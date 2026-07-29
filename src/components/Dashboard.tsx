@@ -238,9 +238,16 @@ export function Dashboard({ activeRole }: { activeRole: Role }) {
         />
         <StatCard
           title="Low Stock Items"
-          value={stats.lowStockItems.toString()}
+          value={stats.lowStockItems?.toString()}
           trend={0}
           description="Below minimum"
+          icon={PackageX}
+        />
+        <StatCard
+          title="Out of Stock"
+          value={stats.outOfStock?.toString()}
+          trend={0}
+          description="Items with zero stock"
           icon={PackageX}
         />
         <StatCard
