@@ -120,8 +120,13 @@ export function Dashboard({ activeRole }: { activeRole: Role }) {
         openAlerts: statsData.metrics?.active_alerts || 0,
       });
       
-      // Set real chart data
-      setSalesData(statsData.daily_breakdown || []);
+      // Transform API data to chart format (date -> time, amount -> today/baseline)
+      const chartData = (statsData.daily_breakdown || []).map((d: any) => ({
+        time: d.date?.split('T')[0] || d.date,
+        today: d.amount || 0,
+        baseline: Math.round((d.amount || 0) * 0.85), // Estimated baseline
+      }));
+      setSalesData(chartData);
 
       // Fetch alerts for alerts list
       const alertsRes = await fetch(`${EDGE_FUNCTIONS_URL}/alerts-list`, {
