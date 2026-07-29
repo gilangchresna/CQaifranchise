@@ -1,8 +1,8 @@
 # CyberQuote - Missing Tables Implementation Plan
 
-**Version:** 1.0  
-**Date:** July 14, 2026  
-**Status:** Ready for Implementation  
+**Version:** 1.0\
+**Date:** July 14, 2026\
+**Status:** Ready for Implementation\
 **Based on:** app-gap-analysis.md
 
 ---
@@ -10,13 +10,14 @@
 ## Executive Summary
 
 6 components broken due to 5 missing database tables. This plan covers:
+
 - Creating all missing tables with proper schema
 - Seeding realistic demo data
 - Testing each component
 - Full verification
 
-**Total Effort:** ~8 hours  
-**Components Fixed:** 6  
+**Total Effort:** ~8 hours\
+**Components Fixed:** 6
 
 ---
 
@@ -65,6 +66,7 @@ Phase 4: Documentation (1 hour)
 **Purpose:** Store alert cases for workflow management
 
 **Schema:**
+
 ```sql
 -- Cases table for alert workflow management
 CREATE TABLE IF NOT EXISTS public.cases (
@@ -145,6 +147,7 @@ COMMENT ON TABLE public.cases IS 'Alert cases for workflow management';
 **Purpose:** Store AI agent configurations
 
 **Schema:**
+
 ```sql
 -- AI Agents table for agent management
 CREATE TABLE IF NOT EXISTS public.ai_agents (
@@ -213,6 +216,7 @@ COMMENT ON TABLE public.ai_agents IS 'AI agent configurations for franchise moni
 **Purpose:** Store workforce/staff information
 
 **Schema:**
+
 ```sql
 -- Staff table for workforce management
 CREATE TABLE IF NOT EXISTS public.staff (
@@ -280,6 +284,7 @@ COMMENT ON TABLE public.staff IS 'Staff/workforce information for outlets';
 **Purpose:** Store ML model configurations
 
 **Schema:**
+
 ```sql
 -- ML Models table for model management
 CREATE TABLE IF NOT EXISTS public.ml_models (
@@ -353,6 +358,7 @@ COMMENT ON TABLE public.ml_models IS 'ML model configurations and versions';
 **Purpose:** Store external integrations configuration
 
 **Schema:**
+
 ```sql
 -- Integrations table for external system connections
 CREATE TABLE IF NOT EXISTS public.integrations (
@@ -421,6 +427,7 @@ COMMENT ON TABLE public.integrations IS 'External system integrations';
 **File:** `supabase/migrations/024_seed_cases.sql`
 
 **SQL:**
+
 ```sql
 -- Seed cases from existing alerts
 INSERT INTO public.cases (alert_id, outlet_id, region_id, title, description, status, priority, type, created_at)
@@ -467,6 +474,7 @@ SELECT COUNT(*) as total_cases FROM public.cases;
 **File:** `supabase/migrations/025_seed_ai_agents.sql`
 
 **SQL:**
+
 ```sql
 -- Seed AI Agents
 INSERT INTO public.ai_agents (name, description, type, status, config, capabilities, stats) VALUES
@@ -510,6 +518,7 @@ SELECT COUNT(*) as total_agents FROM public.ai_agents;
 **File:** `supabase/migrations/026_seed_staff.sql`
 
 **SQL:**
+
 ```sql
 -- Seed Staff for each outlet
 DO $$
@@ -567,6 +576,7 @@ FROM public.staff;
 **File:** `supabase/migrations/027_seed_ml_models.sql`
 
 **SQL:**
+
 ```sql
 -- Seed ML Models
 INSERT INTO public.ml_models (name, description, type, version, status, provider, metrics, performance, config, deployed_at) VALUES
@@ -610,6 +620,7 @@ SELECT COUNT(*) as total_models FROM public.ml_models;
 **File:** `supabase/migrations/028_seed_integrations.sql`
 
 **SQL:**
+
 ```sql
 -- Seed Integrations
 INSERT INTO public.integrations (name, type, status, description, config, stats, last_sync_at) VALUES
@@ -619,7 +630,7 @@ INSERT INTO public.integrations (name, type, status, description, config, stats,
  NOW() - interval '1 hour'),
 
 ('SAP Accounting', 'ACCOUNTING', 'CONNECTED', 'SAP integration for financial reporting',
- '{"api_endpoint": "https://sap.weskonek.com/api", "company_code": "ID01"}',
+ '{"api_endpoint": "https://sap.cyberquote.com/api", "company_code": "ID01"}',
  '{"records_synced": 8920, "last_record_count": 45}',
  NOW() - interval '30 minutes'),
 
@@ -678,12 +689,12 @@ curl -s "https://ploqeifazcgzwjzmukgp.supabase.co/functions/v1/ml-models-list" \
 
 ### 3.2 Test Components
 
-| Component | Test | Expected |
-|-----------|------|----------|
-| Workflows.tsx | Load page | Shows cases table |
-| Agents.tsx | Load page | Shows 6 AI agents |
-| Workforce.tsx | Load page | Shows staff list |
-| Models.tsx | Load page | Shows 5 ML models |
+| Component        | Test      | Expected             |
+| ---------------- | --------- | -------------------- |
+| Workflows.tsx    | Load page | Shows cases table    |
+| Agents.tsx       | Load page | Shows 6 AI agents    |
+| Workforce.tsx    | Load page | Shows staff list     |
+| Models.tsx       | Load page | Shows 5 ML models    |
 | Integrations.tsx | Load page | Shows 6 integrations |
 
 ---
@@ -725,6 +736,7 @@ curl -s "https://ploqeifazcgzwjzmukgp.supabase.co/functions/v1/ml-models-list" \
 ### Update Gap Analysis
 
 After implementation, update `docs/app-gap-analysis.md`:
+
 - [ ] Mark all 5 tables as created
 - [ ] Update component status to working
 - [ ] Add test results
@@ -733,46 +745,46 @@ After implementation, update `docs/app-gap-analysis.md`:
 
 ## File Checklist
 
-| # | File | Migration | Purpose |
-|---|------|-----------|---------|
-| 1 | 019_create_cases.sql | ✅ | Cases table |
-| 2 | 020_create_ai_agents.sql | ✅ | AI agents table |
-| 3 | 021_create_staff.sql | ✅ | Staff table |
-| 4 | 022_create_ml_models.sql | ✅ | ML models table |
-| 5 | 023_create_integrations.sql | ✅ | Integrations table |
-| 6 | 024_seed_cases.sql | ✅ | Seed cases |
-| 7 | 025_seed_ai_agents.sql | ✅ | Seed AI agents |
-| 8 | 026_seed_staff.sql | ✅ | Seed staff |
-| 9 | 027_seed_ml_models.sql | ✅ | Seed ML models |
-| 10 | 028_seed_integrations.sql | ✅ | Seed integrations |
+| #  | File                        | Migration | Purpose            |
+| -- | --------------------------- | --------- | ------------------ |
+| 1  | 019_create_cases.sql        | ✅        | Cases table        |
+| 2  | 020_create_ai_agents.sql    | ✅        | AI agents table    |
+| 3  | 021_create_staff.sql        | ✅        | Staff table        |
+| 4  | 022_create_ml_models.sql    | ✅        | ML models table    |
+| 5  | 023_create_integrations.sql | ✅        | Integrations table |
+| 6  | 024_seed_cases.sql          | ✅        | Seed cases         |
+| 7  | 025_seed_ai_agents.sql      | ✅        | Seed AI agents     |
+| 8  | 026_seed_staff.sql          | ✅        | Seed staff         |
+| 9  | 027_seed_ml_models.sql      | ✅        | Seed ML models     |
+| 10 | 028_seed_integrations.sql   | ✅        | Seed integrations  |
 
 ---
 
 ## Effort Estimate
 
-| Phase | Task | Time |
-|-------|------|------|
-| 1.1 | cases table | 30 min |
-| 1.2 | ai_agents table | 20 min |
-| 1.3 | staff table | 20 min |
-| 1.4 | ml_models table | 20 min |
-| 1.5 | integrations table | 20 min |
-| 2.1-2.5 | Seed data | 60 min |
-| 3.1 | Test edge functions | 30 min |
-| 3.2 | Test components | 60 min |
-| 3.3 | E2E verification | 30 min |
-| 4.1 | Documentation | 30 min |
-| **Total** | | **8 hours** |
+| Phase     | Task                | Time        |
+| --------- | ------------------- | ----------- |
+| 1.1       | cases table         | 30 min      |
+| 1.2       | ai_agents table     | 20 min      |
+| 1.3       | staff table         | 20 min      |
+| 1.4       | ml_models table     | 20 min      |
+| 1.5       | integrations table  | 20 min      |
+| 2.1-2.5   | Seed data           | 60 min      |
+| 3.1       | Test edge functions | 30 min      |
+| 3.2       | Test components     | 60 min      |
+| 3.3       | E2E verification    | 30 min      |
+| 4.1       | Documentation       | 30 min      |
+| **Total** |                     | **8 hours** |
 
 ---
 
 ## Risks
 
-| Risk | Impact | Mitigation |
-|------|--------|------------|
-| Migration conflicts | Delay | Run after existing migrations |
-| RLS blocking access | Component fails | Test with service role first |
-| Data not seeding | Empty tables | Check foreign key constraints |
+| Risk                | Impact          | Mitigation                    |
+| ------------------- | --------------- | ----------------------------- |
+| Migration conflicts | Delay           | Run after existing migrations |
+| RLS blocking access | Component fails | Test with service role first  |
+| Data not seeding    | Empty tables    | Check foreign key constraints |
 
 ---
 
