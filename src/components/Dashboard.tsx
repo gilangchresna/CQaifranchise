@@ -121,7 +121,7 @@ export function Dashboard({ activeRole }: { activeRole: Role }) {
       });
       
       // Set real chart data
-      setSalesData(statsData.chart || []);
+      setSalesData(statsData.daily_breakdown || []);
 
       // Fetch alerts for alerts list
       const alertsRes = await fetch(`${EDGE_FUNCTIONS_URL}/alerts-list`, {
