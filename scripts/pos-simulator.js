@@ -172,9 +172,9 @@ function sendToWebhook(sale) {
   });
 }
 
-// Format currency
-function formatRupiah(num) {
-  return 'Rp ' + num.toLocaleString('id-ID');
+// Format currency (SGD - Singapore Dollars)
+function formatSGD(num) {
+  return 'S$ ' + num.toLocaleString('en-SG', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 // Print banner
@@ -231,7 +231,7 @@ async function runSimulation() {
         console.log(
           `  [${timestamp}] ✅ Sale #${String(totalSales).padStart(4, '0')} | ` +
           `Outlet ${sale.outlet_id} | ${sale.items.length} items | ` +
-          `${formatRupiah(sale.amount)}`
+          `${formatSGD(sale.amount)}`
         );
       } else {
         errorCount++;

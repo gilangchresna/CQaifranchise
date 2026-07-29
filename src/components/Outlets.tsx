@@ -229,7 +229,7 @@ export function Outlets({ activeRole }: { activeRole: Role }) {
     fetchData();
     const interval = setInterval(() => fetchData(true), 5000);
     return () => clearInterval(interval);
-  }, [activeRole, selectedOutletId]);
+  }, [activeRole, selectedOutletId, selectedPeriod]);
 
   async function fetchData(silent = false) {
     if (!silent) setLoading(true);
