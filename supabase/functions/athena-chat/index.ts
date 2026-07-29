@@ -319,7 +319,7 @@ async function queryFranchiseData(ctx: SystemPromptContext): Promise<string | nu
 
     if (outlets && outlets.length > 0) {
       const outletList = outlets.map((o: any) => 
-        `  - ${o.name} (${o.code}) | ${o.city || "N/A"} | Status: ${o.status} | Daily Target: RM${o.daily_target || 0}`
+        `  - ${o.name} (${o.code}) | ${o.city || "N/A"} | Status: ${o.status} | Daily Target: SG${o.daily_target || 0}`
       ).join("\n");
       dataSections.push(`YOUR OUTLETS:\n${outletList}`);
     }
@@ -378,13 +378,13 @@ async function queryFranchiseData(ctx: SystemPromptContext): Promise<string | nu
       // Get daily totals for last 7 days
       const last7Days = sales.slice(0, 7).map((s: any) => {
         const d = new Date(s.date);
-        return `${d.toLocaleDateString("en-MY", { weekday: 'short', month: 'short', day: 'numeric' })}: RM${parseFloat(s.amount).toFixed(2)}`;
+        return `${d.toLocaleDateString("en-SG", { weekday: 'short', month: 'short', day: 'numeric' })}: SG${parseFloat(s.amount).toFixed(2)}`;
       }).join("\n  ");
 
       dataSections.push(`SALES SUMMARY (Last 14 Days):
-  Total Revenue: RM${totalAmount.toFixed(2)}
+  Total Revenue: SG${totalAmount.toFixed(2)}
   Total Transactions: ${totalTransactions}
-  Average Daily: RM${avgDaily.toFixed(2)}
+  Average Daily: SG${avgDaily.toFixed(2)}
   Anomalies Detected: ${anomalyCount}
 
 Recent Daily Sales (Last 7 Days):
