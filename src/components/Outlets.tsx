@@ -117,9 +117,9 @@ function OutletCard({ outlet, onClick, index }: { outlet: Outlet; onClick: () =>
   const stockRisk = outlet.stockout_risk || 0;
   
   const getRiskStyle = () => {
-    if (stockRisk > 80) return { bg: "bg-gradient-to-br from-red-50 to-orange-50", border: "border-red-200", badge: "bg-red-100 text-red-700" };
-    if (stockRisk > 50) return { bg: "bg-gradient-to-br from-orange-50 to-yellow-50", border: "border-orange-200", badge: "bg-orange-100 text-orange-700" };
-    return { bg: "bg-gradient-to-br from-slate-50 to-white", border: "border-slate-200", badge: "bg-green-100 text-green-700" };
+    if (stockRisk > 80) return { bg: "bg-linear-to-br from-red-50 to-orange-50", border: "border-red-200", badge: "bg-red-100 text-red-700" };
+    if (stockRisk > 50) return { bg: "bg-linear-to-br from-orange-50 to-yellow-50", border: "border-orange-200", badge: "bg-orange-100 text-orange-700" };
+    return { bg: "bg-linear-to-br from-slate-50 to-white", border: "border-slate-200", badge: "bg-green-100 text-green-700" };
   };
   
   const riskStyle = getRiskStyle();
@@ -352,7 +352,7 @@ export function Outlets({ activeRole }: { activeRole: Role }) {
 
         {/* Stats Cards */}
         <div className="grid md:grid-cols-4 gap-4">
-          <div className="bg-gradient-to-br from-green-500 to-emerald-600 rounded-2xl p-5 text-white">
+          <div className="bg-linear-to-br from-green-500 to-emerald-600 rounded-2xl p-5 text-white">
             <p className="text-xs opacity-80">Today's Revenue</p>
             <p className="text-2xl font-bold">{formatSGD(outletDetail.sales || 0)}</p>
             <p className="text-xs opacity-70 mt-1">{outletDetail.transaction_count || 0} transactions</p>
@@ -361,7 +361,7 @@ export function Outlets({ activeRole }: { activeRole: Role }) {
             <p className="text-xs text-slate-500">Avg/Transaction</p>
             <p className="text-2xl font-bold">{formatSGD(outletDetail.avg_transaction || 0)}</p>
           </div>
-          <div className={cn("rounded-2xl p-5", stockRisk > 70 ? "bg-gradient-to-br from-red-500 to-orange-500 text-white" : "bg-white border")}>
+          <div className={cn("rounded-2xl p-5", stockRisk > 70 ? "bg-linear-to-br from-red-500 to-orange-500 text-white" : "bg-white border")}>
             <p className={cn("text-xs", stockRisk > 70 ? "opacity-80" : "text-slate-500")}>Stock Risk</p>
             <p className="text-2xl font-bold">{stockRisk}%</p>
           </div>
@@ -509,7 +509,7 @@ export function Outlets({ activeRole }: { activeRole: Role }) {
         )}
 
         {/* AI Panel */}
-        <div className="rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 p-6 text-white">
+        <div className="rounded-2xl bg-linear-to-br from-indigo-500 to-purple-600 p-6 text-white">
           <div className="flex justify-between items-center mb-4">
             <h3 className="text-lg font-semibold flex items-center gap-2"><Sparkles className="w-5 h-5" /> Athena AI Insights</h3>
             {aiExplanation && <span className="text-xs bg-white/20 px-3 py-1 rounded-full">Analyzed</span>}
@@ -608,7 +608,7 @@ export function Outlets({ activeRole }: { activeRole: Role }) {
   // Outlet Directory View
   return (
     <div className="space-y-6">
-      <div className="bg-gradient-to-r from-slate-900 to-slate-800 rounded-2xl p-6 text-white">
+      <div className="bg-linear-to-r from-slate-900 to-slate-800 rounded-2xl p-6 text-white">
         <div className="flex justify-between items-start mb-4">
           <div>
             <h2 className="text-xl font-bold flex items-center gap-2"><Store className="w-6 h-6" /> Outlet Directory</h2>

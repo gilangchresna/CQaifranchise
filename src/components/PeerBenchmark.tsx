@@ -228,7 +228,7 @@ export function PeerBenchmark() {
       {/* Top vs Underperformers */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Top Performers */}
-        <div className="bg-gradient-to-br from-green-50 to-green-100 p-6 rounded-xl border border-green-200">
+        <div className="bg-linear-to-br from-green-50 to-green-100 p-6 rounded-xl border border-green-200">
           <div className="flex items-center gap-2 mb-4">
             <Award className="w-6 h-6 text-green-600" />
             <h2 className="text-lg font-semibold text-green-800">Top Performers</h2>
@@ -252,7 +252,7 @@ export function PeerBenchmark() {
         </div>
 
         {/* Underperformers */}
-        <div className="bg-gradient-to-br from-red-50 to-red-100 p-6 rounded-xl border border-red-200">
+        <div className="bg-linear-to-br from-red-50 to-red-100 p-6 rounded-xl border border-red-200">
           <div className="flex items-center gap-2 mb-4">
             <AlertTriangle className="w-6 h-6 text-red-600" />
             <h2 className="text-lg font-semibold text-red-800">Needs Attention</h2>

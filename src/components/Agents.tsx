@@ -263,7 +263,7 @@ export function Agents({ activeRole }: { activeRole: Role }) {
 
   if (loading) {
     return (
-      <div className="min-h-[400px] flex items-center justify-center">
+      <div className="min-h-100 flex items-center justify-center">
         <div className="animate-spin rounded-full h-10 w-10 border-3 border-violet-600 border-t-transparent"></div>
       </div>
     );
@@ -360,7 +360,7 @@ export function Agents({ activeRole }: { activeRole: Role }) {
                 key={agent.id}
                 onClick={() => setSelectedAgent(agent)}
                 className={cn(
-                  "rounded-xl border p-5 bg-gradient-to-br cursor-pointer transition-all hover:shadow-lg",
+                  "rounded-xl border p-5 bg-linear-to-br cursor-pointer transition-all hover:shadow-lg",
                   agent.status === 'online' || agent.status === 'busy'
                     ? "border-slate-200 hover:border-violet-300"
                     : "border-slate-200 opacity-60"
@@ -369,7 +369,7 @@ export function Agents({ activeRole }: { activeRole: Role }) {
                 <div className="flex items-start justify-between mb-4">
                   <div className={cn(
                     "w-12 h-12 rounded-xl flex items-center justify-center text-white",
-                    `bg-gradient-to-br ${agentColors[agent.id] || 'from-slate-500 to-slate-600'}`
+                    `bg-linear-to-br ${agentColors[agent.id] || 'from-slate-500 to-slate-600'}`
                   )}>
                     {agentIcons[agent.id] || <Bot className="w-6 h-6" />}
                   </div>
@@ -558,7 +558,7 @@ export function Agents({ activeRole }: { activeRole: Role }) {
                   </span>
                   <span className={cn(
                     "shrink-0 px-1.5 py-0.5 rounded text-xs",
-                    `bg-gradient-to-br ${agentColors[log.agent_id] || 'from-slate-500 to-slate-600'} text-white`
+                    `bg-linear-to-br ${agentColors[log.agent_id] || 'from-slate-500 to-slate-600'} text-white`
                   )}>
                     {log.agent_name}
                   </span>
@@ -653,7 +653,7 @@ function AgentDetailModal({
       >
         {/* Header */}
         <div className={cn(
-          "p-6 text-white bg-gradient-to-br",
+          "p-6 text-white bg-linear-to-br",
           agentColors[agent.id] || 'from-slate-500 to-slate-600'
         )}>
           <div className="flex items-start justify-between">

@@ -126,9 +126,9 @@ export function RiskDashboard({ activeRole }: { activeRole: Role }) {
 
   const getRiskBgColor = (level: string) => {
     switch (level) {
-      case 'HIGH': return 'bg-gradient-to-br from-red-500 to-orange-600';
-      case 'MEDIUM': return 'bg-gradient-to-br from-yellow-500 to-orange-500';
-      case 'LOW': return 'bg-gradient-to-br from-green-500 to-emerald-600';
+      case 'HIGH': return 'bg-linear-to-br from-red-500 to-orange-600';
+      case 'MEDIUM': return 'bg-linear-to-br from-yellow-500 to-orange-500';
+      case 'LOW': return 'bg-linear-to-br from-green-500 to-emerald-600';
       default: return 'bg-slate-500';
     }
   };
@@ -152,7 +152,7 @@ export function RiskDashboard({ activeRole }: { activeRole: Role }) {
 
   if (loading) {
     return (
-      <div className="min-h-[400px] flex items-center justify-center">
+      <div className="min-h-100 flex items-center justify-center">
         <div className="animate-spin rounded-full h-10 w-10 border-3 border-red-500 border-t-transparent"></div>
       </div>
     );
@@ -517,7 +517,7 @@ function RiskDetailModal({
       >
         {/* Header */}
         <div className={cn(
-          "p-6 text-white bg-gradient-to-br",
+          "p-6 text-white bg-linear-to-br",
           getRiskBgColor(risk.risk_level)
         )}>
           <div className="flex items-start justify-between">
@@ -617,7 +617,7 @@ function RiskDetailModal({
           </div>
 
           {/* AI Recommendation */}
-          <div className="bg-gradient-to-br from-violet-50 to-purple-50 rounded-xl p-4 border border-violet-100">
+          <div className="bg-linear-to-br from-violet-50 to-purple-50 rounded-xl p-4 border border-violet-100">
             <h4 className="font-semibold text-violet-900 mb-2 flex items-center gap-2">
               <Zap className="w-4 h-4" />
               AI Recommendation
