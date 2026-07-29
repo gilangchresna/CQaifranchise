@@ -21,7 +21,7 @@ tests/
 ### Run All Tests
 
 ```bash
-cd ~/WeskonekWeb/unified-ai-CQ
+cd ~/CyberquoteWeb/unified-ai-CQ
 deno test --allow-all tests/
 ```
 
@@ -71,12 +71,12 @@ deno test --allow-all --coverage=coverage tests/
 
 ## Test Coverage
 
-| Function | Coverage | Status |
-|----------|----------|--------|
-| ml-anomaly-score | Statistical functions | ✅ |
-| ml-stockout-risk | Velocity & risk logic | ✅ |
-| alert-generator | Validation logic | ✅ |
-| case-create | Business logic | ✅ |
+| Function         | Coverage              | Status |
+| ---------------- | --------------------- | ------ |
+| ml-anomaly-score | Statistical functions | ✅     |
+| ml-stockout-risk | Velocity & risk logic | ✅     |
+| alert-generator  | Validation logic      | ✅     |
+| case-create      | Business logic        | ✅     |
 
 ## Adding New Tests
 
@@ -100,7 +100,7 @@ Tests can be run in CI using:
 # GitHub Actions example
 - name: Run Tests
   run: |
-    cd ~/WeskonekWeb/unified-ai-CQ
+    cd ~/CyberquoteWeb/unified-ai-CQ
     deno test --allow-all tests/
 ```
 

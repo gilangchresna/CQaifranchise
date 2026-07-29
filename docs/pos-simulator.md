@@ -2,16 +2,18 @@
 
 ## Overview
 
-The POS Simulator generates fake Point-of-Sale (POS) data and sends it to CyberQuote's webhook endpoint. This allows for demo and testing without requiring a real POS system.
+The POS Simulator generates fake Point-of-Sale (POS) data and sends it to
+CyberQuote's webhook endpoint. This allows for demo and testing without
+requiring a real POS system.
 
 ## Purpose
 
-| Use Case | Description |
-|----------|-------------|
-| **Demo** | Show CyberQuote working with "live" data |
-| **Testing** | Test webhook ingestion and ML pipeline |
+| Use Case        | Description                                       |
+| --------------- | ------------------------------------------------- |
+| **Demo**        | Show CyberQuote working with "live" data          |
+| **Testing**     | Test webhook ingestion and ML pipeline            |
 | **Development** | Verify system behavior without POS infrastructure |
-| **Training** | Train users on CyberQuote workflow |
+| **Training**    | Train users on CyberQuote workflow                |
 
 ## How It Works
 
@@ -46,7 +48,7 @@ The POS Simulator generates fake Point-of-Sale (POS) data and sends it to CyberQ
 ### 1. Navigate to Project
 
 ```bash
-cd ~/Weskonek/WeskonekWeb/unified-ai-CQ
+cd ~/Cyberquote/CyberquoteWeb/unified-ai-CQ
 ```
 
 ### 2. Run Simulator
@@ -150,17 +152,17 @@ node scripts/pos-simulator.js
 
 The simulator covers 24 outlets across Indonesia:
 
-| Outlet ID | Name | Region |
-|-----------|------|--------|
-| 37-39 | Kopi Oey - Jakarta | Jakarta |
-| 40 | Kopi Oey - Bandung | West Java |
-| 41 | Kopi Oey - Yogyakarta | Yogyakarta |
-| 42 | Kopi Oey - Semarang | Central Java |
-| 43 | Kopi Oey - Medan | North Sumatra |
-| 44 | Kopi Oey - Makassar | South Sulawesi |
-| 45 | Kopi Oey - Bali | Bali |
-| 46 | Kopi Oey - Malang | East Java |
-| 47-60 | Kopi Oey - Various | Other regions |
+| Outlet ID | Name                  | Region         |
+| --------- | --------------------- | -------------- |
+| 37-39     | Kopi Oey - Jakarta    | Jakarta        |
+| 40        | Kopi Oey - Bandung    | West Java      |
+| 41        | Kopi Oey - Yogyakarta | Yogyakarta     |
+| 42        | Kopi Oey - Semarang   | Central Java   |
+| 43        | Kopi Oey - Medan      | North Sumatra  |
+| 44        | Kopi Oey - Makassar   | South Sulawesi |
+| 45        | Kopi Oey - Bali       | Bali           |
+| 46        | Kopi Oey - Malang     | East Java      |
+| 47-60     | Kopi Oey - Various    | Other regions  |
 
 ---
 
@@ -196,7 +198,7 @@ export POS_HMAC_SECRET="your_secure_random_secret_here"
 ### 1. Start Simulator (Terminal 1)
 
 ```bash
-cd ~/Weskonek/WeskonekWeb/unified-ai-CQ
+cd ~/Cyberquote/CyberquoteWeb/unified-ai-CQ
 node scripts/pos-simulator.js
 ```
 
@@ -215,6 +217,7 @@ http://localhost:3001
 ### 4. Trigger ML Alerts
 
 Wait 5-10 minutes for ML to:
+
 1. Calculate anomaly scores
 2. Detect stockout risks
 3. Generate alerts
@@ -252,7 +255,8 @@ node scripts/pos-simulator.js
 
 **Cause:** HMAC computation mismatch
 
-**Fix:** 
+**Fix:**
+
 1. Verify secret is identical on both sides
 2. Check signature header format (`sha256=` prefix)
 
@@ -275,6 +279,7 @@ supabase projects list
 **Cause:** Network or project issue
 
 **Fix:**
+
 1. Check Supabase project is running
 2. Verify project ID is correct
 3. Check if functions are deployed
@@ -292,14 +297,14 @@ function mokaToCyberQuoteFormat(mokaPayload) {
     outlet_id: parseInt(mokaPayload.outlet_id),
     transaction_id: mokaPayload.order_id,
     amount: mokaPayload.total_amount,
-    items: mokaPayload.items.map(item => ({
+    items: mokaPayload.items.map((item) => ({
       sku: item.item_code,
       name: item.item_name,
       quantity: item.qty,
       unit_price: item.unit_price,
-      subtotal: item.subtotal
+      subtotal: item.subtotal,
     })),
-    timestamp: mokaPayload.created_at
+    timestamp: mokaPayload.created_at,
   };
 }
 ```
@@ -313,14 +318,14 @@ function posterToCyberQuoteFormat(posterPayload) {
     outlet_id: parseInt(posterPayload.restaurant_id),
     transaction_id: posterPayload.order_id,
     amount: posterPayload.total_sum,
-    items: posterPayload.items.map(item => ({
+    items: posterPayload.items.map((item) => ({
       sku: item.product_id,
       name: item.name,
       quantity: item.quantity,
       unit_price: item.price,
-      subtotal: item.price * item.quantity
+      subtotal: item.price * item.quantity,
     })),
-    timestamp: posterPayload.created
+    timestamp: posterPayload.created,
   };
 }
 ```

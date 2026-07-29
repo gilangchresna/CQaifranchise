@@ -650,7 +650,7 @@ INSERT INTO public.integrations (name, type, status, description, config, stats,
  NULL),
 
 ('HR System - Workday', 'HR', 'PENDING', 'Workday HR integration for staff management',
- '{"api_endpoint": "https://wd3.workday.com/ccx/api/v1/weskonek"}',
+ '{"api_endpoint": "https://wd3.workday.com/ccx/api/v1/Cyberquote"}',
  '{"records_synced": 0}',
  NULL);
 
