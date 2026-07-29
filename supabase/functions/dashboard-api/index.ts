@@ -32,7 +32,7 @@ async function verifyAuth(req: Request) {
 }
 
 function getDateRange(period: string) {
-  const today = new Date('2026-07-25'); // Demo date
+  const today = new Date(); // Use current date
   const todayStr = today.toISOString().split('T')[0];
   let startDate: string;
   let periodLabel: string;
