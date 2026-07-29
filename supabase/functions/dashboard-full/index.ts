@@ -105,7 +105,12 @@ serve(async (req: Request) => {
     // Get metrics
     const { count: outletCount } = await supabase.from("outlets").select("*", { count: "exact", head: true });
     const { count: alertsCount } = await supabase.from("alerts").select("*", { count: "exact", head: true });
-    const { data: lowStock } = await supabase.from("inventory").select("id").lt("current_stock", 25);
+    // Get accurate low stock count - count items below minimum stock level
+    const { data: lowStockItems } = await supabase
+      .from("inventory")
+      .select("id")
+      .lt("current_stock", "min_stock");
+    const lowStockCount = lowStockItems?.length || 0;
     
     // Comparison period (previous period)
     const compareStartDate = new Date(new Date(startDate).getTime() - daysInPeriod * 86400000).toISOString().split('T')[0];
@@ -151,7 +156,7 @@ serve(async (req: Request) => {
         outlets: outletCount || 0,
         outlets_with_sales: outletsSet.size,
         active_alerts: alertsCount || 0,
-        low_stock: lowStock?.length || 0,
+        low_stock: lowStockCount,
       },
       daily_breakdown: Object.entries(dailySales).sort().map(([d, a]) => ({ date: d, amount: Math.round(a * 100) / 100 })),
       payment_breakdown: Object.entries(paymentBreakdown).map(([m, a]) => ({ method: m, amount: Math.round(a * 100) / 100 })),
