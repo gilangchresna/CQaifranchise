@@ -157,8 +157,7 @@ async function searchKnowledgeBase(
   try {
     // Search SOPs - use ILIKE for flexible matching
     const searchTerms = query.toLowerCase().split(" ").filter(w => w.length > 2);
-    const searchPattern = searchTerms.slice(0, 5).map(w => `%${w}%`).join("");
-    
+
     const { data: sops } = await supabase
       .from("knowledge_sops")
       .select("id, title, content, category")
@@ -233,8 +232,8 @@ async function buildSystemPrompt(
   ctx: SystemPromptContext,
   knowledgeContext: { context: string }
 ): Promise<string> {
-  const { user_id, user_role, region_id, outlet_id, supabase } = ctx;
-  
+  const { user_role } = ctx;
+
   const roleDescription = {
     "HQ_ADMIN": "You are helping a HQ Admin who has full access to all franchise data across all regions.",
     "REGIONAL_MANAGER": "You are helping a Regional Manager who oversees outlets within their assigned region.",
