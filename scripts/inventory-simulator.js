@@ -22,32 +22,30 @@ const CONFIG = {
   anonKey: process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY,
 };
 
-// 24 Outlet IDs that exist in DB
-const OUTLET_IDS = [37, 36, 41, 9, 33, 35, 25, 27, 26, 23, 22, 24, 28, 30, 29, 39, 11, 40, 10, 34, 38, 12, 8, 32];
+// 8 Singapore Outlet IDs that exist in DB
+const OUTLET_IDS = [156, 157, 158, 159, 160, 161, 162, 163];
 
 // Product catalog (SKU -> name, category, unit)
+// SGD prices (Singapore Dollars)
 const PRODUCTS = [
-  // Minuman
-  { sku: 'MNL_ES_TEH', name: 'Es Teh Manis', category: 'Minuman', unit: 'glass', cost_range: [3000, 5000], sell_range: [8000, 12000], min_stock: 50, max_stock: 200 },
-  { sku: 'MNL_ES_JERUK', name: 'Es Jeruk Peras', category: 'Minuman', unit: 'glass', cost_range: [4000, 6000], sell_range: [10000, 15000], min_stock: 40, max_stock: 150 },
-  { sku: 'MNL_KOPI', name: 'Kopi Hitam', category: 'Minuman', unit: 'cup', cost_range: [5000, 8000], sell_range: [12000, 20000], min_stock: 30, max_stock: 120 },
-  { sku: 'MNL_JUS', name: 'Jus Jeruk Segar', category: 'Minuman', unit: 'glass', cost_range: [6000, 10000], sell_range: [15000, 25000], min_stock: 25, max_stock: 100 },
-  
-  // Makanan Ringan
-  { sku: 'MGR_PANGGANG', name: 'Roti Bakar', category: 'Makanan Ringan', unit: 'pcs', cost_range: [8000, 12000], sell_range: [18000, 25000], min_stock: 20, max_stock: 80 },
-  { sku: 'MGR_GORENGAN', name: 'Gorengan Assorti', category: 'Makanan Ringan', unit: 'porsi', cost_range: [5000, 10000], sell_range: [12000, 20000], min_stock: 30, max_stock: 100 },
-  { sku: 'MGR_TAHU', name: 'Tahu Crispy', category: 'Makanan Ringan', unit: 'porsi', cost_range: [4000, 8000], sell_range: [10000, 18000], min_stock: 25, max_stock: 90 },
-  { sku: 'MGR_TEMPE', name: 'Tempe Goreng', category: 'Makanan Ringan', unit: 'porsi', cost_range: [3000, 6000], sell_range: [8000, 15000], min_stock: 30, max_stock: 100 },
-  
-  // Makanan Berat
-  { sku: 'MBT_NASI_GORENG', name: 'Nasi Goreng Spesial', category: 'Makanan Berat', unit: 'porsi', cost_range: [12000, 18000], sell_range: [25000, 40000], min_stock: 15, max_stock: 60 },
-  { sku: 'MBT_MIE_GORENG', name: 'Mie Goreng Jawa', category: 'Makanan Berat', unit: 'porsi', cost_range: [10000, 15000], sell_range: [22000, 35000], min_stock: 15, max_stock: 60 },
-  { sku: 'MBT_AYAM_GPREK', name: 'Ayam Geprek Sambel', category: 'Makanan Berat', unit: 'porsi', cost_range: [15000, 22000], sell_range: [30000, 45000], min_stock: 12, max_stock: 50 },
-  { sku: 'MBT_BAKSO', name: 'Bakso Komplit', category: 'Makanan Berat', unit: 'porsi', cost_range: [13000, 20000], sell_range: [28000, 42000], min_stock: 12, max_stock: 50 },
-  { sku: 'MBT_SOTO', name: 'Soto Ayam Bening', category: 'Makanan Berat', unit: 'porsi', cost_range: [14000, 20000], sell_range: [30000, 45000], min_stock: 10, max_stock: 45 },
-  { sku: 'MBT_RAWON', name: 'Rawon Setan', category: 'Makanan Berat', unit: 'porsi', cost_range: [18000, 25000], sell_range: [35000, 55000], min_stock: 8, max_stock: 40 },
-  { sku: 'MBT_SATE', name: 'Sate Ayam Khas', category: 'Makanan Berat', unit: 'porsi', cost_range: [16000, 23000], sell_range: [32000, 50000], min_stock: 10, max_stock: 45 },
-  { sku: 'MBT_RENDANG', name: 'Rendang Sapi', category: 'Makanan Berat', unit: 'porsi', cost_range: [20000, 28000], sell_range: [40000, 65000], min_stock: 8, max_stock: 35 },
+  // Beverages
+  { sku: 'BEV_TEH', name: 'Teh C Siewdai', category: 'Beverages', unit: 'cup', cost_range: [1, 2], sell_range: [3, 5], min_stock: 50, max_stock: 200 },
+  { sku: 'BEV_KOPI', name: 'Kopi O', category: 'Beverages', unit: 'cup', cost_range: [2, 3], sell_range: [4, 7], min_stock: 40, max_stock: 150 },
+  { sku: 'BEV_MILO', name: 'Milo Dinosaur', category: 'Beverages', unit: 'cup', cost_range: [2, 4], sell_range: [5, 8], min_stock: 30, max_stock: 120 },
+  { sku: 'BEV_JUICE', name: 'Fresh Orange Juice', category: 'Beverages', unit: 'glass', cost_range: [2, 4], sell_range: [6, 10], min_stock: 25, max_stock: 100 },
+
+  // Light Meals
+  { sku: 'LME_TOAST', name: 'Kaya Toast Set', category: 'Light Meals', unit: 'set', cost_range: [2, 4], sell_range: [5, 8], min_stock: 20, max_stock: 80 },
+  { sku: 'LME_PRATA', name: 'Plain Prata', category: 'Light Meals', unit: 'pcs', cost_range: [2, 3], sell_range: [4, 6], min_stock: 30, max_stock: 100 },
+  { sku: 'LME_EGG', name: 'Soft Boiled Egg', category: 'Light Meals', unit: 'pcs', cost_range: [1, 2], sell_range: [2, 4], min_stock: 25, max_stock: 90 },
+
+  // Main Meals
+  { sku: 'MME_CHICKEN_RICE', name: 'Chicken Rice', category: 'Main Meals', unit: 'plate', cost_range: [5, 8], sell_range: [10, 16], min_stock: 15, max_stock: 60 },
+  { sku: 'MME_LAKSA', name: 'Laksa Singapore', category: 'Main Meals', unit: 'bowl', cost_range: [6, 9], sell_range: [12, 18], min_stock: 15, max_stock: 60 },
+  { sku: 'MME_NASI_LEMAK', name: 'Nasi Lemak', category: 'Main Meals', unit: 'plate', cost_range: [5, 8], sell_range: [10, 15], min_stock: 12, max_stock: 50 },
+  { sku: 'MME_ECONOMY_RICE', name: 'Economy Rice', category: 'Main Meals', unit: 'plate', cost_range: [4, 7], sell_range: [8, 14], min_stock: 12, max_stock: 50 },
+  { sku: 'MME_MOOKATA', name: 'Mookata Set', category: 'Main Meals', unit: 'set', cost_range: [15, 25], sell_range: [30, 50], min_stock: 10, max_stock: 45 },
+  { sku: 'MME_ROTI_PRATA', name: 'Roti Prata with Curry', category: 'Main Meals', unit: 'plate', cost_range: [6, 10], sell_range: [12, 20], min_stock: 8, max_stock: 40 },
 ];
 
 // Helper: Random number in range
