@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { 
+import {
   AlertTriangle, TrendingDown, Package, Clock, Zap,
   ChevronRight, Filter, RefreshCw, BarChart3, Activity,
   ArrowUpRight, ArrowDownRight, AlertCircle, CheckCircle2,
@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/src/lib/utils";
 import { Role } from "@/src/types";
+import { supabase } from "@/src/lib/supabase";
 
 const EDGE_URL = 'https://ploqeifazcgzwjzmukgp.supabase.co/functions/v1';
 
