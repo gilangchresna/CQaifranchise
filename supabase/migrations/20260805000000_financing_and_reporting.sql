@@ -190,3 +190,172 @@ DROP TRIGGER IF EXISTS trg_financing_applications_updated_at ON public.financing
 CREATE TRIGGER trg_financing_applications_updated_at
     BEFORE UPDATE ON public.financing_applications
     FOR EACH ROW EXECUTE FUNCTION public.set_financing_updated_at();
+
+-- =============================================================================
+-- REPAYMENT EVENTS
+-- Real-time event stream for payment status updates from lender systems.
+-- Captures every payment-related event for risk scoring and audit trail.
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS public.repayment_events (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    application_id UUID REFERENCES public.financing_applications(id) ON DELETE CASCADE,
+    lender_code VARCHAR(50) NOT NULL,
+    event_id VARCHAR(200),
+
+    -- Event classification
+    event_type VARCHAR(50) NOT NULL,
+    event_subtype VARCHAR(100),
+
+    -- Payment details
+    amount DECIMAL(15,2),
+    currency VARCHAR(3) DEFAULT 'SGD',
+    payment_reference VARCHAR(200),
+
+    -- Schedule context
+    emi_number INTEGER,
+    scheduled_date DATE,
+
+    -- Risk context
+    days_overdue INTEGER DEFAULT 0,
+    delinquency_level VARCHAR(20) DEFAULT 'NONE',
+
+    -- Metadata
+    raw_payload JSONB NOT NULL DEFAULT '{}',
+    source VARCHAR(50) DEFAULT 'LENDER_WEBHOOK',
+    processed BOOLEAN NOT NULL DEFAULT false,
+    processing_error TEXT,
+    received_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_repayment_events_application ON public.repayment_events(application_id);
+CREATE INDEX IF NOT EXISTS idx_repayment_events_type ON public.repayment_events(event_type);
+CREATE INDEX IF NOT EXISTS idx_repayment_events_received ON public.repayment_events(received_at DESC);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_repayment_events_dedupe
+    ON public.repayment_events(lender_code, event_id) WHERE event_id IS NOT NULL;
+
+-- =============================================================================
+-- REPAYMENT SCHEDULE
+-- Tracks EMI schedule and payment status for each financing application.
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS public.repayment_schedule (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    application_id UUID REFERENCES public.financing_applications(id) ON DELETE CASCADE,
+    emi_number INTEGER NOT NULL,
+    due_date DATE NOT NULL,
+    principal_amount DECIMAL(15,2) NOT NULL,
+    interest_amount DECIMAL(15,2) NOT NULL,
+    total_amount DECIMAL(15,2) NOT NULL,
+    currency VARCHAR(3) DEFAULT 'SGD',
+
+    -- Payment tracking
+    paid_amount DECIMAL(15,2) DEFAULT 0,
+    paid_at TIMESTAMPTZ,
+    payment_reference VARCHAR(200),
+
+    -- Status
+    status VARCHAR(20) DEFAULT 'PENDING',
+
+    -- Risk tracking
+    days_overdue INTEGER DEFAULT 0,
+    penalty_accrued DECIMAL(15,2) DEFAULT 0,
+
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+    UNIQUE(application_id, emi_number)
+);
+
+CREATE INDEX IF NOT EXISTS idx_repayment_schedule_application ON public.repayment_schedule(application_id);
+CREATE INDEX IF NOT EXISTS idx_repayment_schedule_status ON public.repayment_schedule(status);
+CREATE INDEX IF NOT EXISTS idx_repayment_schedule_due ON public.repayment_schedule(due_date);
+
+-- =============================================================================
+-- APPLICATION RISK SCORES
+-- Tracks risk scoring history for financing applications.
+-- Enables trend analysis and alert escalation tracking.
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS public.application_risk_scores (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    application_id UUID REFERENCES public.financing_applications(id) ON DELETE CASCADE,
+
+    -- Risk components
+    payment_timing_score DECIMAL(5,2) DEFAULT 100.00,
+    delinquency_score DECIMAL(5,2) DEFAULT 0.00,
+    affordability_score DECIMAL(5,2) DEFAULT 100.00,
+
+    -- Composite score
+    overall_risk_score DECIMAL(5,2) DEFAULT 0.00,
+    risk_level VARCHAR(20) DEFAULT 'LOW',
+
+    -- Factors
+    risk_factors JSONB DEFAULT '[]',
+    triggering_events JSONB DEFAULT '[]',
+
+    -- Metadata
+    computed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    computation_method VARCHAR(50) DEFAULT 'RULE_BASED',
+    notes TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_risk_scores_application ON public.application_risk_scores(application_id);
+CREATE INDEX IF NOT EXISTS idx_risk_scores_level ON public.application_risk_scores(risk_level);
+CREATE INDEX IF NOT EXISTS idx_risk_scores_computed ON public.application_risk_scores(computed_at DESC);
+
+-- =============================================================================
+-- ROW LEVEL SECURITY for New Tables
+-- =============================================================================
+
+-- RLS for repayment_events (HQ/Regional only)
+ALTER TABLE public.repayment_events ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS repayment_events_hq_only ON public.repayment_events;
+CREATE POLICY repayment_events_hq_only ON public.repayment_events
+    FOR SELECT USING (
+        EXISTS (
+            SELECT 1 FROM public.user_profiles
+            WHERE id = auth.uid() AND role IN ('HQ_ADMIN', 'REGIONAL_MANAGER')
+        )
+    );
+
+-- RLS for repayment_schedule (Owner + HQ/Regional)
+DROP POLICY IF EXISTS repayment_schedule_access ON public.repayment_schedule;
+CREATE POLICY repayment_schedule_access ON public.repayment_schedule
+    FOR SELECT USING (
+        EXISTS (
+            SELECT 1 FROM public.user_profiles up
+            JOIN public.financing_applications fa ON up.id = fa.franchisee_id
+            WHERE up.id = auth.uid()
+              AND fa.id = repayment_schedule.application_id
+        )
+        OR EXISTS (
+            SELECT 1 FROM public.user_profiles
+            WHERE id = auth.uid() AND role IN ('HQ_ADMIN', 'REGIONAL_MANAGER')
+        )
+    );
+
+-- RLS for application_risk_scores (HQ/Regional only)
+ALTER TABLE public.application_risk_scores ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS risk_scores_hq_only ON public.application_risk_scores;
+CREATE POLICY risk_scores_hq_only ON public.application_risk_scores
+    FOR SELECT USING (
+        EXISTS (
+            SELECT 1 FROM public.user_profiles
+            WHERE id = auth.uid() AND role IN ('HQ_ADMIN', 'REGIONAL_MANAGER')
+        )
+    );
+
+-- Trigger for repayment_schedule updated_at
+CREATE OR REPLACE FUNCTION public.set_repayment_schedule_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = NOW();
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_repayment_schedule_updated_at ON public.repayment_schedule;
+CREATE TRIGGER trg_repayment_schedule_updated_at
+    BEFORE UPDATE ON public.repayment_schedule
+    FOR EACH ROW EXECUTE FUNCTION public.set_repayment_schedule_updated_at();

@@ -4,28 +4,15 @@
  * Lender Bridge Edge Function
  * Generic bridge-loan financing integration for franchisee setup.
  *
- * Why this exists: franchisee onboarding (see public.pilot_outreach:
- * contacted_at -> demo_scheduled_at -> agreement_signed_at ->
- * onboarding_completed_at) has a capital gap between signing the franchise
- * agreement and opening the outlet — fit-out, opening inventory, staffing.
- * This function is the integration point that lets that gap be funded by an
- * external lender's bridge-loan product, without hard-coding any one
- * lender's API. It follows the same "connector + adapter" pattern already
- * used for POS systems in pos-connector/index.ts.
- *
  * POST /functions/v1/lender-bridge
  *   action: "submit_application" | "get_status" | "cancel_application"
  *
- * POST /functions/v1/lender-bridge/webhook   (see handleLenderWebhook below;
- *   deployed as the same function — action is inferred from the URL path so
- *   this can be registered directly as the lender's webhook callback URL)
+ * POST /functions/v1/lender-bridge/webhook
+ *   inbound from lender — approvals, declines, disbursement, repayments
+ *   Query param ?type=repayment for payment-specific events
  *
- * Lender configuration (base_url, api_key, auth style) is read from
- * public.integrations where type = 'LENDER' and name = lender_code, so a
- * real lender can be plugged in later purely via config (Integrations UI),
- * with no code change. Until a lender is configured, requests run in
- * "simulate" mode so the flow can be demoed and the app UI built against it
- * today — mirroring how pos-connector simulates POS systems.
+ * POST /functions/v1/lender-bridge/webhook?type=repayment
+ *   repayment-specific webhook for EMI payments, delinquency, etc.
  */
 
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
@@ -33,8 +20,34 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-lender-webhook-secret",
 };
+
+// =============================================================================
+// EVENT TYPE CONSTANTS
+// =============================================================================
+
+const REPAYMENT_EVENT_TYPES = {
+  APPLICATION_SUBMITTED: 'APPLICATION_SUBMITTED',
+  APPLICATION_APPROVED: 'APPLICATION_APPROVED',
+  APPLICATION_DECLINED: 'APPLICATION_DECLINED',
+  DISBURSEMENT_COMPLETED: 'DISBURSEMENT_COMPLETED',
+  EMI_DUE: 'EMI_DUE',
+  EMI_PAID: 'EMI_PAID',
+  EMI_OVERDUE: 'EMI_OVERDUE',
+  PARTIAL_PAYMENT: 'PARTIAL_PAYMENT',
+  DELINQUENCY_STARTED: 'DELINQUENCY_STARTED',
+  DELINQUENCY_RESOLVED: 'DELINQUENCY_RESOLVED',
+  DEFAULT_NOTICE: 'DEFAULT_NOTICE',
+  FULL_REPAYMENT: 'FULL_REPAYMENT',
+  EARLY_REPAYMENT: 'EARLY_REPAYMENT',
+  STATUS_CHANGE: 'STATUS_CHANGE',
+} as const;
+
+type RepaymentEventType = typeof REPAYMENT_EVENT_TYPES[keyof typeof REPAYMENT_EVENT_TYPES];
+
+const DELINQUENCY_LEVELS = ['NONE', 'MILD', 'MODERATE', 'SEVERE', 'CRITICAL'] as const;
+const RISK_LEVELS = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'] as const;
 
 const VALID_PURPOSES = ["FRANCHISEE_SETUP", "INVENTORY", "EQUIPMENT", "WORKING_CAPITAL"];
 
@@ -346,6 +359,305 @@ async function handleLenderWebhook(req: Request, supabase: any) {
   return { status: 200, body: { success: true, matched: true, application_id: application.id, status: update.status || application.status } };
 }
 
+// =============================================================================
+// REPAYMENT EVENT HANDLING
+// =============================================================================
+
+/**
+ * Handle repayment-specific webhooks from lenders.
+ * These include EMI payments, delinquency, overdue notices, etc.
+ */
+async function handleRepaymentWebhook(req: Request, supabase: any) {
+  const payload = await req.json();
+  const lenderCode = payload.lender_code || 'GENERIC';
+  const eventId = payload.event_id || null;
+  const eventType = (payload.event_type || 'STATUS_CHANGE') as RepaymentEventType;
+  const webhookType = new URL(req.url).searchParams.get('type');
+
+  // Validate event type
+  const validTypes = Object.values(REPAYMENT_EVENT_TYPES);
+  if (!validTypes.includes(eventType)) {
+    return { status: 400, body: { success: false, error: `Invalid event_type: ${eventType}` } };
+  }
+
+  // 1. Idempotency check on repayment_events
+  if (eventId) {
+    const { data: existing } = await supabase
+      .from('repayment_events')
+      .select('id')
+      .eq('lender_code', lenderCode)
+      .eq('event_id', eventId)
+      .maybeSingle();
+    if (existing) {
+      return { status: 200, body: { success: true, deduped: true } };
+    }
+  }
+
+  // 2. Find application
+  const applicationRef = payload.application_id || payload.lender_reference_id;
+  let application: any = null;
+  if (applicationRef) {
+    const { data } = await supabase
+      .from('financing_applications')
+      .select('*')
+      .or(`id.eq.${applicationRef},lender_reference_id.eq.${applicationRef}`)
+      .maybeSingle();
+    application = data;
+  }
+
+  // 3. Store raw repayment event
+  const { data: eventRow, error: eventError } = await supabase
+    .from('repayment_events')
+    .insert({
+      application_id: application?.id ?? null,
+      lender_code: lenderCode,
+      event_id: eventId,
+      event_type: eventType,
+      event_subtype: payload.event_subtype || null,
+      amount: payload.amount || null,
+      currency: payload.currency || 'SGD',
+      payment_reference: payload.payment_reference || null,
+      emi_number: payload.emi_number || null,
+      scheduled_date: payload.scheduled_date || null,
+      days_overdue: payload.days_overdue || 0,
+      delinquency_level: payload.delinquency_level || 'NONE',
+      raw_payload: payload,
+      source: 'LENDER_WEBHOOK',
+      processed: false,
+    })
+    .select()
+    .single();
+
+  if (eventError) {
+    console.error('Failed to store repayment event:', eventError);
+    throw eventError;
+  }
+
+  // 4. Process event if application found
+  if (application) {
+    await processRepaymentEvent(supabase, application, payload, eventType);
+  }
+
+  // 5. Mark as processed
+  await supabase
+    .from('repayment_events')
+    .update({ processed: true })
+    .eq('id', eventRow.id);
+
+  return {
+    status: 200,
+    body: {
+      success: true,
+      event_id: eventRow.id,
+      application_id: application?.id,
+      matched: !!application
+    }
+  };
+}
+
+/**
+ * Process a repayment event and update related records.
+ */
+async function processRepaymentEvent(
+  supabase: any,
+  application: any,
+  payload: any,
+  eventType: RepaymentEventType
+) {
+  const updates: Record<string, any> = { last_lender_response: payload };
+
+  // Update application status based on event type
+  switch (eventType) {
+    case REPAYMENT_EVENT_TYPES.DISBURSEMENT_COMPLETED:
+      updates.status = 'REPAYING';
+      updates.disbursed_at = payload.disbursed_at || new Date().toISOString();
+      updates.disbursed_amount = payload.disbursed_amount || application.approved_amount;
+      break;
+
+    case REPAYMENT_EVENT_TYPES.EMI_PAID:
+    case REPAYMENT_EVENT_TYPES.PARTIAL_PAYMENT:
+      updates.status = 'REPAYING';
+      await updateRepaymentSchedule(supabase, application.id, payload, eventType);
+      break;
+
+    case REPAYMENT_EVENT_TYPES.EMI_OVERDUE:
+    case REPAYMENT_EVENT_TYPES.DELINQUENCY_STARTED:
+      updates.status = 'REPAYING'; // Still repaying but delinquent
+      await updateRepaymentSchedule(supabase, application.id, payload, eventType);
+      break;
+
+    case REPAYMENT_EVENT_TYPES.FULL_REPAYMENT:
+    case REPAYMENT_EVENT_TYPES.EARLY_REPAYMENT:
+      updates.status = 'CLOSED';
+      updates.closed_at = new Date().toISOString();
+      break;
+
+    case REPAYMENT_EVENT_TYPES.STATUS_CHANGE:
+      if (payload.status) updates.status = payload.status;
+      break;
+  }
+
+  // Apply updates
+  await supabase
+    .from('financing_applications')
+    .update(updates)
+    .eq('id', application.id);
+
+  // Trigger downstream actions
+  await triggerDownstreamActions(supabase, application, eventType, payload);
+}
+
+/**
+ * Update repayment schedule based on payment event.
+ */
+async function updateRepaymentSchedule(
+  supabase: any,
+  applicationId: string,
+  payload: any,
+  eventType: RepaymentEventType
+) {
+  const emiNumber = payload.emi_number;
+  if (!emiNumber) return;
+
+  // Check if schedule entry exists
+  const { data: existing } = await supabase
+    .from('repayment_schedule')
+    .select('*')
+    .eq('application_id', applicationId)
+    .eq('emi_number', emiNumber)
+    .maybeSingle();
+
+  if (existing) {
+    // Update existing entry
+    const scheduleUpdate: Record<string, any> = { updated_at: new Date().toISOString() };
+
+    if (eventType === REPAYMENT_EVENT_TYPES.EMI_PAID) {
+      scheduleUpdate.status = 'PAID';
+      scheduleUpdate.paid_amount = payload.amount || existing.total_amount;
+      scheduleUpdate.paid_at = payload.paid_at || new Date().toISOString();
+      scheduleUpdate.payment_reference = payload.payment_reference || null;
+    } else if (eventType === REPAYMENT_EVENT_TYPES.PARTIAL_PAYMENT) {
+      scheduleUpdate.status = 'PARTIAL';
+      scheduleUpdate.paid_amount = (existing.paid_amount || 0) + (payload.amount || 0);
+      scheduleUpdate.payment_reference = payload.payment_reference || null;
+    } else if (eventType === REPAYMENT_EVENT_TYPES.EMI_OVERDUE || eventType === REPAYMENT_EVENT_TYPES.DELINQUENCY_STARTED) {
+      scheduleUpdate.status = 'OVERDUE';
+      scheduleUpdate.days_overdue = payload.days_overdue || 1;
+    }
+
+    await supabase
+      .from('repayment_schedule')
+      .update(scheduleUpdate)
+      .eq('id', existing.id);
+  }
+}
+
+/**
+ * Trigger downstream actions (risk scoring, alerts, notifications).
+ */
+async function triggerDownstreamActions(
+  supabase: any,
+  application: any,
+  eventType: RepaymentEventType,
+  payload: any
+) {
+  const actions: Promise<any>[] = [];
+
+  // 1. Recalculate risk score
+  actions.push(
+    supabase.functions.invoke('repayment-risk-scorer', {
+      body: { application_id: application.id }
+    }).catch(e => console.error('Risk scorer error:', e))
+  );
+
+  // 2. Create alert for risk events
+  const riskEventTypes = [
+    REPAYMENT_EVENT_TYPES.EMI_OVERDUE,
+    REPAYMENT_EVENT_TYPES.DELINQUENCY_STARTED,
+    REPAYMENT_EVENT_TYPES.DEFAULT_NOTICE
+  ];
+
+  if (riskEventTypes.includes(eventType)) {
+    actions.push(
+      supabase.functions.invoke('repayment-alert-generator', {
+        body: {
+          application_id: application.id,
+          franchisee_id: application.franchisee_id,
+          outlet_id: application.outlet_id,
+          event_type: eventType,
+          severity: getSeverity(eventType, payload),
+          message: getAlertMessage(eventType, payload),
+        }
+      }).catch(e => console.error('Alert generator error:', e))
+    );
+  }
+
+  // 3. Notify via existing notification system
+  actions.push(
+    supabase.functions.invoke('notification-send', {
+      body: {
+        user_id: application.franchisee_id,
+        title: `Payment Update: ${eventType}`,
+        message: getNotificationMessage(eventType, payload),
+        channel: 'ALL',
+        priority: getPriority(eventType),
+      }
+    }).catch(e => console.error('Notification error:', e))
+  );
+
+  // Execute all actions in parallel
+  await Promise.allSettled(actions);
+}
+
+function getSeverity(eventType: RepaymentEventType, payload: any): string {
+  switch (eventType) {
+    case REPAYMENT_EVENT_TYPES.DEFAULT_NOTICE: return 'CRITICAL';
+    case REPAYMENT_EVENT_TYPES.DELINQUENCY_STARTED: return 'HIGH';
+    case REPAYMENT_EVENT_TYPES.EMI_OVERDUE: return 'MEDIUM';
+    default: return 'LOW';
+  }
+}
+
+function getPriority(eventType: RepaymentEventType): string {
+  switch (eventType) {
+    case REPAYMENT_EVENT_TYPES.DEFAULT_NOTICE:
+    case REPAYMENT_EVENT_TYPES.DELINQUENCY_STARTED:
+    case REPAYMENT_EVENT_TYPES.EMI_OVERDUE:
+      return 'HIGH';
+    default: return 'NORMAL';
+  }
+}
+
+function getAlertMessage(eventType: RepaymentEventType, payload: any): string {
+  switch (eventType) {
+    case REPAYMENT_EVENT_TYPES.EMI_OVERDUE:
+      return `EMI #${payload.emi_number} is ${payload.days_overdue || 1} days overdue. Amount: ${payload.currency || 'SGD'} ${payload.amount || 'N/A'}`;
+    case REPAYMENT_EVENT_TYPES.DELINQUENCY_STARTED:
+      return `Delinquency started for EMI #${payload.emi_number}. Level: ${payload.delinquency_level || 'MILD'}. Days overdue: ${payload.days_overdue || 0}`;
+    case REPAYMENT_EVENT_TYPES.DEFAULT_NOTICE:
+      return `Payment default notice issued for application. Immediate attention required.`;
+    default:
+      return `Payment event: ${eventType}`;
+  }
+}
+
+function getNotificationMessage(eventType: RepaymentEventType, payload: any): string {
+  switch (eventType) {
+    case REPAYMENT_EVENT_TYPES.EMI_PAID:
+      return `EMI #${payload.emi_number} payment of ${payload.currency || 'SGD'} ${payload.amount} received.`;
+    case REPAYMENT_EVENT_TYPES.PARTIAL_PAYMENT:
+      return `Partial payment of ${payload.currency || 'SGD'} ${payload.amount} received for EMI #${payload.emi_number}.`;
+    case REPAYMENT_EVENT_TYPES.EMI_OVERDUE:
+      return `EMI #${payload.emi_number} is overdue by ${payload.days_overdue || 1} days.`;
+    case REPAYMENT_EVENT_TYPES.DELINQUENCY_STARTED:
+      return `Your account is now in delinquency status. Please contact us immediately.`;
+    case REPAYMENT_EVENT_TYPES.FULL_REPAYMENT:
+      return `Congratulations! Your financing has been fully repaid.`;
+    default:
+      return `Payment status update: ${eventType}`;
+  }
+}
+
 serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
@@ -367,6 +679,18 @@ serve(async (req: Request) => {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
+
+      // Check if this is a repayment-specific webhook
+      const webhookType = url.searchParams.get('type');
+      if (webhookType === 'repayment') {
+        const result = await handleRepaymentWebhook(req, supabase);
+        return new Response(JSON.stringify(result.body), {
+          status: result.status,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // Original lender webhook (approvals, declines, disbursement)
       const result = await handleLenderWebhook(req, supabase);
       return new Response(JSON.stringify(result.body), {
         status: result.status,

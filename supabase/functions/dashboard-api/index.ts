@@ -109,7 +109,7 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
 
     const body = await req.json().catch(() => ({}));
-    const { period = '7d' } = body;
+    const { period = '7d', outlet_id } = body;
     const { startDate, endDate, periodLabel } = getDateRange(period);
 
     // Get outlets
@@ -174,6 +174,46 @@ serve(async (req) => {
       totals.total_transactions += outletData[id].transaction_count;
     }
 
+    // Fetch outlet detail if outlet_id is provided
+    let outletDetail = null;
+    if (outlet_id) {
+      // Authorization check for FRANCHISEE_OWNER/FRANCHISEE_STAFF
+      if (user.role === 'FRANCHISEE_OWNER' || user.role === 'FRANCHISEE_STAFF') {
+        const { data: userOutlets } = await supabase.from('user_outlets').select('outlet_id').eq('user_id', user.id).eq('outlet_id', outlet_id);
+        if (!userOutlets || userOutlets.length === 0) {
+          return new Response(JSON.stringify({ error: 'Forbidden: You do not have access to this outlet' }), { status: 403, headers: corsHeaders });
+        }
+      }
+      const { data: inventory } = await supabase.from('inventory').select('*').eq('outlet_id', outlet_id);
+      const { data: recentTxns } = await supabase.from('sales_transactions').select('*').eq('outlet_id', outlet_id).gte('date', startDate).lte('date', endDate).order('created_at', { ascending: false }).limit(20);
+      const todaySales = (recentTxns || []).filter((s: any) => s.date === endDate);
+      const todayRevenue = todaySales.reduce((sum: number, s: any) => sum + parseFloat(s.amount || 0), 0);
+      const yesterdayStr = new Date(new Date(endDate).getTime() - 86400000).toISOString().split('T')[0];
+      const { data: yesterdaySales } = await supabase.from('sales_transactions').select('amount').eq('outlet_id', outlet_id).eq('date', yesterdayStr);
+      const yesterdayRevenue = (yesterdaySales || []).reduce((sum: number, s: any) => sum + parseFloat(s.amount || 0), 0);
+      const lastWeekStr = new Date(new Date(endDate).getTime() - 7 * 86400000).toISOString().split('T')[0];
+      const { data: lastWeekSales } = await supabase.from('sales_transactions').select('amount').eq('outlet_id', outlet_id).eq('date', lastWeekStr);
+      const lastWeekRevenue = (lastWeekSales || []).reduce((sum: number, s: any) => sum + parseFloat(s.amount || 0), 0);
+      const lowStockItems = (inventory || []).filter((inv: any) => inv.current_stock < inv.min_stock);
+      const hourlySales: Record<string, number> = {};
+      (recentTxns || []).forEach((s: any) => {
+        const hour = new Date(s.created_at).getUTCHours();
+        const hourKey = `${String(hour).padStart(2, '0')}:00`;
+        hourlySales[hourKey] = (hourlySales[hourKey] || 0) + parseFloat(s.amount || 0);
+      });
+      outletDetail = {
+        sales: todayRevenue,
+        transaction_count: todaySales.length,
+        avg_transaction: todaySales.length > 0 ? todayRevenue / todaySales.length : 0,
+        stock_risk_percent: (inventory || []).length > 0 ? Math.round((lowStockItems.length / (inventory || []).length) * 100) : 0,
+        low_stock_items: lowStockItems.slice(0, 10).map((inv: any) => ({ sku: inv.sku, product_name: inv.product_name, current_stock: inv.current_stock, min_stock: inv.min_stock, max_stock: inv.max_stock, risk_level: inv.current_stock < inv.min_stock * 0.3 ? 'critical' : 'warning' })),
+        total_products: (inventory || []).length,
+        recent_transactions: (recentTxns || []).slice(0, 10).map((t: any) => ({ transaction_id: t.transaction_id, amount: parseFloat(t.amount || 0), item_count: t.transaction_count || 1, created_at: t.created_at, items: t.metadata?.items || [] })),
+        hourly_sales: hourlySales,
+        comparison: { yesterday: yesterdayRevenue, yesterday_change: yesterdayRevenue > 0 ? Math.round(((todayRevenue - yesterdayRevenue) / yesterdayRevenue) * 100) : 0, last_week: lastWeekRevenue, last_week_change: lastWeekRevenue > 0 ? Math.round(((todayRevenue - lastWeekRevenue) / lastWeekRevenue) * 100) : 0 }
+      };
+    }
+
     return new Response(JSON.stringify({
       outlets: Object.values(outletData),
       totals,
@@ -181,6 +221,7 @@ serve(async (req) => {
       period_label: periodLabel,
       records_fetched: allSales.length,
       date_range: { start: startDate, end: endDate },
+      outlet_detail: outletDetail,
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
   } catch (error: any) {
