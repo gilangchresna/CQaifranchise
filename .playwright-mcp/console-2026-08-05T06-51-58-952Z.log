@@ -72,3 +72,9 @@
 [23261487ms] [ERROR] Failed to load resource: net::ERR_INTERNET_DISCONNECTED @ https://ploqeifazcgzwjzmukgp.supabase.co/auth/v1/token?grant_type=refresh_token:0
 [23655624ms] [ERROR] Failed to load resource: the server responded with a status of 400 () @ https://ploqeifazcgzwjzmukgp.supabase.co/rest/v1/staff?select=*%2Coutlet%3Aoutlets%28id%2Cname%2Ccode%2Cregion%3Aregions%28name%29%29%2Cemployees%3Aemployee_id.employees%28employee_id%2Cperformance_score%2Cattendance_rate%2Chire_date%29&order=name.asc:0
 [23655626ms] [ERROR] Error fetching staff: {code: PGRST100, details: unexpected "e" expecting "sum", "avg", "count", "max" or "min", hint: null, message: "failed to parse select parameter (*,outlet:outlet…,attendance_rate,hire_date))" (line 1, column 75)} @ https://c-qaifranchise.vercel.app/assets/index-ByMZsAa8.js:590
+[27939197ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://c-qaifranchise.vercel.app/favicon.ico:0
+[27990695ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://c-qaifranchise.vercel.app/favicon.ico:0
+[28221392ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://c-qaifranchise.vercel.app/favicon.ico:0
+[28463095ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://c-qaifranchise.vercel.app/favicon.ico:0
+[28478947ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://c-qaifranchise.vercel.app/favicon.ico:0
+[28559695ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://c-qaifranchise.vercel.app/favicon.ico:0

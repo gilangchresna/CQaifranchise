@@ -44,38 +44,47 @@ export function FloatingChat() {
     setInput("");
     setIsLoading(true);
 
-    // Simulate AI response (in production, this would call an AI API)
-    setTimeout(() => {
+    try {
+      const { data: { session } } = await import("@/src/lib/supabase").then(m => m.supabase.auth.getSession());
+      const token = session?.access_token;
+
+      if (!token) {
+        throw new Error("No session");
+      }
+
+      const res = await fetch(import.meta.env.VITE_SUPABASE_URL + "/functions/v1/athena-chat", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          message: userMessage.content,
+          history: messages.slice(-6).map(m => ({ role: m.role, content: m.content })),
+        }),
+      });
+
+      const data = await res.json();
+
       const aiResponse: Message = {
         id: (Date.now() + 1).toString(),
         role: "assistant",
-        content: getAIResponse(userMessage.content),
+        content: data.response || data.error || "Maaf, saya tidak dapat memproses pertanyaan Anda saat ini.",
         timestamp: new Date(),
       };
       setMessages((prev) => [...prev, aiResponse]);
+    } catch (err) {
+      console.error("Chat error:", err);
+      const aiResponse: Message = {
+        id: (Date.now() + 1).toString(),
+        role: "assistant",
+        content: "Maaf, terjadi kesalahan koneksi. Silakan coba lagi.",
+        timestamp: new Date(),
+      };
+      setMessages((prev) => [...prev, aiResponse]);
+    } finally {
       setIsLoading(false);
-    }, 1000);
-  };
-
-  const getAIResponse = (question: string): string => {
-    const lowerQuestion = question.toLowerCase();
-
-    if (lowerQuestion.includes("outlet") || lowerQuestion.includes("store")) {
-      return "You can view all outlets in the Network Directory tab. Each outlet shows real-time KPIs, inventory levels, and sales performance.";
     }
-    if (lowerQuestion.includes("alert") || lowerQuestion.includes("stockout")) {
-      return "Alerts are triggered when inventory falls below threshold levels. You can view active alerts in the Dashboard and manage them through the workflow system.";
-    }
-    if (lowerQuestion.includes("financing") || lowerQuestion.includes("loan")) {
-      return "The Bridge Financing module helps you manage working capital needs. Navigate to Bridge Financing in the sidebar to apply for financing.";
-    }
-    if (lowerQuestion.includes("report") || lowerQuestion.includes("sales")) {
-      return "Sales reports are available in the Dashboard. You can view regional performance, outlet comparisons, and trend analysis.";
-    }
-    if (lowerQuestion.includes("help")) {
-      return "I can help you with:\n• Outlet performance and KPIs\n• Inventory management\n• Alert management\n• Financing applications\n• Sales reports\n• Workflow status\n\nWhat would you like to know?";
-    }
-    return "I understand you're asking about: '" + question + "'. For specific help, try asking about:\n• Outlets & stores\n• Alerts & stockouts\n• Financing options\n• Sales reports\n• Workflow management";
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {

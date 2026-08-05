@@ -525,6 +525,49 @@ async function queryFranchiseData(ctx: SystemPromptContext): Promise<string | nu
 
     const { data: sales } = await salesQuery.limit(50);
 
+    // =========================================
+    // TODAY'S SALES: Separate query for today
+    // =========================================
+    let todayRevenue = 0;
+    let todayTransactions = 0;
+    try {
+      const todayStr = new Date().toISOString().split("T")[0];
+      let todayQuery = supabase
+        .from("sales_transactions")
+        .select("id, amount, transaction_count")
+        .eq("date", todayStr);
+
+      if (user_role === "FRANCHISEE_OWNER" || user_role === "FRANCHISEE_STAFF") {
+        if (outlet_id) {
+          todayQuery = todayQuery.eq("outlet_id", outlet_id);
+        } else {
+          const { data: myOutlets } = await supabase
+            .from("outlets")
+            .select("id")
+            .eq("franchisee_id", user_id);
+          if (myOutlets && myOutlets.length > 0) {
+            todayQuery = todayQuery.in("outlet_id", myOutlets.map((o: any) => o.id));
+          }
+        }
+      } else if (user_role === "REGIONAL_MANAGER" && region_id) {
+        const { data: regionOutlets } = await supabase
+          .from("outlets")
+          .select("id")
+          .eq("region_id", region_id);
+        if (regionOutlets && regionOutlets.length > 0) {
+          todayQuery = todayQuery.in("outlet_id", regionOutlets.map((o: any) => o.id));
+        }
+      }
+
+      const { data: todaySales } = await todayQuery;
+      if (todaySales && todaySales.length > 0) {
+        todayRevenue = todaySales.reduce((sum: number, s: any) => sum + parseFloat(s.amount || 0), 0);
+        todayTransactions = todaySales.reduce((sum: number, s: any) => sum + (s.transaction_count || 0), 0);
+      }
+    } catch (err) {
+      console.error("Today sales query error:", err);
+    }
+
     if (sales && sales.length > 0) {
       // Calculate summary stats
       const totalAmount = sales.reduce((sum: number, s: any) => sum + parseFloat(s.amount || 0), 0);
@@ -539,6 +582,7 @@ async function queryFranchiseData(ctx: SystemPromptContext): Promise<string | nu
       }).join("\n  ");
 
       dataSections.push(`SALES SUMMARY (Last 14 Days):
+  Today's Revenue: RM${todayRevenue.toFixed(2)} (${todayTransactions} transactions)
   Total Revenue: RM${totalAmount.toFixed(2)}
   Total Transactions: ${totalTransactions}
   Average Daily: RM${avgDaily.toFixed(2)}
