@@ -1,0 +1,36 @@
+[ 4047988ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://c-qaifranchise.vercel.app/favicon.ico:0
+[ 4047991ms] [VERBOSE] [DOM] Input elements should have autocomplete attributes (suggested: "current-password"): (More info: https://goo.gl/9p2vKq) %o @ https://c-qaifranchise.vercel.app/:0
+[ 4093507ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://ploqeifazcgzwjzmukgp.supabase.co/rest/v1/financing_applications?select=*&order=created_at.desc:0
+[ 4093509ms] [ERROR] Error fetching financing applications: {code: PGRST205, details: null, hint: Perhaps you meant the table 'public.ai_explanations', message: Could not find the table 'public.financing_applications' in the schema cache} @ https://c-qaifranchise.vercel.app/assets/index-CPa9Uvk7.js:657
+[ 4105867ms] TypeError: Cannot read properties of undefined (reading 'toLowerCase')
+    at https://c-qaifranchise.vercel.app/assets/index-CPa9Uvk7.js:590:52852
+    at Array.filter (<anonymous>)
+    at Cte (https://c-qaifranchise.vercel.app/assets/index-CPa9Uvk7.js:590:52818)
+    at _p (https://c-qaifranchise.vercel.app/assets/index-CPa9Uvk7.js:48:48260)
+    at Hp (https://c-qaifranchise.vercel.app/assets/index-CPa9Uvk7.js:48:71084)
+    at i1 (https://c-qaifranchise.vercel.app/assets/index-CPa9Uvk7.js:48:81445)
+    at D1 (https://c-qaifranchise.vercel.app/assets/index-CPa9Uvk7.js:48:117275)
+    at Y4 (https://c-qaifranchise.vercel.app/assets/index-CPa9Uvk7.js:48:116319)
+    at u0 (https://c-qaifranchise.vercel.app/assets/index-CPa9Uvk7.js:48:116149)
+    at O1 (https://c-qaifranchise.vercel.app/assets/index-CPa9Uvk7.js:48:112930)
+[ 4117571ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://c-qaifranchise.vercel.app/favicon.ico:0
+[ 4124156ms] [ERROR] TypeError: Cannot read properties of undefined (reading 'auth')
+    at https://c-qaifranchise.vercel.app/assets/index-CPa9Uvk7.js:656:47356
+    at async E (https://c-qaifranchise.vercel.app/assets/index-CPa9Uvk7.js:656:47243)
+    at async A (https://c-qaifranchise.vercel.app/assets/index-CPa9Uvk7.js:656:45929) @ https://c-qaifranchise.vercel.app/assets/index-CPa9Uvk7.js:655
+[ 4124156ms] [ERROR] Failed to fetch: TypeError: Cannot read properties of undefined (reading 'auth')
+    at https://c-qaifranchise.vercel.app/assets/index-CPa9Uvk7.js:656:47356
+    at async E (https://c-qaifranchise.vercel.app/assets/index-CPa9Uvk7.js:656:47243)
+    at async T (https://c-qaifranchise.vercel.app/assets/index-CPa9Uvk7.js:656:46911) @ https://c-qaifranchise.vercel.app/assets/index-CPa9Uvk7.js:655
+[ 4124156ms] [ERROR] TypeError: Cannot read properties of undefined (reading 'auth')
+    at https://c-qaifranchise.vercel.app/assets/index-CPa9Uvk7.js:656:47356
+    at async E (https://c-qaifranchise.vercel.app/assets/index-CPa9Uvk7.js:656:47243)
+    at async A (https://c-qaifranchise.vercel.app/assets/index-CPa9Uvk7.js:656:46162) @ https://c-qaifranchise.vercel.app/assets/index-CPa9Uvk7.js:655
+[ 4124156ms] [ERROR] TypeError: Cannot read properties of undefined (reading 'auth')
+    at https://c-qaifranchise.vercel.app/assets/index-CPa9Uvk7.js:656:47356
+    at async E (https://c-qaifranchise.vercel.app/assets/index-CPa9Uvk7.js:656:47243)
+    at async A (https://c-qaifranchise.vercel.app/assets/index-CPa9Uvk7.js:656:46405) @ https://c-qaifranchise.vercel.app/assets/index-CPa9Uvk7.js:655
+[ 4124157ms] [ERROR] TypeError: Cannot read properties of undefined (reading 'auth')
+    at https://c-qaifranchise.vercel.app/assets/index-CPa9Uvk7.js:656:47356
+    at async E (https://c-qaifranchise.vercel.app/assets/index-CPa9Uvk7.js:656:47243)
+    at async A (https://c-qaifranchise.vercel.app/assets/index-CPa9Uvk7.js:656:46646) @ https://c-qaifranchise.vercel.app/assets/index-CPa9Uvk7.js:655

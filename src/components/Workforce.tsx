@@ -7,6 +7,7 @@ const EDGE_FUNCTIONS_URL = 'https://ploqeifazcgzwjzmukgp.supabase.co/functions/v
 
 interface Staff {
   id: number;
+  employee_id?: string;
   name: string;
   role: string;
   outlet_id: number;
@@ -51,16 +52,27 @@ export function Workforce({ activeRole }: { activeRole: Role }) {
   async function fetchStaff() {
     setLoading(true);
     try {
+      // Fetch staff with outlet info
       const { data, error } = await supabase
         .from('staff')
         .select(`
           *,
-          outlet:outlets(id, name, code, region:regions(name))
+          outlet:outlets(id, name, code, region:regions(name)),
+          employees:employee_id.employees(employee_id, performance_score, attendance_rate, hire_date)
         `)
         .order('name');
-      
+
       if (error) throw error;
-      setStaff(data || []);
+
+      // Flatten employee data
+      const staffWithEmployee = (data || []).map((s: any) => ({
+        ...s,
+        employee_id: s.employee_id,
+        performance_score: s.employees?.performance_score || s.performance_score || 75,
+        attendance_rate: s.employees?.attendance_rate || s.attendance_rate || 95,
+      }));
+
+      setStaff(staffWithEmployee);
     } catch (err) {
       console.error('Error fetching staff:', err);
       // Show empty state - staff table may be empty
@@ -260,7 +272,7 @@ export function Workforce({ activeRole }: { activeRole: Role }) {
                       </div>
                       <div>
                         <p className="font-medium text-slate-900">{emp.name}</p>
-                        <p className="text-xs text-slate-400">EMP-{String(emp.id).padStart(3, '0')}</p>
+                        <p className="text-xs text-slate-400">{emp.employee_id || `EMP-${String(emp.id).padStart(3, '0')}`}</p>
                       </div>
                     </div>
                   </td>
@@ -431,7 +443,7 @@ function StaffDetailView({
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
               <div>
                 <p className="text-slate-400 text-xs">Employee ID</p>
-                <p className="font-medium">EMP-{String(staff.id).padStart(3, '0')}</p>
+                <p className="font-mono font-medium">{staff.employee_id || `EMP-${String(staff.id).padStart(3, '0')}`}</p>
               </div>
               <div>
                 <p className="text-slate-400 text-xs">Role</p>
