@@ -6,7 +6,91 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 const VALID_PAYMENT_METHODS = ['cash', 'card', 'qrcode', 'ewallet', 'gofood', 'grabfood', 'shopeefood', 'dine_in'];
 const VALID_PLATFORMS = ['dine_in', 'gofood', 'grabfood', 'shopeefood', 'pos'];
 
+// HMAC secret for POS webhook authentication
+const POS_WEBHOOK_SECRET = Deno.env.get('POS_WEBHOOK_SECRET');
+
+// CORS headers
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-pos-signature",
+};
+
+/**
+ * Verify HMAC-SHA256 signature for POS webhook
+ * Returns true if signature is valid, false otherwise
+ */
+async function verifyHMAC(req: Request): Promise<boolean> {
+  const signature = req.headers.get('x-pos-signature');
+  
+  // If no secret configured, reject ALL requests (fail closed)
+  if (!POS_WEBHOOK_SECRET) {
+    console.error('SECURITY: POS_WEBHOOK_SECRET not configured - rejecting all requests');
+    return false;
+  }
+  
+  // If no signature provided, reject
+  if (!signature) {
+    console.error('POS Webhook: Missing x-pos-signature header');
+    return false;
+  }
+  
+  // Get raw body for HMAC calculation
+  const body = await req.text();
+  
+  // Calculate expected HMAC-SHA256
+  const encoder = new TextEncoder();
+  const keyData = encoder.encode(POS_WEBHOOK_SECRET);
+  const messageData = encoder.encode(body);
+  
+  const cryptoKey = await crypto.subtle.importKey(
+    'raw',
+    keyData,
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  );
+  
+  const signatureBuffer = await crypto.subtle.sign('HMAC', cryptoKey, messageData);
+  const signatureArray = new Uint8Array(signatureBuffer);
+  const expectedHex = Array.from(signatureArray)
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('');
+  
+  // Timing-safe comparison
+  if (signature.length !== expectedHex.length) {
+    return false;
+  }
+  
+  let result = 0;
+  for (let i = 0; i < signature.length; i++) {
+    result |= signature.charCodeAt(i) ^ expectedHex.charCodeAt(i);
+  }
+  
+  return result === 0;
+}
+
 serve(async (req) => {
+  // Handle CORS preflight
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: corsHeaders });
+  }
+  
+  // ========== HMAC AUTHENTICATION ==========
+  // SECURITY FIX: Verify HMAC signature for all POST requests
+  if (req.method === "POST") {
+    const hmacValid = await verifyHMAC(req.clone()); // clone() because we already read body in verifyHMAC
+    if (!hmacValid) {
+      console.error('POS Webhook: HMAC verification failed');
+      return new Response(JSON.stringify({
+        success: false,
+        error: "Unauthorized: Invalid or missing signature"
+      }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" }
+      });
+    }
+  }
+  
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   const supabase = createClient(supabaseUrl, serviceKey);

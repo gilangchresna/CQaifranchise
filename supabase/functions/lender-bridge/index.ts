@@ -150,6 +150,13 @@ async function handleSubmit(req: Request, supabase: any, auth: { userId: string;
   if (!body.requested_amount || body.requested_amount <= 0) {
     return { status: 400, body: { success: false, error: "requested_amount must be a positive number" } };
   }
+  
+  // FIX 1.2: Validate amount is not excessive
+  const MAX_AMOUNT = 10000000; // 10M SGD max
+  if (body.requested_amount > MAX_AMOUNT) {
+    return { status: 400, body: { success: false, error: `requested_amount exceeds maximum of ${MAX_AMOUNT}` } };
+  }
+  
   const purpose = body.purpose && VALID_PURPOSES.includes(body.purpose) ? body.purpose : "FRANCHISEE_SETUP";
   const lenderCode = body.lender_code || "GENERIC";
 
@@ -160,6 +167,24 @@ async function handleSubmit(req: Request, supabase: any, auth: { userId: string;
       ? body.franchisee_id || auth.userId
       : auth.userId;
 
+  // FIX 1.2: Rate limiting - max 5 applications per day per franchisee
+  const today = new Date().toISOString().split('T')[0];
+  const { count: dailyCount } = await supabase
+    .from("financing_applications")
+    .select('id', { count: 'exact', head: true })
+    .eq('franchisee_id', franchiseeId)
+    .gte('submitted_at', today);
+  
+  if ((dailyCount || 0) >= 5) {
+    return { 
+      status: 429, 
+      body: { 
+        success: false, 
+        error: "Rate limit exceeded. Maximum 5 applications per day." 
+      } 
+    };
+  }
+  
   const submittedPayload = {
     franchisee_id: franchiseeId,
     outlet_id: body.outlet_id ?? null,
@@ -335,7 +360,11 @@ async function handleLenderWebhook(req: Request, supabase: any) {
   if (payload.interest_rate_bps !== undefined) update.interest_rate_bps = payload.interest_rate_bps;
   if (payload.disbursed_amount !== undefined) update.disbursed_amount = payload.disbursed_amount;
   if (payload.status === "DISBURSED") update.disbursed_at = new Date().toISOString();
-  if (["APPROVED", "DECLINED"].includes(payload.status)) update.decided_at = new Date().toISOString();
+  
+  // FIX 1.5: Set decided_at for APPROVED, DECLINED, or APPLICATION_DECLINED
+  if (["APPROVED", "DECLINED", "APPLICATION_DECLINED"].includes(payload.status)) {
+    update.decided_at = new Date().toISOString();
+  }
   if (payload.decision_reason) update.decision_reason = payload.decision_reason;
 
   await supabase.from("financing_applications").update(update).eq("id", application.id);
@@ -378,6 +407,32 @@ async function handleRepaymentWebhook(req: Request, supabase: any) {
   const validTypes = Object.values(REPAYMENT_EVENT_TYPES);
   if (!validTypes.includes(eventType)) {
     return { status: 400, body: { success: false, error: `Invalid event_type: ${eventType}` } };
+  }
+
+  // FIX 1.3: Validate amount if provided
+  if (payload.amount !== undefined && payload.amount !== null) {
+    if (typeof payload.amount !== 'number' || payload.amount <= 0) {
+      return { 
+        status: 400, 
+        body: { success: false, error: 'amount must be a positive number' } 
+      };
+    }
+    // Validate currency if provided
+    const validCurrencies = ['SGD', 'MYR', 'IDR', 'USD'];
+    if (payload.currency && !validCurrencies.includes(payload.currency)) {
+      return { 
+        status: 400, 
+        body: { success: false, error: `Invalid currency: ${payload.currency}. Must be one of: ${validCurrencies.join(', ')}` } 
+      };
+    }
+  }
+  
+  // FIX 1.3: Validate days_overdue if provided
+  if (payload.days_overdue !== undefined && payload.days_overdue < 0) {
+    return { 
+      status: 400, 
+      body: { success: false, error: 'days_overdue cannot be negative' } 
+    };
   }
 
   // 1. Idempotency check on repayment_events
@@ -673,7 +728,22 @@ serve(async (req: Request) => {
       // Lender webhooks authenticate via a shared secret header, not a user JWT.
       const secret = req.headers.get("x-lender-webhook-secret");
       const expected = Deno.env.get("LENDER_WEBHOOK_SECRET");
-      if (expected && secret !== expected) {
+      
+      // SECURITY FIX: Fail closed if no secret configured
+      if (!expected) {
+        console.error('CRITICAL: LENDER_WEBHOOK_SECRET not configured - rejecting webhook');
+        return new Response(JSON.stringify({ 
+          success: false, 
+          error: "Webhook endpoint not configured. Contact administrator." 
+        }), {
+          status: 503, // Service Unavailable
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      
+      // SECURITY FIX: Reject if no secret provided
+      if (!secret || secret !== expected) {
+        console.error('Lender Webhook: Invalid or missing webhook secret');
         return new Response(JSON.stringify({ success: false, error: "Invalid webhook secret" }), {
           status: 401,
           headers: { ...corsHeaders, "Content-Type": "application/json" },

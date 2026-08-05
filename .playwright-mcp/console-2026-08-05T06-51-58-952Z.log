@@ -34,3 +34,41 @@
     at https://c-qaifranchise.vercel.app/assets/index-CPa9Uvk7.js:656:47356
     at async E (https://c-qaifranchise.vercel.app/assets/index-CPa9Uvk7.js:656:47243)
     at async A (https://c-qaifranchise.vercel.app/assets/index-CPa9Uvk7.js:656:46646) @ https://c-qaifranchise.vercel.app/assets/index-CPa9Uvk7.js:655
+[15000131ms] [ERROR] Failed to load resource: net::ERR_INTERNET_DISCONNECTED @ https://ploqeifazcgzwjzmukgp.supabase.co/auth/v1/token?grant_type=refresh_token:0
+[15000340ms] [ERROR] Failed to load resource: net::ERR_INTERNET_DISCONNECTED @ https://ploqeifazcgzwjzmukgp.supabase.co/auth/v1/token?grant_type=refresh_token:0
+[15000747ms] [ERROR] Failed to load resource: net::ERR_INTERNET_DISCONNECTED @ https://ploqeifazcgzwjzmukgp.supabase.co/auth/v1/token?grant_type=refresh_token:0
+[15001555ms] [ERROR] Failed to load resource: net::ERR_INTERNET_DISCONNECTED @ https://ploqeifazcgzwjzmukgp.supabase.co/auth/v1/token?grant_type=refresh_token:0
+[15003161ms] [ERROR] Failed to load resource: net::ERR_INTERNET_DISCONNECTED @ https://ploqeifazcgzwjzmukgp.supabase.co/auth/v1/token?grant_type=refresh_token:0
+[15006368ms] [ERROR] Failed to load resource: net::ERR_INTERNET_DISCONNECTED @ https://ploqeifazcgzwjzmukgp.supabase.co/auth/v1/token?grant_type=refresh_token:0
+[16003798ms] [ERROR] Failed to load resource: net::ERR_INTERNET_DISCONNECTED @ https://ploqeifazcgzwjzmukgp.supabase.co/auth/v1/token?grant_type=refresh_token:0
+[17086058ms] [ERROR] Failed to load resource: net::ERR_INTERNET_DISCONNECTED @ https://ploqeifazcgzwjzmukgp.supabase.co/auth/v1/token?grant_type=refresh_token:0
+[17086263ms] [ERROR] Failed to load resource: net::ERR_INTERNET_DISCONNECTED @ https://ploqeifazcgzwjzmukgp.supabase.co/auth/v1/token?grant_type=refresh_token:0
+[17086671ms] [ERROR] Failed to load resource: net::ERR_INTERNET_DISCONNECTED @ https://ploqeifazcgzwjzmukgp.supabase.co/auth/v1/token?grant_type=refresh_token:0
+[17087478ms] [ERROR] Failed to load resource: net::ERR_INTERNET_DISCONNECTED @ https://ploqeifazcgzwjzmukgp.supabase.co/auth/v1/token?grant_type=refresh_token:0
+[17089084ms] [ERROR] Failed to load resource: net::ERR_INTERNET_DISCONNECTED @ https://ploqeifazcgzwjzmukgp.supabase.co/auth/v1/token?grant_type=refresh_token:0
+[17092292ms] [ERROR] Failed to load resource: net::ERR_INTERNET_DISCONNECTED @ https://ploqeifazcgzwjzmukgp.supabase.co/auth/v1/token?grant_type=refresh_token:0
+[18131673ms] [ERROR] Failed to load resource: net::ERR_INTERNET_DISCONNECTED @ https://ploqeifazcgzwjzmukgp.supabase.co/auth/v1/token?grant_type=refresh_token:0
+[18581034ms] [ERROR] Failed to load resource: net::ERR_INTERNET_DISCONNECTED @ https://ploqeifazcgzwjzmukgp.supabase.co/auth/v1/token?grant_type=refresh_token:0
+[18581241ms] [ERROR] Failed to load resource: net::ERR_INTERNET_DISCONNECTED @ https://ploqeifazcgzwjzmukgp.supabase.co/auth/v1/token?grant_type=refresh_token:0
+[18581649ms] [ERROR] Failed to load resource: net::ERR_INTERNET_DISCONNECTED @ https://ploqeifazcgzwjzmukgp.supabase.co/auth/v1/token?grant_type=refresh_token:0
+[18582456ms] [ERROR] Failed to load resource: net::ERR_INTERNET_DISCONNECTED @ https://ploqeifazcgzwjzmukgp.supabase.co/auth/v1/token?grant_type=refresh_token:0
+[18584063ms] [ERROR] Failed to load resource: net::ERR_INTERNET_DISCONNECTED @ https://ploqeifazcgzwjzmukgp.supabase.co/auth/v1/token?grant_type=refresh_token:0
+[18587268ms] [ERROR] Failed to load resource: net::ERR_INTERNET_DISCONNECTED @ https://ploqeifazcgzwjzmukgp.supabase.co/auth/v1/token?grant_type=refresh_token:0
+[18593675ms] [ERROR] Failed to load resource: net::ERR_INTERNET_DISCONNECTED @ https://ploqeifazcgzwjzmukgp.supabase.co/auth/v1/token?grant_type=refresh_token:0
+[18606482ms] [ERROR] Failed to load resource: net::ERR_INTERNET_DISCONNECTED @ https://ploqeifazcgzwjzmukgp.supabase.co/auth/v1/token?grant_type=refresh_token:0
+[19570157ms] [ERROR] Failed to load resource: net::ERR_INTERNET_DISCONNECTED @ https://ploqeifazcgzwjzmukgp.supabase.co/auth/v1/token?grant_type=refresh_token:0
+[19570364ms] [ERROR] Failed to load resource: net::ERR_INTERNET_DISCONNECTED @ https://ploqeifazcgzwjzmukgp.supabase.co/auth/v1/token?grant_type=refresh_token:0
+[19570771ms] [ERROR] Failed to load resource: net::ERR_INTERNET_DISCONNECTED @ https://ploqeifazcgzwjzmukgp.supabase.co/auth/v1/token?grant_type=refresh_token:0
+[19571577ms] [ERROR] Failed to load resource: net::ERR_INTERNET_DISCONNECTED @ https://ploqeifazcgzwjzmukgp.supabase.co/auth/v1/token?grant_type=refresh_token:0
+[20520184ms] [ERROR] Failed to load resource: net::ERR_INTERNET_DISCONNECTED @ https://ploqeifazcgzwjzmukgp.supabase.co/auth/v1/token?grant_type=refresh_token:0
+[21642161ms] [ERROR] Failed to load resource: net::ERR_INTERNET_DISCONNECTED @ https://ploqeifazcgzwjzmukgp.supabase.co/auth/v1/token?grant_type=refresh_token:0
+[21642369ms] [ERROR] Failed to load resource: net::ERR_INTERNET_DISCONNECTED @ https://ploqeifazcgzwjzmukgp.supabase.co/auth/v1/token?grant_type=refresh_token:0
+[21642777ms] [ERROR] Failed to load resource: net::ERR_INTERNET_DISCONNECTED @ https://ploqeifazcgzwjzmukgp.supabase.co/auth/v1/token?grant_type=refresh_token:0
+[21643583ms] [ERROR] Failed to load resource: net::ERR_INTERNET_DISCONNECTED @ https://ploqeifazcgzwjzmukgp.supabase.co/auth/v1/token?grant_type=refresh_token:0
+[21645191ms] [ERROR] Failed to load resource: net::ERR_INTERNET_DISCONNECTED @ https://ploqeifazcgzwjzmukgp.supabase.co/auth/v1/token?grant_type=refresh_token:0
+[21648397ms] [ERROR] Failed to load resource: net::ERR_INTERNET_DISCONNECTED @ https://ploqeifazcgzwjzmukgp.supabase.co/auth/v1/token?grant_type=refresh_token:0
+[22230773ms] [ERROR] Failed to load resource: net::ERR_INTERNET_DISCONNECTED @ https://ploqeifazcgzwjzmukgp.supabase.co/auth/v1/token?grant_type=refresh_token:0
+[23261282ms] [ERROR] Failed to load resource: net::ERR_INTERNET_DISCONNECTED @ https://ploqeifazcgzwjzmukgp.supabase.co/auth/v1/token?grant_type=refresh_token:0
+[23261487ms] [ERROR] Failed to load resource: net::ERR_INTERNET_DISCONNECTED @ https://ploqeifazcgzwjzmukgp.supabase.co/auth/v1/token?grant_type=refresh_token:0
+[23655624ms] [ERROR] Failed to load resource: the server responded with a status of 400 () @ https://ploqeifazcgzwjzmukgp.supabase.co/rest/v1/staff?select=*%2Coutlet%3Aoutlets%28id%2Cname%2Ccode%2Cregion%3Aregions%28name%29%29%2Cemployees%3Aemployee_id.employees%28employee_id%2Cperformance_score%2Cattendance_rate%2Chire_date%29&order=name.asc:0
+[23655626ms] [ERROR] Error fetching staff: {code: PGRST100, details: unexpected "e" expecting "sum", "avg", "count", "max" or "min", hint: null, message: "failed to parse select parameter (*,outlet:outlet…,attendance_rate,hire_date))" (line 1, column 75)} @ https://c-qaifranchise.vercel.app/assets/index-ByMZsAa8.js:590

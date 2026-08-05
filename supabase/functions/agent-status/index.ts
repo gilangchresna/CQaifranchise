@@ -1,14 +1,21 @@
 /**
  * Agent Status - Returns current status of all agents
  * Edge Function: agent-status
+ * SECURITY: Requires authentication
  */
 
 import { createClient } from "jsr:@supabase/supabase-js@2"
+import { verifyAuth, unauthorizedResponse } from "../_shared/auth-helper.ts"
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
-const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!
+const SUPABASE_SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type'
+}
 
 interface AgentStatus {
   agent_id: string
@@ -37,13 +44,14 @@ function calculateStatus(tasks: any[]): 'online' | 'busy' | 'offline' | 'error' 
 }
 
 Deno.serve(async (req: Request) => {
-  const corsHeaders = {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type'
-  }
-
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders })
+  }
+
+  // SECURITY: Verify authentication
+  const auth = await verifyAuth(req)
+  if (!auth.authorized) {
+    return unauthorizedResponse(auth.error)
   }
 
   try {

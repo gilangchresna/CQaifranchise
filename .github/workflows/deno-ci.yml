@@ -1,0 +1,44 @@
+name: Deno CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Deno
+        uses: denoland/setup-deno@v1
+        with:
+          deno-version: "1.37.0"
+
+      - name: Type check
+        run: deno check supabase/functions/*/index.ts
+
+      - name: Run unit tests
+        run: deno test --no-check --allow-read tests/
+
+      # Integration tests require real Supabase — run manually or via workflow_dispatch
+      # See: .github/workflows/test-integration.yml
+
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Deno
+        uses: denoland/setup-deno@v1
+        with:
+          deno-version: "1.37.0"
+
+      - name: Lint
+        run: deno lint supabase/functions/

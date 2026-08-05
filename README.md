@@ -70,6 +70,34 @@ Open: http://localhost:3000 (port is set in package.json's "dev" script)
 
 ---
 
+## 🔒 Security
+
+### Webhook Authentication
+- **POS Webhook**: HMAC-SHA256 signature required — header `x-pos-signature`
+- **Lender Webhook**: Secret header required — header `x-lender-webhook-secret`
+
+### Rate Limiting
+- Loan applications: **5 per day** per franchisee
+- API requests: 100 per minute (global)
+
+### RLS Policies
+All tables enforce Row Level Security. Check `supabase/migrations/` for policies.
+
+---
+
+## 🌐 Edge Function Endpoints
+
+| Endpoint | Auth | Rate Limit | Notes |
+|----------|------|------------|-------|
+| `pos-webhook` | HMAC-SHA256 | — | Requires `x-pos-signature` header |
+| `lender-bridge` | JWT | 5/day | Submit/status/cancel actions |
+| `lender-bridge/webhook` | Secret | — | Requires `x-lender-webhook-secret` |
+| `ml-anomaly-v2` | JWT | 10/min | Returns anomaly score |
+| `ml-stockout-v2` | JWT | 10/min | Returns stockout risk |
+| `athena-chat` | JWT | 30/min | AI assistant |
+
+---
+
 ## 📋 Changelog
 
 | Date       | Summary |

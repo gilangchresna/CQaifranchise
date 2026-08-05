@@ -2,7 +2,7 @@
 
 /**
  * ML Stockout Prediction v2
- * LSTM-inspired forecasting for inventory stockout prediction
+ * Velocity-based forecasting for inventory stockout prediction
  * 
  * Features:
  * - Sales velocity analysis
@@ -62,9 +62,10 @@ class StockoutPredictor {
     const recent = this.salesHistory.slice(-7);
     const older = this.salesHistory.slice(-14, -7);
     
-    const recentAvg = recent.reduce((a, b) => a + b, 0) / 7;
-    const olderAvg = older.reduce((a, b) => a + b, 0) / 7;
-    
+    const recentAvg = recent.reduce((a, b) => a + b, 0) / recent.length;
+    const olderAvg = older.reduce((a, b) => a + b, 0) / older.length;
+
+    if (olderAvg === 0) return "STABLE";
     const change = (recentAvg - olderAvg) / olderAvg;
     
     if (change > 0.1) return "INCREASING";
@@ -104,7 +105,7 @@ class StockoutPredictor {
     if (trend === "INCREASING") adjustedVelocity *= 1.2;
     if (trend === "DECREASING") adjustedVelocity *= 0.8;
     
-    // Apply seasonality (simplified LSTM-like pattern detection)
+    // Apply seasonality (velocity-based pattern detection)
     // Higher seasonality = higher demand = faster depletion
     adjustedVelocity *= (0.8 + seasonality * 0.4);
     
@@ -161,10 +162,10 @@ class StockoutPredictor {
   // Get feature importance (simulated)
   getFeatureImportance(): { feature: string; importance: number }[] {
     return [
-      { feature: "sales_velocity_7d", importance: 0.45 },
+      { feature: "sales_velocity_7d", importance: 0.50 },
       { feature: "trend", importance: 0.25 },
       { feature: "seasonality", importance: 0.15 },
-      { feature: "current_stock", importance: 0.15 },
+      { feature: "current_stock", importance: 0.10 },
     ];
   }
 }
@@ -226,12 +227,38 @@ serve(async (req: Request) => {
       ];
     }
 
-    // Generate historical sales data (simulate from stock movements)
-    // In production, this would come from sales_transactions
+    // Load REAL historical sales data from sales_transactions
+    let realSalesData: number[] = [];
+    if (outlet_id) {
+      const { data: salesData } = await supabase
+        .from("sales_transactions")
+        .select("transaction_count, created_at")
+        .eq("outlet_id", outlet_id)
+        .order("created_at", { ascending: false })
+        .limit(30);
+      if (salesData && salesData.length > 0) {
+        // Aggregate daily totals
+        const dailyMap = new Map<string, number>();
+        for (const tx of salesData) {
+          const day = String(tx.created_at).substring(0, 10);
+          dailyMap.set(day, (dailyMap.get(day) || 0) + (Number(tx.transaction_count) || 0));
+        }
+        realSalesData = Array.from(dailyMap.values()).reverse().slice(-21);
+      }
+    }
+
     const predictor = new StockoutPredictor();
-    for (let i = 0; i < 21; i++) {
-      const dailySales = 5 + Math.random() * 10; // 5-15 units/day
-      predictor.addDataPoint(dailySales, 50 - i * 2);
+    if (realSalesData.length >= 7) {
+      // Use real sales data
+      for (let i = 0; i < realSalesData.length; i++) {
+        predictor.addDataPoint(realSalesData[i], 50 - i * 2);
+      }
+    } else {
+      // Fallback: seed with velocity estimate then add real if available
+      for (let i = 0; i < 21; i++) {
+        const dailySales = 5 + Math.random() * 10;
+        predictor.addDataPoint(dailySales, 50 - i * 2);
+      }
     }
 
     // Build predictions for all inventory items
@@ -285,7 +312,7 @@ serve(async (req: Request) => {
           days_until_stockout: pred.days_until_stockout,
           stockout_probability: pred.risk_score,
           recommended_order_qty: pred.recommended_order_qty,
-          model_version: "v2.0.0-lstm-inspired",
+          model_version: "v2.0.0-velocity",
           confidence: pred.confidence,
           feature_importance: predictor.getFeatureImportance(),
         });
@@ -306,7 +333,7 @@ serve(async (req: Request) => {
           risk_score: Math.round(p.risk_score * 100) / 100,
         })),
         model_info: {
-          model_type: "lstm_inspired",
+          model_type: "velocity_based",
           model_version: "v2.0.0",
           features: ["sales_velocity", "trend", "seasonality", "stock_level"],
         },

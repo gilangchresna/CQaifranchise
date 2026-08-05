@@ -91,15 +91,19 @@ export function Dashboard({ activeRole }: { activeRole: Role }) {
     setError(null);
     
     try {
+      // SECURITY FIX: Use authenticated session token, not anon key
       const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token || '';
+      if (!session) {
+        setError('Not authenticated');
+        setLoading(false);
+        return;
+      }
+      const token = session.access_token;
 
-      // Fetch dashboard stats with period parameter - use dashboard-full for complete data
-      const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+      // Fetch dashboard stats with period parameter
       const statsRes = await fetch(`${EDGE_FUNCTIONS_URL}/dashboard-full?period=${selectedPeriod}`, {
         headers: { 
-          'apikey': anonKey,
-          'Authorization': `Bearer ${anonKey}`
+          'Authorization': `Bearer ${token}`  // FIX: Use session token, not anon key
         },
       });
       

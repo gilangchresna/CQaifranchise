@@ -1,3 +1,7 @@
 node_modules
 .env.local
 .env.*.local
+docs/PHASE0_DEPLOYMENT.md
+docs/IMPLEMENTATION_PLAN.md
+.gitignore
+CODE_REVIEW_REPORT.md

@@ -25,7 +25,7 @@ const RISK_THRESHOLDS = {
   LOW: 30,
   MEDIUM: 60,
   HIGH: 80,
-  CRITICAL: 100
+  CRITICAL: 70
 };
 
 // Weight factors for risk calculation
@@ -86,15 +86,16 @@ serve(async (req: Request) => {
     }
 
     // 2. Get recent repayment events (last 90 days)
+    // 2. Get recent repayment events (last 90 days)
+    // FIX 1.1: Use created_at instead of received_at (column name correction)
     const ninetyDaysAgo = new Date();
     ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
-
     const { data: recentEvents } = await supabase
       .from('repayment_events')
       .select('*')
       .eq('application_id', applicationId)
-      .gte('received_at', ninetyDaysAgo.toISOString())
-      .order('received_at', { ascending: false });
+      .gte('created_at', ninetyDaysAgo.toISOString())
+      .order('created_at', { ascending: false });
 
     // 3. Get payment history from repayment_schedule
     const { data: paymentHistory } = await supabase
@@ -196,9 +197,15 @@ function calculateRiskScores(
   // 1. Payment Timing Score (0-100, higher is better)
   const totalPayments = paymentHistory.filter(p => ['PAID', 'PARTIAL'].includes(p.status));
   const onTimePayments = totalPayments.filter(p => (p.days_overdue || 0) <= 0);
-  const paymentTimingScore = totalPayments.length > 0
-    ? (onTimePayments.length / totalPayments.length) * 100
-    : 100;
+  
+  // FIX 1.4: No payment history = null (unknown), NOT 100 (perfect)
+  // A new franchisee with no history should NOT score as perfect
+  let paymentTimingScore: number;
+  if (totalPayments.length === 0) {
+    paymentTimingScore = null as any; // Unknown - no history
+  } else {
+    paymentTimingScore = (onTimePayments.length / totalPayments.length) * 100;
+  }
 
   // 2. Delinquency Score (0-100, higher is worse)
   const overdueEvents = recentEvents.filter(e =>
@@ -222,9 +229,14 @@ function calculateRiskScores(
   const affordabilityScore = Math.max(0, Math.min(100, 100 - (recentMissed * 25)));
 
   // 4. Overall Risk Score (weighted average)
+  // FIX 1.4: Handle null paymentTimingScore (no history)
+  const paymentComponent = paymentTimingScore !== null 
+    ? (100 - paymentTimingScore) * WEIGHTS.paymentTiming 
+    : 0; // Unknown = neutral (no history to judge)
+  
   const overallRiskScore = Math.round(
     (delinquencyScore * WEIGHTS.delinquency) +
-    ((100 - paymentTimingScore) * WEIGHTS.paymentTiming) +
+    paymentComponent +
     ((100 - affordabilityScore) * WEIGHTS.affordability)
   );
 
@@ -240,9 +252,14 @@ function calculateRiskScores(
   if (delinquencyScore > 50) {
     riskFactors.push(`High delinquency (${delinquencyScore}% - ${maxDaysOverdue} days overdue)`);
   }
-  if (paymentTimingScore < 80) {
+  
+  // FIX 1.4: Handle null paymentTimingScore
+  if (paymentTimingScore !== null && paymentTimingScore < 80) {
     riskFactors.push(`Late payment pattern (${Math.round(paymentTimingScore)}% on-time)`);
+  } else if (paymentTimingScore === null) {
+    riskFactors.push('No payment history (new borrower - cannot assess timing)');
   }
+  
   if (affordabilityScore < 60) {
     riskFactors.push(`Payment difficulty detected (${Math.round(affordabilityScore)}% affordability score)`);
   }
@@ -255,7 +272,9 @@ function calculateRiskScores(
   const triggeringEvents = recentEvents.slice(0, 5).map(e => e.event_type);
 
   return {
-    payment_timing_score: Math.round(paymentTimingScore * 100) / 100,
+    payment_timing_score: paymentTimingScore !== null
+      ? Math.round(paymentTimingScore * 100) / 100
+      : null,
     delinquency_score: Math.round(delinquencyScore * 100) / 100,
     affordability_score: Math.round(affordabilityScore * 100) / 100,
     overall_risk_score: Math.round(overallRiskScore * 100) / 100,

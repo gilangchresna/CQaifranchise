@@ -218,11 +218,9 @@ serve(async (req: Request) => {
       features = current_metrics || [2.5, 1.0, 3.0, 3.5, 6.5];
     }
 
-    // Train Isolation Forest on sample data (in production, load from trained model)
+    // Train Isolation Forest on REAL historical data
     const iforest = new IsolationForest(100, 0.05);
-    
-    // Generate training data (in production, load from historical features)
-    const trainingData = generateTrainingData();
+    const trainingData = await loadRealTrainingData(supabase, outlet_id || undefined);
     iforest.fit(trainingData);
 
     // Score the current features
@@ -304,31 +302,56 @@ serve(async (req: Request) => {
   }
 });
 
-// Generate synthetic training data (in production, load from DB)
-function generateTrainingData(): number[][] {
+// Load REAL historical data from outlet_features for training
+async function loadRealTrainingData(supabase: any, excludeOutletId?: number): Promise<number[][]> {
+  try {
+    let query = supabase
+      .from("outlet_features")
+      .select("revenue_7d_avg, cost_7d_avg, staff_productivity, inventory_turnover, stock_level_pct")
+      .limit(500);
+
+    if (excludeOutletId) {
+      query = query.neq("outlet_id", excludeOutletId);
+    }
+
+    const { data, error } = await query;
+
+    if (error || !data || data.length === 0) {
+      console.warn("No outlet_features found, using fallback defaults");
+      return generateFallbackData();
+    }
+
+    // Build feature vectors matching ML expectation
+    // [revenue/1000, cost/1000, staff_prod/100, inv_turnover, stock_pct*10]
+    return data
+      .filter((row: any) =>
+        row.revenue_7d_avg != null &&
+        row.cost_7d_avg != null &&
+        row.staff_productivity != null
+      )
+      .map((row: any) => [
+        Number(row.revenue_7d_avg) / 1000,
+        Number(row.cost_7d_avg) / 1000,
+        Number(row.staff_productivity) / 100,
+        Number(row.inventory_turnover || 3.0),
+        Number(row.stock_level_pct || 0.5) * 10,
+      ]);
+  } catch (e) {
+    console.error("Failed to load real training data:", e);
+    return generateFallbackData();
+  }
+}
+
+function generateFallbackData(): number[][] {
   const data: number[][] = [];
-  
-  // Normal operating patterns
-  for (let i = 0; i < 500; i++) {
+  for (let i = 0; i < 300; i++) {
     data.push([
-      2.0 + Math.random() * 1.5,  // revenue: 2-3.5k
-      0.8 + Math.random() * 0.6,  // cost: 0.8-1.4k
-      2.5 + Math.random() * 1.5,  // staff productivity
-      3.0 + Math.random() * 1.5,  // inventory turnover
-      5.0 + Math.random() * 3.0,   // stock level
+      2.0 + Math.random() * 1.5,
+      0.8 + Math.random() * 0.6,
+      2.5 + Math.random() * 1.5,
+      3.0 + Math.random() * 1.5,
+      5.0 + Math.random() * 3.0,
     ]);
   }
-  
-  // Seasonal patterns (higher variance)
-  for (let i = 0; i < 200; i++) {
-    data.push([
-      2.5 + Math.random() * 2.0,  // revenue
-      1.0 + Math.random() * 0.8,  // cost
-      3.0 + Math.random() * 2.0,  // staff productivity
-      3.5 + Math.random() * 2.0,  // inventory turnover
-      6.5 + Math.random() * 2.0,  // stock level
-    ]);
-  }
-  
   return data;
 }
