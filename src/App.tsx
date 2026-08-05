@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { supabase } from "./lib/supabase";
+import { I18nProvider } from "./i18n/I18nContext";
 import { Layout } from "@/src/components/Layout";
 import { Dashboard } from "@/src/components/Dashboard";
 import { Outlets } from "@/src/components/Outlets";
@@ -16,6 +17,8 @@ import { PeerBenchmark } from "@/src/components/PeerBenchmark";
 import { ApprovalWorkflows } from "@/src/components/ApprovalWorkflows";
 import KnowledgeBaseAdmin from "@/src/components/KnowledgeBaseAdmin";
 import { Financing } from "@/src/components/Financing";
+import { LiveTransactionFeed } from "@/src/components/LiveTransactionFeed";
+import { FloatingChat } from "@/src/components/FloatingChat";
 import Login from "@/src/components/Login";
 import { Role } from "@/src/types";
 
@@ -98,14 +101,17 @@ export default function App() {
   };
 
   return (
-    <Layout
-      activeRole={activeRole}
-      onRoleChange={handleRoleChange}
-      activeTab={activeTab}
-      onTabChange={setActiveTab}
-    >
-      {renderContent()}
-      <ChatPanel />
-    </Layout>
+    <I18nProvider>
+      <Layout
+        activeRole={activeRole}
+        onRoleChange={handleRoleChange}
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+      >
+        {renderContent()}
+        <ChatPanel />
+        <FloatingChat />
+      </Layout>
+    </I18nProvider>
   );
 }

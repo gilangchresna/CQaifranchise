@@ -1,7 +1,7 @@
 # CyberQuote MVP - README
 
 **CyberQuote MVP is LIVE**\
-Last Updated: July 16, 2026
+Last Updated: August 5, 2026
 
 ---
 
@@ -31,8 +31,9 @@ Open: http://localhost:3000 (port is set in package.json's "dev" script)
 | Database       | ✅ 10 tables, 1000+ records |
 | Edge Functions | ✅ 34 deployed              |
 | ML Pipeline    | ✅ Working                  |
-| Frontend       | ✅ 11 components            |
+| Frontend       | ✅ 15+ components           |
 | Cron Jobs      | ✅ Orchestrator ready       |
+| i18n           | ✅ EN + ID supported        |
 
 ---
 
@@ -50,6 +51,32 @@ Open: http://localhost:3000 (port is set in package.json's "dev" script)
    - Region overview (9 regions)
    - Outlet monitoring (24 outlets)
    - Alert summary (26 alerts)
+
+4. **Financing Module** *(NEW)*
+   - Lender bridge integration
+   - Stakeholder reporting
+
+5. **Multi-language (i18n)** *(NEW)*
+   - English (EN) + Indonesian (ID)
+   - Language switcher in header
+
+6. **POS Simulator** *(NEW)*
+   - Live transaction simulation
+   - Real-time transaction feed
+
+7. **AI Chat** *(NEW)*
+   - Floating chat button
+   - AI-powered assistance
+
+---
+
+## 📋 Changelog
+
+| Date       | Summary |
+| ---------- | ------- |
+| 2026-08-05 | Financing module, i18n, POS Simulator, FloatingChat |
+| 2026-08-01 | Security fixes, RLS cleanup |
+| 2026-07-16 | MVP launch |
 
 ---
 
