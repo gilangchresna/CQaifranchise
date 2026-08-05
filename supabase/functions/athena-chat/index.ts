@@ -230,7 +230,13 @@ serve(async (req: Request) => {
     // STEP 2: Build System Prompt with Context
     // =========================================
     const systemPrompt = buildHardenedSystemPrompt();
-    const franchiseData = await queryFranchiseData(supabase, userData.id, userRole, userRegionId, userOutletId);
+    const franchiseData = await queryFranchiseData({
+      supabase,
+      user_id: userData.id,
+      user_role: userRole,
+      region_id: userRegionId,
+      outlet_id: userOutletId,
+    });
     const fullPrompt = franchiseData 
       ? `${systemPrompt}\n\n${franchiseData}`
       : systemPrompt;

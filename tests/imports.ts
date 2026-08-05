@@ -1,13 +1,16 @@
 /**
  * Test Imports — re-export all assertion helpers for Deno test files
- * Use: import { assertEquals, assertTrue, assertFalse, assertStringIncludes } from "./imports.ts";
+ * Use: import { assertEquals, assertStringIncludes, assert } from "./imports.ts";
  */
 export {
   assertEquals,
-  assertArrayEquals,
-  assertObjectEquals,
-  assertTrue,
+  assertEquals as assertEq,
+  assert,
+  assertExists,
   assertFalse,
-  assertThrows,
+  assertArrayIncludes,
   assertStringIncludes,
+  assertObjectMatch,
+  assertThrows,
+  assertStrictEquals,
 } from "https://deno.land/std@0.177.0/testing/asserts.ts";
