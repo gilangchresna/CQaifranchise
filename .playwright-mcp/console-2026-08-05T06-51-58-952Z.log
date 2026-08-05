@@ -81,3 +81,28 @@
 [28633631ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://c-qaifranchise.vercel.app/favicon.ico:0
 [28787959ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://c-qaifranchise.vercel.app/favicon.ico:0
 [29096477ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://c-qaifranchise.vercel.app/favicon.ico:0
+[30492008ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://c-qaifranchise.vercel.app/favicon.ico:0
+[56380217ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://c-qaifranchise.vercel.app/favicon.ico:0
+[56384352ms] TypeError: Cannot read properties of undefined (reading 'toLowerCase')
+    at https://c-qaifranchise.vercel.app/assets/index-B6F5Dejh.js:591:53147
+    at Array.filter (<anonymous>)
+    at Cte (https://c-qaifranchise.vercel.app/assets/index-B6F5Dejh.js:591:53113)
+    at jp (https://c-qaifranchise.vercel.app/assets/index-B6F5Dejh.js:48:48260)
+    at qp (https://c-qaifranchise.vercel.app/assets/index-B6F5Dejh.js:48:71084)
+    at o1 (https://c-qaifranchise.vercel.app/assets/index-B6F5Dejh.js:48:81445)
+    at L1 (https://c-qaifranchise.vercel.app/assets/index-B6F5Dejh.js:48:117275)
+    at Y4 (https://c-qaifranchise.vercel.app/assets/index-B6F5Dejh.js:48:116319)
+    at d0 (https://c-qaifranchise.vercel.app/assets/index-B6F5Dejh.js:48:116149)
+    at R1 (https://c-qaifranchise.vercel.app/assets/index-B6F5Dejh.js:48:112930)
+[56405958ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://c-qaifranchise.vercel.app/favicon.ico:0
+[56408404ms] TypeError: Cannot read properties of undefined (reading 'toLowerCase')
+    at https://c-qaifranchise.vercel.app/assets/index-B6F5Dejh.js:591:53147
+    at Array.filter (<anonymous>)
+    at Cte (https://c-qaifranchise.vercel.app/assets/index-B6F5Dejh.js:591:53113)
+    at jp (https://c-qaifranchise.vercel.app/assets/index-B6F5Dejh.js:48:48260)
+    at qp (https://c-qaifranchise.vercel.app/assets/index-B6F5Dejh.js:48:71084)
+    at o1 (https://c-qaifranchise.vercel.app/assets/index-B6F5Dejh.js:48:81445)
+    at L1 (https://c-qaifranchise.vercel.app/assets/index-B6F5Dejh.js:48:117275)
+    at Y4 (https://c-qaifranchise.vercel.app/assets/index-B6F5Dejh.js:48:116319)
+    at d0 (https://c-qaifranchise.vercel.app/assets/index-B6F5Dejh.js:48:116149)
+    at R1 (https://c-qaifranchise.vercel.app/assets/index-B6F5Dejh.js:48:112930)

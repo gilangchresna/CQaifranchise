@@ -317,8 +317,8 @@ async function loadRealTrainingData(supabase: any, excludeOutletId?: number): Pr
     const { data, error } = await query;
 
     if (error || !data || data.length === 0) {
-      console.warn("No outlet_features found, using fallback defaults");
-      return generateFallbackData();
+      console.warn("No outlet_features found, falling back to outlet_classifications");
+      return loadFromOutletClassifications(supabase, excludeOutletId);
     }
 
     // Build feature vectors matching ML expectation
@@ -354,4 +354,53 @@ function generateFallbackData(): number[][] {
     ]);
   }
   return data;
+}
+
+/**
+ * Fallback: derive ML features from outlet_classifications metadata.
+ * Revenue/cost/staff are estimated from region + type + size — not real sales data.
+ * This provides realistic variation across outlets until outlet_features is populated.
+ */
+async function loadFromOutletClassifications(
+  supabase: any,
+  excludeOutletId?: number
+): Promise<number[][]> {
+  try {
+    let query = supabase
+      .from("outlet_classifications")
+      .select("region, outlet_type, size_category, staff_count")
+      .eq("is_active", true);
+
+    if (excludeOutletId) {
+      query = query.neq("outlet_id", excludeOutletId);
+    }
+
+    const { data, error } = await query;
+
+    if (error || !data || data.length === 0) {
+      console.warn("No outlet_classifications data, using random fallback");
+      return generateFallbackData();
+    }
+
+    return data.map((o: any) => {
+      const rm = o.region === "Singapore" ? 1.4 : o.region === "Indonesia" ? 0.7 : 1.0;
+      const tm = o.outlet_type === "premium" ? 1.6 : o.outlet_type === "express" ? 0.6 : 1.0;
+      const sm = o.size_category === "large" ? 1.5 : o.size_category === "small" ? 0.6 : 1.0;
+      const baseRevenue = 1.8 * rm * tm * sm; // scaled: 1800/1000
+      const staffCount = o.staff_count ?? 8;
+      const staffProd = baseRevenue / (staffCount / 8);
+
+      // [revenue/1000, cost/1000, staff_prod/100, inv_turnover, stock_pct*10]
+      return [
+        Math.round(baseRevenue * (0.9 + Math.random() * 0.2) * 100) / 100,
+        Math.round(baseRevenue * 0.6 * 100) / 100,
+        Math.round(staffProd * 100) / 100 / 100,
+        Math.round((2.5 + Math.random() * 2.0) * 100) / 100,
+        Math.round((5.0 + Math.random() * 4.0) * 100) / 100,
+      ];
+    });
+  } catch (e) {
+    console.error("Failed to load outlet_classifications:", e);
+    return generateFallbackData();
+  }
 }

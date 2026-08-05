@@ -141,7 +141,7 @@ export function Models({ activeRole }: ModelsProps) {
     
     if (modelId === 1 || modelId === 2) {
       const newLogs = [
-        `[${new Date().toLocaleTimeString()}] INFO: Starting Inference [${model?.name}]`,
+        `[${new Date().toLocaleTimeString()}] INFO: Starting Inference [${model?.model_name}]`,
         `[${new Date().toLocaleTimeString()}] Fetching recent 1hr sales window from Feature Store...`,
       ];
       setSimLogs(prev => [...prev, ...newLogs]);
@@ -167,9 +167,9 @@ export function Models({ activeRole }: ModelsProps) {
     }
   };
 
-  const filteredModels = models.filter(m => 
-    m.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-    m.provider?.toLowerCase().includes(searchQuery.toLowerCase())
+  const filteredModels = models.filter(m =>
+    (m.model_name ?? '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (m.model_type ?? '').toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const getStatusColor = (status: ModelStatus) => {
