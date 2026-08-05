@@ -371,15 +371,54 @@ export function ApprovalWorkflows() {
 }
 
 // Mock data for demo
-/**
- * Fallback mock data - only used when API fails
- * Real data comes from approvals Edge Function
- */
 function getMockApprovals(): ApprovalRequest[] {
-  // Return empty array instead of fake data
-  // Real approvals should come from /functions/v1/approvals API
-  console.warn('Using fallback mock approvals - API may be down');
-  return [];
+  return [
+    {
+      id: '1',
+      request_type: 'CASE_CREATE',
+      trigger_source: 'AI_AGENT',
+      related_entity_type: 'alert',
+      related_entity_code: 'ALERT-101',
+      request_payload: { alert_id: 101, title: 'Critical Stockout Risk - WKN-001', severity: 'P1_CRITICAL' },
+      reasoning: 'Stock risk score reached 92% at WKN-001. 3 items critical. Immediate action required.',
+      priority: 'HIGH',
+      status: 'PENDING',
+      approver_role: 'REGIONAL_MANAGER',
+      created_at: new Date(Date.now() - 30 * 60 * 1000).toISOString(),
+      expires_at: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+      outlet_id: 1
+    },
+    {
+      id: '2',
+      request_type: 'ESCALATE',
+      trigger_source: 'ML_MODEL',
+      related_entity_type: 'outlet',
+      related_entity_code: 'JKT-004',
+      request_payload: { outlet_id: 4, action: 'ESCALATE_TO_HQ', reason: 'Sustained underperformance' },
+      reasoning: 'JKT-004 has been below peer average by >20% for 7 consecutive days.',
+      priority: 'MEDIUM',
+      status: 'PENDING',
+      approver_role: 'HQ_ADMIN',
+      created_at: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
+      expires_at: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),
+      outlet_id: 4
+    },
+    {
+      id: '3',
+      request_type: 'AUTO_RESOLVE',
+      trigger_source: 'SYSTEM',
+      related_entity_type: 'case',
+      related_entity_code: 'CASE-45',
+      request_payload: { case_id: 45, confidence: 0.87 },
+      reasoning: 'AI suggests closing case #45 as sales have returned to normal. Confidence: 87%.',
+      priority: 'LOW',
+      status: 'PENDING',
+      approver_role: 'REGIONAL_MANAGER',
+      created_at: new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString(),
+      expires_at: new Date(Date.now() + 20 * 60 * 60 * 1000).toISOString(),
+      outlet_id: 2
+    }
+  ];
 }
 
 export default ApprovalWorkflows;

@@ -157,7 +157,8 @@ async function searchKnowledgeBase(
   try {
     // Search SOPs - use ILIKE for flexible matching
     const searchTerms = query.toLowerCase().split(" ").filter(w => w.length > 2);
-
+    const searchPattern = searchTerms.slice(0, 5).map(w => `%${w}%`).join("");
+    
     const { data: sops } = await supabase
       .from("knowledge_sops")
       .select("id, title, content, category")
@@ -232,8 +233,8 @@ async function buildSystemPrompt(
   ctx: SystemPromptContext,
   knowledgeContext: { context: string }
 ): Promise<string> {
-  const { user_role } = ctx;
-
+  const { user_id, user_role, region_id, outlet_id, supabase } = ctx;
+  
   const roleDescription = {
     "HQ_ADMIN": "You are helping a HQ Admin who has full access to all franchise data across all regions.",
     "REGIONAL_MANAGER": "You are helping a Regional Manager who oversees outlets within their assigned region.",
@@ -249,15 +250,12 @@ Your role:
 - Answer questions based on the provided knowledge base
 - Be professional, concise, and actionable
 
-IMPORTANT - Currency: All monetary values are in SGD (Singapore Dollars), displayed as "SG$" or "SG". NEVER use "RM" (Ringgit Malaysia) or "Rp" (Rupiah Indonesia).
-
 Current user role: ${roleDescription[user_role as keyof typeof roleDescription] || "Franchise operator"}
 
 Response guidelines:
 - Be concise (3-5 sentences max for simple questions)
 - Use bullet points for lists or steps
 - Include specific numbers and data when available
-- ALWAYS use SG$ or SG for currency (e.g., "SG$5,000" not "RM5,000")
 - Suggest actionable next steps when relevant
 - If you dont know something, say so honestly
 
@@ -321,7 +319,7 @@ async function queryFranchiseData(ctx: SystemPromptContext): Promise<string | nu
 
     if (outlets && outlets.length > 0) {
       const outletList = outlets.map((o: any) => 
-        `  - ${o.name} (${o.code}) | ${o.city || "N/A"} | Status: ${o.status} | Daily Target: SG${o.daily_target || 0}`
+        `  - ${o.name} (${o.code}) | ${o.city || "N/A"} | Status: ${o.status} | Daily Target: RM${o.daily_target || 0}`
       ).join("\n");
       dataSections.push(`YOUR OUTLETS:\n${outletList}`);
     }
@@ -380,13 +378,13 @@ async function queryFranchiseData(ctx: SystemPromptContext): Promise<string | nu
       // Get daily totals for last 7 days
       const last7Days = sales.slice(0, 7).map((s: any) => {
         const d = new Date(s.date);
-        return `${d.toLocaleDateString("en-SG", { weekday: 'short', month: 'short', day: 'numeric' })}: SG${parseFloat(s.amount).toFixed(2)}`;
+        return `${d.toLocaleDateString("en-MY", { weekday: 'short', month: 'short', day: 'numeric' })}: RM${parseFloat(s.amount).toFixed(2)}`;
       }).join("\n  ");
 
       dataSections.push(`SALES SUMMARY (Last 14 Days):
-  Total Revenue: SG${totalAmount.toFixed(2)}
+  Total Revenue: RM${totalAmount.toFixed(2)}
   Total Transactions: ${totalTransactions}
-  Average Daily: SG${avgDaily.toFixed(2)}
+  Average Daily: RM${avgDaily.toFixed(2)}
   Anomalies Detected: ${anomalyCount}
 
 Recent Daily Sales (Last 7 Days):

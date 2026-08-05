@@ -10,11 +10,12 @@ Last Updated: July 16, 2026
 ### Frontend
 
 ```bash
-cd ~/CyberquoteWeb/unified-ai-CQ
+cd CQaifranchise
+npm install
 npm run dev
 ```
 
-Open: http://localhost:5173
+Open: http://localhost:3000 (port is set in package.json's "dev" script)
 
 ### Login
 

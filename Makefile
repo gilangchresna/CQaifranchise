@@ -48,7 +48,7 @@ setup:
 	cd backend && pip install -r requirements.txt
 	cd backend && pip install -r requirements-dev.txt
 	@echo "$(YELLOW)Frontend...$(NC)"
-	cd frontend/web && npm install
+	npm install
 	@echo "$(GREEN)Done!$(NC)"
 
 # Development
@@ -63,7 +63,7 @@ dev-backend:
 
 dev-frontend:
 	@echo "$(GREEN)Starting frontend...$(NC)"
-	cd frontend/web && npm run dev
+	npm run dev
 
 # Testing
 test:
@@ -71,56 +71,72 @@ test:
 	@echo "$(YELLOW)Backend tests...$(NC)"
 	cd backend && pytest --cov=src tests/
 	@echo "$(YELLOW)Frontend tests...$(NC)"
-	cd frontend/web && npm run test
+	@echo "$(YELLOW)No frontend test script configured yet (package.json has no \"test\" entry) - skipping$(NC)"
 
 test-backend:
 	cd backend && pytest --cov=src tests/ -v
 
 test-frontend:
-	cd frontend/web && npm run test -- --watchAll=false
+	@echo "$(YELLOW)No frontend test script configured yet (package.json has no \"test\" entry) - nothing to run$(NC)"
 
 # Linting
 lint:
 	@echo "$(GREEN)Running linting...$(NC)"
 	@echo "$(YELLOW)Backend (ruff)...$(NC)"
 	cd backend && ruff check src/
-	@echo "$(YELLOW)Frontend (eslint)...$(NC)"
-	cd frontend/web && npm run lint
+	@echo "$(YELLOW)Frontend (tsc --noEmit)...$(NC)"
+	npm run lint
 
 format:
 	@echo "$(GREEN)Formatting code...$(NC)"
 	cd backend && ruff format src/
-	cd frontend/web && npm run format
+	@echo "$(YELLOW)No frontend format script configured yet (package.json has no \"format\" entry) - skipping$(NC)"
 
 # Build
 build:
 	@echo "$(GREEN)Building for production...$(NC)"
-	cd frontend/web && npm run build
+	npm run build
 	@echo "$(GREEN)Frontend built!$(NC)"
 
 docker-build:
 	@echo "$(GREEN)Building Docker images...$(NC)"
 	docker build -t cyberquote/backend:latest ./backend
-	docker build -t cyberquote/frontend:latest ./frontend/web
+	@if [ -f Dockerfile ]; then \
+		docker build -t cyberquote/frontend:latest . ; \
+	 else \
+		echo "$(YELLOW)No frontend Dockerfile yet - skipping frontend image$(NC)" ; \
+	 fi
 
 # Deployment
 deploy-staging:
 	@echo "$(YELLOW)Deploying to staging...$(NC)"
+	@if [ ! -d infra/terraform/environments/staging ]; then \
+		echo "$(YELLOW)infra/terraform/environments/staging does not exist in this repo - staging deploy is not wired up yet. Set up Terraform + CI before using this target.$(NC)" ; exit 1 ; \
+	 fi
 	cd infra/terraform/environments/staging && terraform apply
-	cd frontend/web && npm run build && aws s3 sync dist/ s3://cyberquote-staging-frontend/
+	npm run build && aws s3 sync dist/ s3://cyberquote-staging-frontend/
 
 deploy-prod:
 	@echo "$(RED)Deploying to PRODUCTION - requires approval!$(NC)"
+	@if [ ! -d infra/terraform/environments/prod ]; then \
+		echo "$(YELLOW)infra/terraform/environments/prod does not exist in this repo - prod deploy is not wired up yet. Set up Terraform + CI before using this target.$(NC)" ; exit 1 ; \
+	 fi
 	@read -p "Are you sure? (yes/no): " confirm && [ "$$confirm" = "yes" ]
 	cd infra/terraform/environments/prod && terraform apply
-	cd frontend/web && npm run build && aws s3 sync dist/ s3://cyberquote-prod-frontend/
+	npm run build && aws s3 sync dist/ s3://cyberquote-prod-frontend/
 
 # Infrastructure
 infra-init:
 	@echo "$(GREEN)Initializing Terraform...$(NC)"
+	@if [ ! -d infra/terraform/environments/dev ]; then \
+		echo "$(YELLOW)infra/terraform/environments/dev does not exist in this repo yet$(NC)" ; exit 1 ; \
+	 fi
 	cd infra/terraform/environments/dev && terraform init
 
 infra-plan:
+	@if [ ! -d infra/terraform/environments/dev ]; then \
+		echo "$(YELLOW)infra/terraform/environments/dev does not exist in this repo yet$(NC)" ; exit 1 ; \
+	 fi
 	cd infra/terraform/environments/dev && terraform plan
 
 # Database
@@ -136,8 +152,8 @@ db-reset:
 # Utilities
 clean:
 	@echo "$(GREEN)Cleaning...$(NC)"
-	rm -rf frontend/web/dist
-	rm -rf frontend/web/node_modules/.vite
+	rm -rf dist
+	rm -rf node_modules/.vite
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 	find . -type f -name "*.pyc" -delete
 
@@ -158,4 +174,4 @@ docker-logs:
 # Check health
 health:
 	curl -s http://localhost:8000/health || echo "Backend not running"
-	@echo "Frontend: http://localhost:5173"
+	@echo "Frontend: http://localhost:3000"

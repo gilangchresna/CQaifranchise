@@ -19,18 +19,17 @@ serve(async (req: Request) => {
     const period = url.searchParams.get('period') || '7d';
     const dateOverride = url.searchParams.get('date'); // Optional: YYYY-MM-DD
     
-    // Use override date if provided, otherwise use today
-    // For demo data (2026), default to 2026-07-25
+    // Use override date if provided, otherwise use real-time "today" so the
+    // dashboard reflects live data as it arrives. DEMO_DATE_OVERRIDE (env) or
+    // ?date= (query param) remain available for staging/demo replay.
+    const envOverride = Deno.env.get("DEMO_DATE_OVERRIDE");
     let today: Date;
     if (dateOverride) {
       today = new Date(dateOverride);
+    } else if (envOverride) {
+      today = new Date(envOverride);
     } else {
       today = new Date();
-      // If system date is before data, use data date
-      const systemDate = today.toISOString().split('T')[0];
-      if (systemDate < '2026-01-01') {
-        today = new Date('2026-07-25'); // Use latest data date
-      }
     }
     const todayStr = today.toISOString().split('T')[0];
     

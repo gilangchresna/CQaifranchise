@@ -10,8 +10,7 @@
   },
   "lint": {
     "rules": {
-      "exclude": ["no-explicit-any", "no-unused-vars", "no-import-prefix"]
+      "exclude": ["no-explicit-any"]
     }
-  },
-  "exclude": ["node_modules", ".git"]
+  }
 }

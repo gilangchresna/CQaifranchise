@@ -120,13 +120,8 @@ export function Dashboard({ activeRole }: { activeRole: Role }) {
         openAlerts: statsData.metrics?.active_alerts || 0,
       });
       
-      // Transform API data to chart format (date -> time, amount -> today/baseline)
-      const chartData = (statsData.daily_breakdown || []).map((d: any) => ({
-        time: d.date?.split('T')[0] || d.date,
-        today: d.amount || 0,
-        baseline: Math.round((d.amount || 0) * 0.85), // Estimated baseline
-      }));
-      setSalesData(chartData);
+      // Set real chart data
+      setSalesData(statsData.chart || []);
 
       // Fetch alerts for alerts list
       const alertsRes = await fetch(`${EDGE_FUNCTIONS_URL}/alerts-list`, {
@@ -238,16 +233,9 @@ export function Dashboard({ activeRole }: { activeRole: Role }) {
         />
         <StatCard
           title="Low Stock Items"
-          value={stats.lowStockItems?.toString()}
+          value={stats.lowStockItems.toString()}
           trend={0}
           description="Below minimum"
-          icon={PackageX}
-        />
-        <StatCard
-          title="Out of Stock"
-          value={stats.outOfStock?.toString()}
-          trend={0}
-          description="Items with zero stock"
           icon={PackageX}
         />
         <StatCard

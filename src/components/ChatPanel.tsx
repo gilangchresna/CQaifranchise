@@ -231,7 +231,7 @@ For detailed answers, please ensure you're logged in.`;
     return (
       <button
         onClick={() => setIsOpen(true)}
-        className="fixed bottom-6 right-6 w-14 h-14 bg-linear-to-br from-violet-500 to-purple-600 text-white rounded-full shadow-lg hover:shadow-xl transition-all flex items-center justify-center z-50"
+        className="fixed bottom-6 right-6 w-14 h-14 bg-gradient-to-br from-violet-500 to-purple-600 text-white rounded-full shadow-lg hover:shadow-xl transition-all flex items-center justify-center z-50"
       >
         <Bot className="w-7 h-7" />
         <span className="absolute -top-1 -right-1 w-4 h-4 bg-green-400 rounded-full border-2 border-white"></span>
@@ -242,10 +242,10 @@ For detailed answers, please ensure you're logged in.`;
   return (
     <div className={cn(
       "fixed bottom-6 right-6 w-96 bg-white rounded-2xl shadow-2xl z-50 flex flex-col overflow-hidden transition-all",
-      isMinimized ? "h-16" : "h-150"
+      isMinimized ? "h-16" : "h-[600px]"
     )}>
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 bg-linear-to-r from-violet-500 to-purple-600 text-white shrink-0">
+      <div className="flex items-center justify-between px-4 py-3 bg-gradient-to-r from-violet-500 to-purple-600 text-white shrink-0">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center">
             <Bot className="w-6 h-6" />
@@ -284,7 +284,7 @@ For detailed answers, please ensure you're logged in.`;
                 <div className={cn(
                   "w-8 h-8 rounded-full flex items-center justify-center shrink-0",
                   msg.role === "assistant" 
-                    ? "bg-linear-to-br from-violet-500 to-purple-600 text-white"
+                    ? "bg-gradient-to-br from-violet-500 to-purple-600 text-white"
                     : "bg-slate-200 text-slate-600"
                 )}>
                   {msg.role === "assistant" ? <Bot className="w-5 h-5" /> : <User className="w-5 h-5" />}
@@ -337,7 +337,7 @@ For detailed answers, please ensure you're logged in.`;
             {/* Loading indicator */}
             {isLoading && (
               <div className="flex gap-3">
-                <div className="w-8 h-8 rounded-full bg-linear-to-br from-violet-500 to-purple-600 flex items-center justify-center text-white shrink-0">
+                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center text-white shrink-0">
                   <Bot className="w-5 h-5" />
                 </div>
                 <div className="bg-slate-100 rounded-2xl px-4 py-3">
@@ -396,7 +396,7 @@ For detailed answers, please ensure you're logged in.`;
                 className={cn(
                   "w-10 h-10 rounded-xl flex items-center justify-center transition-all shrink-0",
                   input.trim() && !isLoading
-                    ? "bg-linear-to-br from-violet-500 to-purple-600 text-white hover:shadow-lg"
+                    ? "bg-gradient-to-br from-violet-500 to-purple-600 text-white hover:shadow-lg"
                     : "bg-slate-100 text-slate-400"
                 )}
               >

@@ -13,7 +13,7 @@ tests/
 ├── ml_stockout_risk_test.ts   # Stockout prediction tests
 ├── alert_generator_test.ts     # Alert validation tests
 ├── case_create_test.ts         # Case creation tests
-└── run_tests.sh               # Test runner script
+└── helpers/mod.ts              # Shared test helpers
 ```
 
 ## Running Tests
@@ -21,7 +21,7 @@ tests/
 ### Run All Tests
 
 ```bash
-cd ~/CyberquoteWeb/unified-ai-CQ
+cd CQaifranchise
 deno test --allow-all tests/
 ```
 
@@ -94,15 +94,8 @@ Deno.test("test name", () => {
 
 ## CI Integration
 
-Tests can be run in CI using:
-
-```yaml
-# GitHub Actions example
-- name: Run Tests
-  run: |
-    cd ~/CyberquoteWeb/unified-ai-CQ
-    deno test --allow-all tests/
-```
+These tests run automatically on every push/PR via
+`.github/workflows/ci.yml` (the `edge-function-tests` job).
 
 ## Notes
 

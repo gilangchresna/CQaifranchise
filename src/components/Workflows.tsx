@@ -259,7 +259,7 @@ export function Workflows({ activeRole }: { activeRole: Role }) {
 
   if (loading) {
     return (
-      <div className="min-h-100 flex items-center justify-center">
+      <div className="min-h-[400px] flex items-center justify-center">
         <div className="animate-spin rounded-full h-10 w-10 border-3 border-blue-600 border-t-transparent"></div>
       </div>
     );
@@ -527,7 +527,7 @@ function CaseDetailModal({
           </div>
 
           {/* AI Analysis Section */}
-          <div className="bg-linear-to-br from-indigo-500 to-purple-600 rounded-xl p-5 text-white">
+          <div className="bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl p-5 text-white">
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-semibold flex items-center gap-2">
                 <Sparkles className="w-5 h-5" />

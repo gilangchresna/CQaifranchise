@@ -17,8 +17,11 @@ serve(async (req: Request) => {
     const url = new URL(req.url);
     const period = url.searchParams.get('period') || '7d';
     
-    // Use 2026-07-25 as "today" for demo
-    const today = new Date('2026-07-25');
+    // Real-time "today" — reflects live data as it arrives.
+    // DEMO_DATE_OVERRIDE (YYYY-MM-DD) can still be set in env for staging/demo
+    // environments that intentionally replay historical data.
+    const demoOverride = Deno.env.get("DEMO_DATE_OVERRIDE");
+    const today = demoOverride ? new Date(demoOverride) : new Date();
     const todayStr = today.toISOString().split('T')[0];
     
     let startDate: string;
@@ -105,13 +108,7 @@ serve(async (req: Request) => {
     // Get metrics
     const { count: outletCount } = await supabase.from("outlets").select("*", { count: "exact", head: true });
     const { count: alertsCount } = await supabase.from("alerts").select("*", { count: "exact", head: true });
-    // Get accurate low stock count - count items below minimum stock level
-    const { data: outOfStockItems } = await supabase
-      .from("inventory")
-      .select("id")
-      .eq("current_stock", 0);
-    const outOfStockCount = outOfStockItems?.length || 0;
-    const lowStockCount = lowStockItems?.length || 0;
+    const { data: lowStock } = await supabase.from("inventory").select("id").lt("current_stock", 25);
     
     // Comparison period (previous period)
     const compareStartDate = new Date(new Date(startDate).getTime() - daysInPeriod * 86400000).toISOString().split('T')[0];
@@ -157,9 +154,7 @@ serve(async (req: Request) => {
         outlets: outletCount || 0,
         outlets_with_sales: outletsSet.size,
         active_alerts: alertsCount || 0,
-        out_of_stock: outOfStockCount,
-        low_stock: lowStockCount,
-        low_stock_items: lowStockCount,
+        low_stock: lowStock?.length || 0,
       },
       daily_breakdown: Object.entries(dailySales).sort().map(([d, a]) => ({ date: d, amount: Math.round(a * 100) / 100 })),
       payment_breakdown: Object.entries(paymentBreakdown).map(([m, a]) => ({ method: m, amount: Math.round(a * 100) / 100 })),

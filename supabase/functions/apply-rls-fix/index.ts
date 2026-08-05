@@ -3,6 +3,7 @@
 
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0";
+import { verifyAuth, isAtLeastRole, unauthorizedResponse, forbiddenResponse } from "../_shared/auth.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -13,6 +14,16 @@ serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
+  // SECURITY: this function uses the service-role key (bypasses RLS) and can
+  // mutate/delete data. Restrict it to authenticated HQ_ADMIN callers only.
+  const auth = await verifyAuth(req);
+  if (!auth.success || !auth.user) {
+    return unauthorizedResponse(auth.error);
+  }
+  if (!isAtLeastRole(auth.user, 'HQ_ADMIN')) {
+    return forbiddenResponse('HQ_ADMIN role required for this operation');
+  }
+
 
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;

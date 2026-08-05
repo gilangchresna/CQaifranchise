@@ -129,7 +129,7 @@ export function Workforce({ activeRole }: { activeRole: Role }) {
   // Main Staff List View
   if (loading) {
     return (
-      <div className="min-h-100 flex items-center justify-center">
+      <div className="min-h-[400px] flex items-center justify-center">
         <div className="animate-spin rounded-full h-10 w-10 border-3 border-blue-600 border-t-transparent"></div>
       </div>
     );
@@ -255,7 +255,7 @@ export function Workforce({ activeRole }: { activeRole: Role }) {
                 >
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-3">
-                      <div className="h-10 w-10 rounded-full bg-linear-to-br from-blue-500 to-purple-500 flex items-center justify-center text-white font-medium">
+                      <div className="h-10 w-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center text-white font-medium">
                         {emp.name.split(' ').map(n => n[0]).join('')}
                       </div>
                       <div>
@@ -416,9 +416,9 @@ function StaffDetailView({
       </button>
 
       {/* Staff Header */}
-      <div className="bg-linear-to-r from-slate-900 to-slate-800 rounded-2xl p-6 text-white">
+      <div className="bg-gradient-to-r from-slate-900 to-slate-800 rounded-2xl p-6 text-white">
         <div className="flex items-start gap-6">
-          <div className="h-20 w-20 rounded-full bg-linear-to-br from-blue-500 to-purple-500 flex items-center justify-center text-white text-2xl font-bold">
+          <div className="h-20 w-20 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center text-white text-2xl font-bold">
             {staff.name.split(' ').map(n => n[0]).join('')}
           </div>
           <div className="flex-1">
@@ -519,7 +519,7 @@ function StaffDetailView({
       </div>
 
       {/* AI Insights */}
-      <div className="bg-linear-to-br from-indigo-500 to-purple-600 rounded-2xl p-6 text-white">
+      <div className="bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl p-6 text-white">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-semibold flex items-center gap-2">
             <Sparkles className="w-5 h-5" />

@@ -15,11 +15,12 @@ import { AccessManagement } from "@/src/components/AccessManagement";
 import { PeerBenchmark } from "@/src/components/PeerBenchmark";
 import { ApprovalWorkflows } from "@/src/components/ApprovalWorkflows";
 import KnowledgeBaseAdmin from "@/src/components/KnowledgeBaseAdmin";
+import { Financing } from "@/src/components/Financing";
 import Login from "@/src/components/Login";
 import { Role } from "@/src/types";
 
 export type Tab =
-  | "Dashboard" | "Outlets" | "Workforce" | "Workflows" | "Agents" | "Risk" | "Knowledge" | "Peer" | "Approval" | "Integrations" | "Models" | "Settings" | "Access";
+  | "Dashboard" | "Outlets" | "Workforce" | "Workflows" | "Agents" | "Risk" | "Knowledge" | "Peer" | "Approval" | "Integrations" | "Models" | "Settings" | "Access" | "Financing";
 
 export default function App() {
   const [activeRole, setActiveRole] = useState<Role>("Regional");
@@ -84,6 +85,8 @@ export default function App() {
         return <AccessManagement activeRole={activeRole} />;
       case "Settings":
         return <Settings />;
+      case "Financing":
+        return <Financing activeRole={activeRole} />;
       default:
         return <Dashboard activeRole={activeRole} />;
     }

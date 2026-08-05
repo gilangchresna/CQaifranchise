@@ -8,7 +8,13 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { WebhookPayload, WebhookResponse, validateWebhookPayload, parseItemsToJSON } from "../_shared/types.ts";
 
 const WEBHOOK_SECRET_HEADER = "x-signature-256";
-const DEFAULT_HMAC_SECRET = Deno.env.get("WEBHOOK_HMAC_SECRET") || "whsec_default_dev_secret_change_in_production";
+const DEFAULT_HMAC_SECRET = Deno.env.get("WEBHOOK_HMAC_SECRET");
+
+// Fail hard if no webhook secret configured
+if (!DEFAULT_HMAC_SECRET) {
+  console.error("FATAL: WEBHOOK_HMAC_SECRET environment variable is not set!");
+  throw new Error("WEBHOOK_HMAC_SECRET environment variable is required");
+}
 
 async function verifyHmacSignature(payload: Uint8Array, signature: string, secret: string): Promise<boolean> {
   if (!signature) {
@@ -82,16 +88,12 @@ async function insertTransaction(
   const metadata = itemsJson ? { items: JSON.parse(itemsJson) } : undefined;
   const date = new Date(payload.timestamp);
 
-  // Convert to Singapore Time (SGT/UTC+8)
-  const sgDate = new Date(date.getTime() + (8 * 60 * 60 * 1000));
-  const dateStr = sgDate.toISOString().split("T")[0];
-
   const { data, error } = await supabase
     .from("sales_transactions")
     .insert({
       transaction_id: payload.transaction_id.trim(),
       outlet_id: payload.outlet_id,
-      date: dateStr,
+      date: date.toISOString().split("T")[0],
       amount: payload.amount,
       transaction_count: transactionCount,
       metadata: metadata,

@@ -18,7 +18,7 @@ const CONFIG = {
   webhookUrl: process.env.CYBERQUOTE_WEBHOOK || 
     "https://ploqeifazcgzwjzmukgp.supabase.co/functions/v1/ingestion-webhook",
   interval: parseInt(process.argv.find(arg => arg.startsWith('--interval'))?.split('=')[1] || '10000'),  // 10 seconds default
-  numOutlets: parseInt(process.argv.find(arg => arg.startsWith('--outlets'))?.split('=')[1] || '8'),
+  numOutlets: parseInt(process.argv.find(arg => arg.startsWith('--outlets'))?.split('=')[1] || '24'),
   // HMAC secret - MUST match the server's WEBHOOK_HMAC_SECRET
   // Default: "whsec_default_dev_secret_change_in_production"
   hmacSecret: process.env.POS_HMAC_SECRET || "whsec_default_dev_secret_change_in_production",
@@ -27,14 +27,30 @@ const CONFIG = {
 // Outlet definitions (mimicking real franchise outlets)
 // Only use IDs that exist in the database!
 const OUTLETS = [
-  { id: 156, name: "Kopitiam @ Tampines Mall", products: ["Kaya Toast", "Kopi", "Soft Boiled Egg", "Teh"] },
-  { id: 157, name: "Chicken Rice @ Jurong Point", products: ["Chicken Rice", "Roasted Chicken", "Rice", "Soup"] },
-  { id: 158, name: "Nasi Lemak Express AMK", products: ["Nasi Lemak", "Chicken Wings", "Egg", "Sambal"] },
-  { id: 159, name: "Laksa King Paya Lebar", products: ["Laksa", "Curry Puff", "Kopi", "Teh"] },
-  { id: 160, name: "Kaya Toast @ Clementi Mall", products: ["Kaya Toast", "Kopi O", "Egg", " Milo"] },
-  { id: 161, name: "Mookata @ Woodlands", products: ["Mookata Set", "BBQ Chicken", "Vegetables", "Drinks"] },
-  { id: 162, name: "Roti Prata @ Hougang Mall", products: ["Roti Prata", "Curry", "Milo", " Teh"] },
-  { id: 163, name: "Economic Rice @ Bishan", products: ["Economic Rice", "Vegetable", "Chicken", "Fish"] },
+  { id: 37, name: "Ayam Geprek sambel", products: ["Ayam Geprek", "Sambel", "Nasi", "Es Teh"] },
+  { id: 36, name: "Bakso Malang Jaya", products: ["Bakso", "Mie Ayam", "Pangsit", "Es Jeruk"] },
+  { id: 41, name: "Batak Hutanta", products: ["Nasi Babi", "Saksang", "Na Niribu", "Es Teh"] },
+  { id: 9, name: "Mie Ayam Barokah", products: ["Mie Ayam", "Pangsit", "Bakso", "Es Jeruk"] },
+  { id: 33, name: "Nasi Goreng END", products: ["Nasi Goreng", "Mie Goreng", "Ayam Geprek", "Es Teh"] },
+  { id: 35, name: "Outlet Bandung Pusat", products: ["Nasi Goreng", "Mie Goreng", "Kwetiau", "Es Teh"] },
+  { id: 25, name: "Outlet Bandung Timur", products: ["Nasi Goreng", "Soto", "Bakso", "Es Jeruk"] },
+  { id: 27, name: "Outlet Bandung Utara", products: ["Mie Ayam", "Bakso", "Pangsit", "Es Teh"] },
+  { id: 26, name: "Outlet Jakarta Barat", products: ["Nasi Goreng", "Ayam Geprek", "Mie Goreng", "Es Teh"] },
+  { id: 23, name: "Outlet Jakarta Pusat", products: ["Mie Ayam", "Bakso", "Kwetiau", "Es Jeruk"] },
+  { id: 22, name: "Outlet Jakarta Selatan", products: ["Nasi Goreng", "Soto", "Rawon", "Es Teh"] },
+  { id: 24, name: "Outlet Surabaya Pusat", products: ["Nasi Goreng", "Mie Goreng", "Bakso", "Es Jeruk"] },
+  { id: 28, name: "Outlet Surabaya Timur", products: ["Mie Ayam", "Pangsit", "Bakso", "Es Teh"] },
+  { id: 30, name: "Outlet Surabaya Utara", products: ["Nasi Goreng", "Ayam Geprek", "Soto", "Es Jeruk"] },
+  { id: 29, name: "Rawon Setan", products: ["Rawon", "Nasi", "Tahu Tempe", "Es Teh"] },
+  { id: 39, name: "Rawon Setan Budi", products: ["Rawon", "Nasi", "Ayam", "Es Jeruk"] },
+  { id: 11, name: "Rendang Sederhana", products: ["Rendang", "Nasi", "Gulai", "Es Teh"] },
+  { id: 40, name: "Sate Ayam Pak Somad", products: ["Sate Ayam", "Nasi", "Lontong", "Es Jeruk"] },
+  { id: 10, name: "Sate Ayam一级棒", products: ["Sate Ayam", "Nasi", "Sate Kambing", "Es Teh"] },
+  { id: 34, name: "Soto Ayam Makmur", products: ["Soto", "Nasi", "Tahu", "Es Jeruk"] },
+  { id: 38, name: "Soto Ayam Mba Sri", products: ["Soto", "Nasi", "Ayam", "Es Teh"] },
+  { id: 12, name: "Warung Kopi Nusantara", products: ["Kopi", "Teh", "Roti", "Gorengan"] },
+  { id: 8, name: "Warung Kopi Nusantara", products: ["Kopi", "Teh", "Nasi", "Mie"] },
+  { id: 32, name: "Warung Kopi Nusantara", products: ["Kopi", "Teh", "Pisang", "Gorengan"] },
 ];
 
 // SGD Price ranges (Singapore Dollars)
@@ -172,9 +188,9 @@ function sendToWebhook(sale) {
   });
 }
 
-// Format currency (SGD - Singapore Dollars)
-function formatSGD(num) {
-  return 'S$ ' + num.toLocaleString('en-SG', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+// Format currency
+function formatRupiah(num) {
+  return 'Rp ' + num.toLocaleString('id-ID');
 }
 
 // Print banner
@@ -231,7 +247,7 @@ async function runSimulation() {
         console.log(
           `  [${timestamp}] ✅ Sale #${String(totalSales).padStart(4, '0')} | ` +
           `Outlet ${sale.outlet_id} | ${sale.items.length} items | ` +
-          `${formatSGD(sale.amount)}`
+          `${formatRupiah(sale.amount)}`
         );
       } else {
         errorCount++;

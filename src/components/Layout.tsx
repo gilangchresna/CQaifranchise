@@ -17,6 +17,7 @@ import {
   Server,
   ShieldCheck,
   Search,
+  Landmark,
 } from "lucide-react";
 import { cn } from "@/src/lib/utils";
 
@@ -38,6 +39,7 @@ const NAV_ITEMS: Record<Role, { icon: React.ElementType; label: string; id: stri
     { icon: AlertTriangle, label: "Stockout Risk", id: "Risk" },
     { icon: BookOpen, label: "Knowledge Base", id: "Knowledge" },
     { icon: Server, label: "System Integrations", id: "Integrations" },
+    { icon: Landmark, label: "Bridge Financing", id: "Financing" },
     { icon: BrainCircuit, label: "ML Models", id: "Models" },
     { icon: ShieldCheck, label: "Access Control", id: "Access" },
     { icon: Settings, label: "Platform Settings", id: "Settings" },
@@ -53,6 +55,7 @@ const NAV_ITEMS: Record<Role, { icon: React.ElementType; label: string; id: stri
     { icon: TrendingUp, label: "Peer Benchmark", id: "Peer" },
     { icon: CheckCircle, label: "Approvals", id: "Approval" },
     { icon: Server, label: "Area Integrations", id: "Integrations" },
+    { icon: Landmark, label: "Bridge Financing", id: "Financing" },
     { icon: BrainCircuit, label: "ML Models", id: "Models" },
     { icon: ShieldCheck, label: "Access Control", id: "Access" },
     { icon: Settings, label: "Regional Settings", id: "Settings" },
@@ -61,6 +64,7 @@ const NAV_ITEMS: Record<Role, { icon: React.ElementType; label: string; id: stri
     { icon: LayoutDashboard, label: "My Store", id: "Dashboard" },
     { icon: Users, label: "My Team", id: "Workforce" },
     { icon: ActivitySquare, label: "My Tasks", id: "Workflows" },
+    { icon: Landmark, label: "Bridge Financing", id: "Financing" },
     { icon: Settings, label: "Store Preferences", id: "Settings" },
   ],
 };

@@ -32,10 +32,13 @@ async function verifyAuth(req: Request) {
 }
 
 function getDateRange(period: string) {
-  // Use Singapore Timezone (SGT/UTC+8)
-  const now = new Date();
-  const sgTime = new Date(now.getTime() + (8 * 60 * 60 * 1000));
-  const todayStr = sgTime.toISOString().split('T')[0];
+  // Real-time "today" — uses actual current time so the dashboard reflects
+  // live data as it arrives, instead of a frozen demo date.
+  // DEMO_DATE_OVERRIDE (YYYY-MM-DD) can still be set in env for staging/demo
+  // environments that intentionally replay historical data.
+  const override = Deno.env.get("DEMO_DATE_OVERRIDE");
+  const today = override ? new Date(override) : new Date();
+  const todayStr = today.toISOString().split('T')[0];
   let startDate: string;
   let periodLabel: string;
 
@@ -45,23 +48,23 @@ function getDateRange(period: string) {
       periodLabel = 'Today';
       break;
     case '7d':
-      startDate = new Date(sgTime.getTime() - 6 * 86400000).toISOString().split('T')[0];
+      startDate = new Date(today.getTime() - 6 * 86400000).toISOString().split('T')[0];
       periodLabel = 'Last 7 Days';
       break;
     case '30d':
-      startDate = new Date(sgTime.getTime() - 29 * 86400000).toISOString().split('T')[0];
+      startDate = new Date(today.getTime() - 29 * 86400000).toISOString().split('T')[0];
       periodLabel = 'Last 30 Days';
       break;
     case 'month':
-      startDate = `${sgTime.getFullYear()}-${String(sgTime.getMonth() + 1).padStart(2, '0')}-01`;
+      startDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-01`;
       periodLabel = 'This Month';
       break;
     case 'ytd':
-      startDate = `${sgTime.getFullYear()}-01-01`;
+      startDate = `${today.getFullYear()}-01-01`;
       periodLabel = 'Year to Date';
       break;
     default:
-      startDate = new Date(sgTime.getTime() - 6 * 86400000).toISOString().split('T')[0];
+      startDate = new Date(today.getTime() - 6 * 86400000).toISOString().split('T')[0];
       periodLabel = 'Last 7 Days';
   }
 
@@ -181,7 +184,6 @@ serve(async (req) => {
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
   } catch (error: any) {
-    console.error('Dashboard API Error:', error);
     return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: corsHeaders });
   }
 });
