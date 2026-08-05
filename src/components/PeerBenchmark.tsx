@@ -41,6 +41,26 @@ interface PeerBenchmarkData {
 
 // EDGE_FUNCTIONS_URL is imported from supabase.ts
 
+// Currency config per region
+const REGION_CURRENCY: Record<string, { symbol: string; code: string }> = {
+  Singapore: { symbol: 'S$', code: 'SGD' },
+  Jakarta:   { symbol: 'Rp',  code: 'IDR' },
+  Bandung:    { symbol: 'Rp',  code: 'IDR' },
+  Surabaya:   { symbol: 'Rp',  code: 'IDR' },
+  Bangkok:   { symbol: '฿',   code: 'THB' },
+  'Kuala Lumpur': { symbol: 'RM', code: 'MYR' },
+};
+
+function formatRevenue(amount: number, region: string): string {
+  const curr = REGION_CURRENCY[region] || REGION_CURRENCY['Singapore'];
+  if (curr.code === 'IDR') {
+    // Abbreviated: Rp 1.25jt
+    const jt = amount / 1_000_000;
+    return `Rp ${jt.toFixed(2)}jt`;
+  }
+  return `${curr.symbol}${amount.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+}
+
 export function PeerBenchmark() {
   const [data, setData] = useState<PeerBenchmarkData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -144,9 +164,12 @@ export function PeerBenchmark() {
             onChange={(e) => setSelectedRegion(e.target.value)}
           >
             <option value="all">All Regions</option>
-            <option value="Singapore">Singapore</option>
-            <option value="Jakarta">Jakarta</option>
-            <option value="Bangkok">Bangkok</option>
+            <option value="Singapore">Singapore (S$)</option>
+            <option value="Jakarta">Jakarta (Rp)</option>
+            <option value="Bandung">Bandung (Rp)</option>
+            <option value="Surabaya">Surabaya (Rp)</option>
+            <option value="Bangkok">Bangkok (฿)</option>
+            <option value="Kuala Lumpur">Kuala Lumpur (RM)</option>
           </select>
           
           <select 
@@ -189,7 +212,7 @@ export function PeerBenchmark() {
             </div>
             <div>
               <p className="text-sm text-gray-500">Avg Revenue</p>
-              <p className="text-2xl font-bold">S${displayData.aggregates.avg_revenue.toLocaleString()}</p>
+              <p className="text-2xl font-bold">{formatRevenue(displayData.aggregates.avg_revenue, selectedRegion)}</p>
             </div>
           </div>
         </div>
@@ -242,7 +265,7 @@ export function PeerBenchmark() {
                     <span className="font-semibold">{outlet.outlet_code}</span>
                     <span className="text-green-600 font-bold">+{outlet.vs_peer_pct}%</span>
                   </div>
-                  <p className="text-sm text-gray-600">Revenue: S${outlet.revenue.toLocaleString()} | Score: {outlet.peer_score}</p>
+                  <p className="text-sm text-gray-600">Revenue: {formatRevenue(outlet.revenue, selectedRegion)} | Score: {outlet.peer_score}</p>
                 </div>
               ))}
             </div>
@@ -266,7 +289,7 @@ export function PeerBenchmark() {
                     <span className="font-semibold">{outlet.outlet_code}</span>
                     <span className="text-red-600 font-bold">{outlet.vs_peer_pct}%</span>
                   </div>
-                  <p className="text-sm text-gray-600">Gap: S${Math.abs(outlet.gap_to_avg).toLocaleString()}</p>
+                  <p className="text-sm text-gray-600">Gap: {formatRevenue(Math.abs(outlet.gap_to_avg), selectedRegion)}</p>
                 </div>
               ))}
             </div>
@@ -312,7 +335,7 @@ export function PeerBenchmark() {
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-right">
-                    S${(outlet.revenue || 0).toLocaleString()}
+                    {formatRevenue(outlet.revenue || 0, selectedRegion)}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-right">
                     <span className={outlet.vs_peer_pct >= 0 ? 'text-green-600' : 'text-red-600'}>

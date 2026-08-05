@@ -33,6 +33,73 @@ interface ChatRequest {
 }
 
 // ============================================================
+// CURRENCY CONFIGURATION
+// ============================================================
+
+interface CurrencyConfig {
+  symbol: string;
+  code: string;
+  locale: string;
+  name: string;
+  /** IDR/THB use abbreviated display (Rp 1.25jt) */
+  abbreviate?: boolean;
+  /** IDR: divide by 1000 for display, multiply on save */
+  divisor?: number;
+}
+
+const CURRENCY_MAP: Record<string, CurrencyConfig> = {
+  'SGD': { symbol: 'S$', code: 'SGD', locale: 'en-SG', name: 'Singapore Dollar' },
+  'IDR': { symbol: 'Rp', code: 'IDR', locale: 'id-ID', name: 'Indonesian Rupiah', abbreviate: true, divisor: 1000 },
+  'THB': { symbol: '฿', code: 'THB', locale: 'th-TH', name: 'Thai Baht', abbreviate: true, divisor: 1 },
+  'MYR': { symbol: 'RM', code: 'MYR', locale: 'en-MY', name: 'Malaysian Ringgit' },
+};
+
+/**
+ * Get currency config by region code (SG, JKT, BDG, etc.)
+ * Falls back to MYR for unknown regions
+ */
+function getCurrency(regionCode: string): CurrencyConfig {
+  // Map region code to currency code
+  const regionToCurrency: Record<string, string> = {
+    'SG': 'SGD',
+    'JKT': 'IDR',
+    'BDG': 'IDR',
+    'SBY': 'IDR',
+    'BKK': 'THB',
+    'KUL': 'MYR',
+  };
+  const currencyCode = regionToCurrency[regionCode] || 'MYR';
+  return CURRENCY_MAP[currencyCode] || CURRENCY_MAP['MYR'];
+}
+
+/**
+ * Format amount with correct currency
+ * IDR/THB: abbreviate to Rp 1.25jt / ฿450
+ * Others: S$1,234.56 / RM5,678.90
+ */
+function formatAmount(amount: number, regionCode: string): string {
+  const cfg = getCurrency(regionCode);
+
+  if (cfg.abbreviate) {
+    // IDR/THB: show in thousands (jt = juta, rb = ribu)
+    const divided = amount / (cfg.divisor || 1);
+    if (divided >= 1000) {
+      const jt = divided / 1000;
+      return `${cfg.symbol}${jt.toFixed(2)}jt`;
+    } else {
+      return `${cfg.symbol}${divided.toFixed(0)}rb`;
+    }
+  }
+
+  // SGD/MYR: full format with commas
+  const formatted = new Intl.NumberFormat(cfg.locale, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(amount);
+  return `${cfg.symbol}${formatted}`;
+}
+
+// ============================================================
 // PROMPT INJECTION GUARD
 // ============================================================
 
@@ -480,14 +547,58 @@ async function queryFranchiseData(ctx: SystemPromptContext): Promise<string | nu
 
     const { data: outlets } = await outletsQuery.limit(20);
 
+    // Fetch region codes for currency display
+    const { data: allRegions } = await supabase
+      .from("regions")
+      .select("id, code, currency_code");
+
+    const regionById: Record<number, any> = {};
+    if (allRegions) {
+      for (const r of allRegions) regionById[r.id] = r;
+    }
+
     if (outlets && outlets.length > 0) {
-      const outletList = outlets.map((o: any) => 
-        `  - ${o.name} (${o.code}) | ${o.city || "N/A"} | Status: ${o.status} | Daily Target: RM${o.daily_target || 0}`
-      ).join("\n");
+      const outletList = outlets.map((o: any) => {
+        const region = regionById[o.region_id];
+        const regionCode = region?.code || 'KUL'; // fallback
+        const curr = getCurrency(regionCode);
+        const target = o.daily_target || 0;
+        const targetFmt = curr.code === 'IDR'
+          ? `${curr.symbol}${(target / 1000).toFixed(0)}rb`
+          : `${curr.symbol}${new Intl.NumberFormat(curr.locale, { minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(target)}`;
+        return `  - ${o.name} (${o.code}) | ${o.city || "N/A"} | ${curr.symbol} target: ${targetFmt} | Status: ${o.status}`;
+      }).join("\n");
       dataSections.push(`YOUR OUTLETS:\n${outletList}`);
     }
   } catch (err) {
     console.error("Outlets query error:", err);
+  }
+
+  // =========================================
+  // BUILD OUTLET → REGION → CURRENCY MAP (reuse across sections)
+  // =========================================
+  const outletRegionMap: Record<number, { code: string; currency: CurrencyConfig }> = {};
+  try {
+    const { data: outletRegions } = await supabase
+      .from("outlets")
+      .select("id, region_id")
+      .limit(50);
+    const { data: allRegions } = await supabase
+      .from("regions")
+      .select("id, code");
+
+    const regionCodeById: Record<number, string> = {};
+    if (allRegions) {
+      for (const r of allRegions) regionCodeById[r.id] = r.code;
+    }
+    if (outletRegions) {
+      for (const o of outletRegions) {
+        const rcode = regionCodeById[o.region_id] || 'KUL';
+        outletRegionMap[o.id] = { code: rcode, currency: getCurrency(rcode) };
+      }
+    }
+  } catch (e) {
+    console.error("Region map error:", e);
   }
 
   // =========================================
@@ -496,7 +607,7 @@ async function queryFranchiseData(ctx: SystemPromptContext): Promise<string | nu
   try {
     let salesQuery = supabase
       .from("sales_transactions")
-      .select("id, date, amount, transaction_count, anomaly_score, is_anomaly")
+      .select("id, date, amount, transaction_count, anomaly_score, is_anomaly, outlet_id")
       .order("date", { ascending: false });
 
     if (user_role === "FRANCHISEE_OWNER" || user_role === "FRANCHISEE_STAFF") {
@@ -537,7 +648,9 @@ async function queryFranchiseData(ctx: SystemPromptContext): Promise<string | nu
     let todayRevenue = 0;
     let todayTransactions = 0;
     try {
-      const todayStr = new Date().toISOString().split("T")[0];
+      // Use SGT timezone (GMT+8) for "today" — data is stored in SGT
+      const nowSGT = new Date(Date.now() + 8 * 60 * 60 * 1000);
+      const todayStr = nowSGT.toISOString().split("T")[0];
       let todayQuery = supabase
         .from("sales_transactions")
         .select("id, amount, transaction_count")
@@ -575,17 +688,62 @@ async function queryFranchiseData(ctx: SystemPromptContext): Promise<string | nu
     }
 
     if (sales && sales.length > 0) {
-      // Calculate summary stats
+      // Calculate summary stats — use primary currency (MYR) for totals
       const totalAmount = sales.reduce((sum: number, s: any) => sum + parseFloat(s.amount || 0), 0);
       const totalTransactions = sales.reduce((sum: number, s: any) => sum + (s.transaction_count || 0), 0);
       const anomalyCount = sales.filter((s: any) => s.is_anomaly).length;
       const avgDaily = totalAmount / 14;
 
-      // Get daily totals for last 7 days
-      const last7Days = sales.slice(0, 7).map((s: any) => {
-        const d = new Date(s.date);
-        return `${d.toLocaleDateString("en-MY", { weekday: 'short', month: 'short', day: 'numeric' })}: RM${parseFloat(s.amount).toFixed(2)}`;
-      }).join("\n  ");
+      // Get daily totals by date (aggregate all outlets)
+      const dailyTotals: Record<string, number> = {};
+      for (const s of sales) {
+        dailyTotals[s.date] = (dailyTotals[s.date] || 0) + parseFloat(s.amount || 0);
+      }
+      const last7Days = Object.entries(dailyTotals)
+        .sort(([a], [b]) => b.localeCompare(a))
+        .slice(0, 7)
+        .map(([date, amt]) => {
+          const d = new Date(date);
+          return `${d.toLocaleDateString("en-MY", { weekday: 'short', month: 'short', day: 'numeric' })}: RM${amt.toFixed(2)}`;
+        }).join("\n  ");
+
+      // Region breakdown: group by outlet's region
+      const regionRevenue: Record<string, number> = {};
+      for (const s of sales) {
+        const rcode = outletRegionMap[s.outlet_id]?.code || 'KUL';
+        regionRevenue[rcode] = (regionRevenue[rcode] || 0) + parseFloat(s.amount || 0);
+      }
+      const regionLines = Object.entries(regionRevenue)
+        .sort(([, a], [, b]) => b - a)
+        .map(([rcode, amt]) => {
+          const curr = getCurrency(rcode);
+          return `  ${rcode}: ${formatAmount(amt, rcode)} (${curr.code})`;
+        }).join("\n");
+
+      // Outlet ranking (last 7 days) — top 5 by revenue
+      const outletRevenue: Record<number, number> = {};
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+      const cutoffDate = sevenDaysAgo.toISOString().split("T")[0];
+      for (const s of sales) {
+        if (s.date >= cutoffDate) {
+          outletRevenue[s.outlet_id] = (outletRevenue[s.outlet_id] || 0) + parseFloat(s.amount || 0);
+        }
+      }
+      // Get outlet names
+      const outletNames: Record<number, string> = {};
+      const { data: namedOutlets } = await supabase.from("outlets").select("id, name, code");
+      if (namedOutlets) {
+        for (const o of namedOutlets) outletNames[o.id] = `${o.name} (${o.code})`;
+      }
+      const topOutlets = Object.entries(outletRevenue)
+        .sort(([, a], [, b]) => b - a)
+        .slice(0, 5)
+        .map(([oid, amt]) => {
+          const rcode = outletRegionMap[Number(oid)]?.code || 'KUL';
+          const oname = outletNames[Number(oid)] || `Outlet #${oid}`;
+          return `  ${oname}: ${formatAmount(amt, rcode)}`;
+        }).join("\n");
 
       dataSections.push(`SALES SUMMARY (Last 14 Days):
   Today's Revenue: RM${todayRevenue.toFixed(2)} (${todayTransactions} transactions)
@@ -595,7 +753,13 @@ async function queryFranchiseData(ctx: SystemPromptContext): Promise<string | nu
   Anomalies Detected: ${anomalyCount}
 
 Recent Daily Sales (Last 7 Days):
-  ${last7Days}`);
+  ${last7Days}
+
+REVENUE BY REGION (Last 14 Days):
+${regionLines}
+
+TOP OUTLETS BY REVENUE (Last 7 Days):
+${topOutlets}`);
     }
   } catch (err) {
     console.error("Sales query error:", err);
