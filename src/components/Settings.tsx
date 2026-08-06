@@ -143,12 +143,15 @@ export function Settings() {
         body: JSON.stringify({ settings: settingsToSave }),
       });
 
-      if (!res.ok) throw new Error("Save failed");
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || `Save failed: ${res.status}`);
+      }
 
       setSaveStatus("success");
       setSmtp((prev) => ({ ...prev, smtp_pass: "" })); // clear password field after save
-    } catch (err) {
-      console.error("Save error:", err);
+    } catch (err: any) {
+      console.error("Settings save error:", err);
       setSaveStatus("error");
     } finally {
       setSaving(false);
@@ -168,7 +171,7 @@ export function Settings() {
           )}
           {saveStatus === "error" && (
             <span className="flex items-center gap-1 text-sm text-red-600">
-              <AlertCircle className="w-4 h-4" /> Error saving
+              <AlertCircle className="w-4 h-4" /> Save failed — see error in console
             </span>
           )}
           <button
