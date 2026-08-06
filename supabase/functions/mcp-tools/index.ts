@@ -39,7 +39,7 @@ async function getOutletStatus(params: {
   const result: any = {
     outlet_id: outlet.id,
     name: outlet.name,
-    region: outlet.regions?.name || "Unknown",
+    region: outlet.region?.name || "Unknown",
     status: outlet.status || "ACTIVE",
     last_updated: new Date().toISOString(),
   };
@@ -126,7 +126,7 @@ async function listActiveAlerts(params: {
 
   let query = supabase
     .from("alerts")
-    .select("*, outlets(name, regions(name))", { count: "exact" })
+    .select("*, outlet(name, region(name))", { count: "exact" })
     .in("status", ["NEW", "ACKNOWLEDGED", "IN_PROGRESS"]);
 
   // Filter by role

@@ -168,3 +168,7 @@
     at pn (https://c-qaifranchise.vercel.app/assets/index-CWFQr7I0.js:48:108194)
     at N1 (https://c-qaifranchise.vercel.app/assets/index-CWFQr7I0.js:48:109076) @ https://c-qaifranchise.vercel.app/assets/index-CWFQr7I0.js:656
 [72672055ms] [ERROR] Failed to load resource: the server responded with a status of 401 () @ https://ploqeifazcgzwjzmukgp.supabase.co/functions/v1/agent-status:0
+[91477143ms] [ERROR] Failed to load resource: the server responded with a status of 500 () @ https://ploqeifazcgzwjzmukgp.supabase.co/functions/v1/alerts-list:0
+[91496352ms] [ERROR] Failed to load resource: the server responded with a status of 500 () @ https://ploqeifazcgzwjzmukgp.supabase.co/functions/v1/alerts-list:0
+[91627525ms] [ERROR] Failed to load resource: the server responded with a status of 500 () @ https://ploqeifazcgzwjzmukgp.supabase.co/functions/v1/alerts-list:0
+[91630087ms] [ERROR] Failed to load resource: the server responded with a status of 500 () @ https://ploqeifazcgzwjzmukgp.supabase.co/functions/v1/alerts-list:0

@@ -45,9 +45,9 @@ serve(async (req: Request) => {
       response = `CyberQuote Outlets (${(outlets || []).length})\n` + 
         (outlets || []).map((o: any) => `- ${o.code}: ${o.region?.name || "N/A"}`).join("\n");
     } else if (action === "alerts") {
-      const { data: alerts } = await supabase.from("alerts").select("*, outlets(name)").eq("status", "NEW").limit(5);
+      const { data: alerts } = await supabase.from("alerts").select("*, outlet(name)").eq("status", "NEW").limit(5);
       response = `Active Alerts: ${(alerts || []).length}\n` +
-        (alerts || []).map((a: any) => `[${a.severity}] ${a.title}\n  Outlet: ${a.outlets?.name || "N/A"}`).join("\n");
+        (alerts || []).map((a: any) => `[${a.severity}] ${a.title}\n  Outlet: ${a.outlet?.name || "N/A"}`).join("\n");
     } else {
       response = "Available: dashboard, outlets, alerts";
     }

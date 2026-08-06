@@ -8,7 +8,7 @@ serve(async (req) => {
   // Get low stock inventory
   const { data: inventory } = await supabase
     .from('inventory')
-    .select('*, outlets(name, code)')
+    .select('*, outlet(name, code)')
     .lt('current_stock', 25);
   
   if (!inventory || inventory.length === 0) {

@@ -1,7 +1,10 @@
 import React, { useState } from "react";
-import { Send, Bot, User, Sparkles } from "lucide-react";
+import { Send, Bot, User, Loader2 } from "lucide-react";
 import { cn } from "@/src/lib/utils";
 import { Role } from "@/src/types";
+import { supabase } from "@/src/lib/supabase";
+
+const EDGE_URL = import.meta.env.VITE_SUPABASE_URL + "/functions/v1";
 
 interface Message {
   id: string;
@@ -22,62 +25,69 @@ export function AICopilot({ activeRole }: { activeRole: Role }) {
   ]);
   const [isTyping, setIsTyping] = useState(false);
 
-  const handleSend = (e: React.FormEvent) => {
+  const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!input.trim()) return;
+    if (!input.trim() || isTyping) return;
 
-    const newMsg: Message = {
+    const userMsg: Message = {
       id: Date.now().toString(),
       role: "user",
-      content: input,
+      content: input.trim(),
     };
-    setMessages((prev) => [...prev, newMsg]);
+    setMessages((prev) => [...prev, userMsg]);
     setInput("");
     setIsTyping(true);
 
-    // Simulate AI response based on typical franchise platform queries
-    setTimeout(() => {
-      let response = `I've analyzed the data for the ${activeRole} scope. Let me break that down for you.`;
-      let toolCalls: string[] = [];
-      const lowerInput = newMsg.content.toLowerCase();
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token || "";
 
-      if (
-        lowerInput.includes("104") ||
-        lowerInput.includes("underperforming") ||
-        lowerInput.includes("drop")
-      ) {
-        if (activeRole === 'Franchisee') {
-            response = "Outlet 104 is outside your franchisee scope. You only have access to Outlet 089.";
-        } else {
-            toolCalls = ["get_outlet_kpi(outlet='104')", "get_inventory_state(outlet='104')", "get_SOP(topic='stockout')"];
-            response =
-              "Outlet 104 is currently showing an 18% drop in lunchtime sales compared to its 30-day baseline. This correlates strongly with two factors: a critical stockout of chicken items (preventing combo sales) and a staffing shortage of 2 key kitchen members. I recommend immediately transferring stock from Outlet 102 and pausing online delivery to preserve service levels for walk-in customers.";
-        }
-      } else if (
-        lowerInput.includes("stockout") ||
-        lowerInput.includes("risk")
-      ) {
-        if (activeRole === 'Franchisee') {
-             toolCalls = ["get_inventory_state(outlet='089')"];
-             response = "Your location (Outlet 089) is currently at 90% risk of a stockout for 'Spicy Chicken Wings' within the next 4 hours based on current sales velocity. Recommend triggering an emergency local transfer.";
-        } else {
-             toolCalls = ["get_network_inventory_risk(region='all')"];
-             response =
-               "Based on current predictive models, Outlet 104 and Outlet 089 are at severe risk (>90%) of stockouts for core items before evening peak. I have drafted emergency transfer workflows for your approval.";
-        }
-      }
+      const roleMap: Record<Role, string> = {
+        HQ: "HQ_ADMIN",
+        Regional: "REGIONAL_MANAGER",
+        Franchisee: "FRANCHISEE_OWNER",
+      };
 
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: (Date.now() + 1).toString(),
-          role: "assistant",
-          content: response,
-          toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
+      const response = await fetch(`${EDGE_URL}/athena-chat`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`,
         },
-      ]);
+        body: JSON.stringify({
+          message: userMsg.content,
+          context: {
+            role: roleMap[activeRole] || "FRANCHISEE_OWNER",
+            region_id: session?.user?.user_metadata?.region_id || null,
+            outlet_id: session?.user?.user_metadata?.outlet_id || null,
+          },
+          history: messages.slice(-6).map((m) => ({
+            role: m.role,
+            content: m.content,
+          })),
+        }),
+      });
+
+      const data = await response.json();
+      const responseText = data.response || "Maaf, saya tidak dapat memproses pertanyaan Anda saat ini.";
+
+      const assistantMsg: Message = {
+        id: (Date.now() + 1).toString(),
+        role: "assistant",
+        content: responseText,
+      };
+      setMessages((prev) => [...prev, assistantMsg]);
+    } catch (err) {
+      console.error("AI Copilot error:", err);
+      const errorMsg: Message = {
+        id: (Date.now() + 1).toString(),
+        role: "assistant",
+        content: "Terjadi kesalahan koneksi. Silakan coba lagi.",
+      };
+      setMessages((prev) => [...prev, errorMsg]);
+    } finally {
       setIsTyping(false);
-    }, 1500);
+    }
   };
 
   return (
@@ -119,19 +129,9 @@ export function AICopilot({ activeRole }: { activeRole: Role }) {
                 "rounded-xl px-4 py-3 max-w-[85%] text-sm leading-relaxed",
                 msg.role === "user"
                   ? "bg-slate-100 border border-slate-200 text-slate-900"
-                  : "bg-white border border-slate-200 text-slate-700 flex flex-col gap-2",
+                  : "bg-white border border-slate-200 text-slate-700",
               )}
             >
-              {msg.toolCalls && msg.toolCalls.length > 0 && (
-                <div className="flex flex-col gap-1.5 mb-1">
-                  {msg.toolCalls.map((tc, idx) => (
-                    <div key={idx} className="flex items-center gap-1.5 text-xs font-mono text-slate-500 bg-slate-50 px-2 py-1 rounded w-fit border border-slate-200">
-                      <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
-                      Tool: {tc}
-                    </div>
-                  ))}
-                </div>
-              )}
               {msg.content}
             </div>
           </div>
@@ -142,18 +142,8 @@ export function AICopilot({ activeRole }: { activeRole: Role }) {
               <Bot className="h-4 w-4" />
             </div>
             <div className="rounded-xl bg-white border border-slate-200 px-4 py-4 flex items-center gap-1.5">
-              <div
-                className="h-1.5 w-1.5 animate-bounce rounded-full bg-blue-400"
-                style={{ animationDelay: "0ms" }}
-              />
-              <div
-                className="h-1.5 w-1.5 animate-bounce rounded-full bg-blue-400"
-                style={{ animationDelay: "150ms" }}
-              />
-              <div
-                className="h-1.5 w-1.5 animate-bounce rounded-full bg-blue-400"
-                style={{ animationDelay: "300ms" }}
-              />
+              <Loader2 className="h-4 w-4 text-blue-500 animate-spin" />
+              <span className="text-xs text-slate-500">Thinking...</span>
             </div>
           </div>
         )}
@@ -162,17 +152,37 @@ export function AICopilot({ activeRole }: { activeRole: Role }) {
       <div className="border-t border-slate-200 p-4 bg-white z-10 flex flex-col gap-3">
         {messages.length === 1 && (
           <div className="flex flex-wrap gap-2">
-             {activeRole === 'Franchisee' ? (
-                <>
-                   <button onClick={() => setInput("What's causing my sales drop?")} className="px-3 py-1.5 rounded-md bg-slate-50 border border-slate-200 text-xs text-slate-600 hover:bg-slate-100 transition-colors text-left">What's causing my sales drop?</button>
-                   <button onClick={() => setInput("Which items are at risk of stockout?")} className="px-3 py-1.5 rounded-md bg-slate-50 border border-slate-200 text-xs text-slate-600 hover:bg-slate-100 transition-colors text-left">Which items are at risk of stockout?</button>
-                </>
-             ) : (
-                <>
-                   <button onClick={() => setInput("Why is Outlet 104 underperforming?")} className="px-3 py-1.5 rounded-md bg-slate-50 border border-slate-200 text-xs text-slate-600 hover:bg-slate-100 transition-colors text-left">Why is Outlet 104 underperforming?</button>
-                   <button onClick={() => setInput("Identify network-wide stockout risks")} className="px-3 py-1.5 rounded-md bg-slate-50 border border-slate-200 text-xs text-slate-600 hover:bg-slate-100 transition-colors text-left">Identify network-wide stockout risks</button>
-                </>
-             )}
+            {activeRole === "Franchisee" ? (
+              <>
+                <button
+                  onClick={() => setInput("What's causing my sales drop?")}
+                  className="px-3 py-1.5 rounded-md bg-slate-50 border border-slate-200 text-xs text-slate-600 hover:bg-slate-100 transition-colors text-left"
+                >
+                  What's causing my sales drop?
+                </button>
+                <button
+                  onClick={() => setInput("Which items are at risk of stockout?")}
+                  className="px-3 py-1.5 rounded-md bg-slate-50 border border-slate-200 text-xs text-slate-600 hover:bg-slate-100 transition-colors text-left"
+                >
+                  Which items are at risk of stockout?
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  onClick={() => setInput("Why is Outlet 104 underperforming?")}
+                  className="px-3 py-1.5 rounded-md bg-slate-50 border border-slate-200 text-xs text-slate-600 hover:bg-slate-100 transition-colors text-left"
+                >
+                  Why is Outlet 104 underperforming?
+                </button>
+                <button
+                  onClick={() => setInput("Identify network-wide stockout risks")}
+                  className="px-3 py-1.5 rounded-md bg-slate-50 border border-slate-200 text-xs text-slate-600 hover:bg-slate-100 transition-colors text-left"
+                >
+                  Identify network-wide stockout risks
+                </button>
+              </>
+            )}
           </div>
         )}
         <form onSubmit={handleSend} className="relative">
@@ -188,7 +198,11 @@ export function AICopilot({ activeRole }: { activeRole: Role }) {
             disabled={!input.trim() || isTyping}
             className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 disabled:opacity-30 transition-all"
           >
-            <Send className="h-4 w-4" />
+            {isTyping ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Send className="h-4 w-4" />
+            )}
           </button>
         </form>
       </div>

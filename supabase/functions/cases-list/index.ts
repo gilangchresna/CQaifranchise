@@ -22,7 +22,7 @@ serve(async (req: Request) => {
       .from("cases")
       .select(`
         *,
-        alert:alerts(id, outlet_id, type, severity, outlets(name, code)),
+        alert:alerts(id, outlet_id, type, severity, outlet(name, code)),
         assigned_to:user_profiles!assigned_to_id(full_name, role)
       `)
       .order("created_at", { ascending: false })

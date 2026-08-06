@@ -62,6 +62,11 @@ function getCurrency(regionCode: string): CurrencyConfig {
   // Map region code to currency code
   const regionToCurrency: Record<string, string> = {
     'SG': 'SGD',
+    'SG-CENTRAL': 'SGD',
+    'SG-NORTH': 'SGD',
+    'SG-EAST': 'SGD',
+    'SG-WEST': 'SGD',
+    'SG-NE': 'SGD',
     'JKT': 'IDR',
     'BDG': 'IDR',
     'SBY': 'IDR',

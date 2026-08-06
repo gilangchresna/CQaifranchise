@@ -45,7 +45,7 @@ export function LiveTransactionFeed() {
 
       const formattedData = (data || []).map((t: any) => ({
         ...t,
-        outlet_name: t.outlets?.name || "Unknown Outlet",
+        outlet_name: t.outlet?.name || "Unknown Outlet",
       }));
 
       setTransactions(formattedData);
