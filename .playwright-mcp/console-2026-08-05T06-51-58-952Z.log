@@ -107,3 +107,64 @@
     at d0 (https://c-qaifranchise.vercel.app/assets/index-B6F5Dejh.js:48:116149)
     at R1 (https://c-qaifranchise.vercel.app/assets/index-B6F5Dejh.js:48:112930)
 [60766879ms] [ERROR] Failed to load resource: the server responded with a status of 405 () @ https://ploqeifazcgzwjzmukgp.supabase.co/functions/v1/users-list:0
+[66380792ms] [ERROR] Failed to load resource: net::ERR_INTERNET_DISCONNECTED @ https://ploqeifazcgzwjzmukgp.supabase.co/auth/v1/token?grant_type=refresh_token:0
+[66381001ms] [ERROR] Failed to load resource: net::ERR_INTERNET_DISCONNECTED @ https://ploqeifazcgzwjzmukgp.supabase.co/auth/v1/token?grant_type=refresh_token:0
+[66381408ms] [ERROR] Failed to load resource: net::ERR_INTERNET_DISCONNECTED @ https://ploqeifazcgzwjzmukgp.supabase.co/auth/v1/token?grant_type=refresh_token:0
+[66382217ms] [ERROR] Failed to load resource: net::ERR_INTERNET_DISCONNECTED @ https://ploqeifazcgzwjzmukgp.supabase.co/auth/v1/token?grant_type=refresh_token:0
+[66383823ms] [ERROR] Failed to load resource: net::ERR_INTERNET_DISCONNECTED @ https://ploqeifazcgzwjzmukgp.supabase.co/auth/v1/token?grant_type=refresh_token:0
+[66387028ms] [ERROR] Failed to load resource: net::ERR_INTERNET_DISCONNECTED @ https://ploqeifazcgzwjzmukgp.supabase.co/auth/v1/token?grant_type=refresh_token:0
+[66393436ms] [ERROR] Failed to load resource: net::ERR_INTERNET_DISCONNECTED @ https://ploqeifazcgzwjzmukgp.supabase.co/auth/v1/token?grant_type=refresh_token:0
+[66406243ms] [ERROR] Failed to load resource: net::ERR_INTERNET_DISCONNECTED @ https://ploqeifazcgzwjzmukgp.supabase.co/auth/v1/token?grant_type=refresh_token:0
+[67494959ms] [ERROR] Failed to load resource: net::ERR_INTERNET_DISCONNECTED @ https://ploqeifazcgzwjzmukgp.supabase.co/auth/v1/token?grant_type=refresh_token:0
+[67495165ms] [ERROR] Failed to load resource: net::ERR_INTERNET_DISCONNECTED @ https://ploqeifazcgzwjzmukgp.supabase.co/auth/v1/token?grant_type=refresh_token:0
+[67495573ms] [ERROR] Failed to load resource: net::ERR_INTERNET_DISCONNECTED @ https://ploqeifazcgzwjzmukgp.supabase.co/auth/v1/token?grant_type=refresh_token:0
+[67496381ms] [ERROR] Failed to load resource: net::ERR_INTERNET_DISCONNECTED @ https://ploqeifazcgzwjzmukgp.supabase.co/auth/v1/token?grant_type=refresh_token:0
+[67497986ms] [ERROR] Failed to load resource: net::ERR_INTERNET_DISCONNECTED @ https://ploqeifazcgzwjzmukgp.supabase.co/auth/v1/token?grant_type=refresh_token:0
+[67501193ms] [ERROR] Failed to load resource: net::ERR_INTERNET_DISCONNECTED @ https://ploqeifazcgzwjzmukgp.supabase.co/auth/v1/token?grant_type=refresh_token:0
+[68088372ms] [ERROR] Failed to load resource: net::ERR_INTERNET_DISCONNECTED @ https://ploqeifazcgzwjzmukgp.supabase.co/auth/v1/token?grant_type=refresh_token:0
+[72663800ms] [ERROR] Failed to load resource: the server responded with a status of 405 () @ https://ploqeifazcgzwjzmukgp.supabase.co/functions/v1/users-list:0
+[72667534ms] [ERROR] TypeError: Cannot read properties of undefined (reading 'auth')
+    at https://c-qaifranchise.vercel.app/assets/index-CWFQr7I0.js:657:47899
+    at async k (https://c-qaifranchise.vercel.app/assets/index-CWFQr7I0.js:657:47786)
+    at async A (https://c-qaifranchise.vercel.app/assets/index-CWFQr7I0.js:657:46472) @ https://c-qaifranchise.vercel.app/assets/index-CWFQr7I0.js:656
+[72667537ms] [ERROR] Failed to fetch: TypeError: Cannot read properties of undefined (reading 'auth')
+    at https://c-qaifranchise.vercel.app/assets/index-CWFQr7I0.js:657:47899
+    at async k (https://c-qaifranchise.vercel.app/assets/index-CWFQr7I0.js:657:47786)
+    at async O (https://c-qaifranchise.vercel.app/assets/index-CWFQr7I0.js:657:47454) @ https://c-qaifranchise.vercel.app/assets/index-CWFQr7I0.js:656
+[72667537ms] [ERROR] TypeError: Cannot read properties of undefined (reading 'auth')
+    at https://c-qaifranchise.vercel.app/assets/index-CWFQr7I0.js:657:47899
+    at async k (https://c-qaifranchise.vercel.app/assets/index-CWFQr7I0.js:657:47786)
+    at async A (https://c-qaifranchise.vercel.app/assets/index-CWFQr7I0.js:657:46705) @ https://c-qaifranchise.vercel.app/assets/index-CWFQr7I0.js:656
+[72667537ms] [ERROR] TypeError: Cannot read properties of undefined (reading 'auth')
+    at https://c-qaifranchise.vercel.app/assets/index-CWFQr7I0.js:657:47899
+    at async k (https://c-qaifranchise.vercel.app/assets/index-CWFQr7I0.js:657:47786)
+    at async A (https://c-qaifranchise.vercel.app/assets/index-CWFQr7I0.js:657:46948) @ https://c-qaifranchise.vercel.app/assets/index-CWFQr7I0.js:656
+[72667537ms] [ERROR] TypeError: Cannot read properties of undefined (reading 'auth')
+    at https://c-qaifranchise.vercel.app/assets/index-CWFQr7I0.js:657:47899
+    at async k (https://c-qaifranchise.vercel.app/assets/index-CWFQr7I0.js:657:47786)
+    at async A (https://c-qaifranchise.vercel.app/assets/index-CWFQr7I0.js:657:47189) @ https://c-qaifranchise.vercel.app/assets/index-CWFQr7I0.js:656
+[72668136ms] [ERROR] Error fetching risk data: ReferenceError: supabase is not defined
+    at A (https://c-qaifranchise.vercel.app/assets/index-CWFQr7I0.js:654:3087)
+    at https://c-qaifranchise.vercel.app/assets/index-CWFQr7I0.js:654:3027
+    at Ho (https://c-qaifranchise.vercel.app/assets/index-CWFQr7I0.js:48:93029)
+    at N1 (https://c-qaifranchise.vercel.app/assets/index-CWFQr7I0.js:48:108310)
+    at pn (https://c-qaifranchise.vercel.app/assets/index-CWFQr7I0.js:48:108194)
+    at N1 (https://c-qaifranchise.vercel.app/assets/index-CWFQr7I0.js:48:109076)
+    at pn (https://c-qaifranchise.vercel.app/assets/index-CWFQr7I0.js:48:108194)
+    at N1 (https://c-qaifranchise.vercel.app/assets/index-CWFQr7I0.js:48:109076)
+    at pn (https://c-qaifranchise.vercel.app/assets/index-CWFQr7I0.js:48:108194)
+    at N1 (https://c-qaifranchise.vercel.app/assets/index-CWFQr7I0.js:48:109076) @ https://c-qaifranchise.vercel.app/assets/index-CWFQr7I0.js:656
+[72668835ms] [ERROR] Failed to load resource: the server responded with a status of 401 () @ https://ploqeifazcgzwjzmukgp.supabase.co/functions/v1/approvals?status=PENDING:0
+[72670087ms] [ERROR] Failed to load resource: the server responded with a status of 401 () @ https://ploqeifazcgzwjzmukgp.supabase.co/functions/v1/agent-status:0
+[72671000ms] [ERROR] Error fetching risk data: ReferenceError: supabase is not defined
+    at A (https://c-qaifranchise.vercel.app/assets/index-CWFQr7I0.js:654:3087)
+    at https://c-qaifranchise.vercel.app/assets/index-CWFQr7I0.js:654:3027
+    at Ho (https://c-qaifranchise.vercel.app/assets/index-CWFQr7I0.js:48:93029)
+    at N1 (https://c-qaifranchise.vercel.app/assets/index-CWFQr7I0.js:48:108310)
+    at pn (https://c-qaifranchise.vercel.app/assets/index-CWFQr7I0.js:48:108194)
+    at N1 (https://c-qaifranchise.vercel.app/assets/index-CWFQr7I0.js:48:109076)
+    at pn (https://c-qaifranchise.vercel.app/assets/index-CWFQr7I0.js:48:108194)
+    at N1 (https://c-qaifranchise.vercel.app/assets/index-CWFQr7I0.js:48:109076)
+    at pn (https://c-qaifranchise.vercel.app/assets/index-CWFQr7I0.js:48:108194)
+    at N1 (https://c-qaifranchise.vercel.app/assets/index-CWFQr7I0.js:48:109076) @ https://c-qaifranchise.vercel.app/assets/index-CWFQr7I0.js:656
+[72672055ms] [ERROR] Failed to load resource: the server responded with a status of 401 () @ https://ploqeifazcgzwjzmukgp.supabase.co/functions/v1/agent-status:0

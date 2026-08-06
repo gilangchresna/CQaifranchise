@@ -40,7 +40,14 @@ function formatMetrics(metrics: { accuracy?: number; precision?: number; recall?
   if (metrics.accuracy) return `Accuracy: ${(metrics.accuracy * 100).toFixed(0)}%`;
   if (metrics.precision) return `Precision: ${(metrics.precision * 100).toFixed(0)}%`;
   if (metrics.recall) return `Recall: ${(metrics.recall * 100).toFixed(0)}%`;
-  if (metrics.mape) return `MAPE: ${(metrics.mape * 100).toFixed(1)}%`;
+  if (metrics.mape !== undefined) {
+    // MAPE stored as ratio (0.12 = 12%) OR already percentage (18.2 = 18.2%)
+    // If value > 1, assume it's already a percentage
+    const mapeDisplay = metrics.mape > 1
+      ? metrics.mape.toFixed(1)
+      : (metrics.mape * 100).toFixed(1);
+    return `MAPE: ${mapeDisplay}%`;
+  }
   return 'N/A';
 }
 
