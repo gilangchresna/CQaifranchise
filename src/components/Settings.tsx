@@ -1,4 +1,5 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
+import { supabase } from "../lib/supabase";
 import {
   Settings as SettingsIcon,
   Save,
@@ -7,56 +8,262 @@ import {
   BrainCircuit,
   Database,
   Lock,
+  Mail,
+  CheckCircle,
+  AlertCircle,
 } from "lucide-react";
 
+const EDGE_FUNCTIONS_URL = "https://ploqeifazcgzwjzmukgp.supabase.co/functions/v1";
+
 export function Settings() {
+  const [saving, setSaving] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<"idle" | "success" | "error">("idle");
+  const [loading, setLoading] = useState(true);
+
+  // SMTP Settings state
+  const [smtp, setSmtp] = useState({
+    smtp_host: "mail.cyberquote.co.id",
+    smtp_port: "465",
+    smtp_user: "stefanus.gilang@cyberquote.co.id",
+    smtp_pass: "",
+    smtp_from: "CyberQuote Alerts <stefanus.gilang@cyberquote.co.id>",
+  });
+
+  // Notification Settings state
+  const [notifications, setNotifications] = useState({
+    email_enabled: true,
+    whatsapp_enabled: false,
+  });
+
+  // Threshold Settings state
+  const [thresholds, setThresholds] = useState({
+    anomaly_threshold: 15,
+    stockout_threshold: 70,
+    sla_warning: 50,
+    sla_escalation: 75,
+  });
+
+  // AI Settings state
+  const [aiSettings, setAiSettings] = useState({
+    operation_mode: "assist",
+    action_threshold: 80,
+    semantic_caching: true,
+  });
+
+  // Security Settings state
+  const [security, setSecurity] = useState({
+    agent_allowlist: true,
+    prompt_injection_filter: true,
+    audit_logging: true,
+  });
+
+  // SLA severity mapping
+  const [slaMapping, setSlaMapping] = useState({
+    sla_high: "1",
+    sla_medium: "24",
+    sla_low: "72",
+  });
+
+  useEffect(() => {
+    loadSettings();
+  }, []);
+
+  async function loadSettings() {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) return;
+
+      const res = await fetch(`${EDGE_FUNCTIONS_URL}/settings-get`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) return;
+
+      const data = await res.json();
+      const s = data.settings || {};
+
+      setSmtp({
+        smtp_host: s.smtp_host || "mail.cyberquote.co.id",
+        smtp_port: s.smtp_port || "465",
+        smtp_user: s.smtp_user || "stefanus.gilang@cyberquote.co.id",
+        smtp_pass: "", // never expose password
+        smtp_from: s.smtp_from || "CyberQuote Alerts <stefanus.gilang@cyberquote.co.id>",
+      });
+
+      setNotifications({
+        email_enabled: s.email_notifications_enabled !== "false",
+        whatsapp_enabled: s.whatsapp_notifications_enabled === "true",
+      });
+
+      setThresholds({
+        anomaly_threshold: Math.round((parseFloat(s.anomaly_threshold || "0.15") * 100)),
+        stockout_threshold: Math.round((parseFloat(s.stockout_threshold || "0.7") * 100)),
+        sla_warning: parseInt(s.sla_warning_threshold || "50"),
+        sla_escalation: parseInt(s.sla_escalation_threshold || "75"),
+      });
+    } catch (err) {
+      console.error("Failed to load settings:", err);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleSave() {
+    setSaving(true);
+    setSaveStatus("idle");
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+
+      const settingsToSave: Record<string, string> = {
+        smtp_host: smtp.smtp_host,
+        smtp_port: smtp.smtp_port,
+        smtp_user: smtp.smtp_user,
+        smtp_from: smtp.smtp_from,
+        email_notifications_enabled: String(notifications.email_enabled),
+        whatsapp_notifications_enabled: String(notifications.whatsapp_enabled),
+        anomaly_threshold: String(thresholds.anomaly_threshold / 100),
+        stockout_threshold: String(thresholds.stockout_threshold / 100),
+        sla_warning_threshold: String(thresholds.sla_warning),
+        sla_escalation_threshold: String(thresholds.sla_escalation),
+      };
+
+      // Only include password if changed
+      if (smtp.smtp_pass.trim() !== "") {
+        settingsToSave.smtp_pass = smtp.smtp_pass;
+      }
+
+      const res = await fetch(`${EDGE_FUNCTIONS_URL}/settings-save`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ settings: settingsToSave }),
+      });
+
+      if (!res.ok) throw new Error("Save failed");
+
+      setSaveStatus("success");
+      setSmtp((prev) => ({ ...prev, smtp_pass: "" })); // clear password field after save
+    } catch (err) {
+      console.error("Save error:", err);
+      setSaveStatus("error");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <div className="space-y-6 max-w-6xl mx-auto">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold text-slate-900">Platform Settings & Governance</h2>
-        <button className="rounded-md px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium transition-all flex items-center gap-2">
-          <Save className="w-3 h-3" /> Save Changes
-        </button>
+        <div className="flex items-center gap-3">
+          {saveStatus === "success" && (
+            <span className="flex items-center gap-1 text-sm text-green-600">
+              <CheckCircle className="w-4 h-4" /> Saved
+            </span>
+          )}
+          {saveStatus === "error" && (
+            <span className="flex items-center gap-1 text-sm text-red-600">
+              <AlertCircle className="w-4 h-4" /> Error saving
+            </span>
+          )}
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="rounded-md px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-medium transition-all flex items-center gap-2"
+          >
+            <Save className="w-3 h-3" />
+            {saving ? "Saving..." : "Save Changes"}
+          </button>
+        </div>
       </div>
 
       <div className="grid gap-6 md:grid-cols-2">
-        {/* Agentic AI Config */}
+
+        {/* SMTP / Email Configuration */}
         <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
           <h3 className="text-sm font-semibold text-slate-900 flex items-center gap-2 mb-6">
-            <BrainCircuit className="w-4 h-4 text-blue-600" /> Agentic AI
-            Configuration
+            <Mail className="w-4 h-4 text-blue-600" /> Email / SMTP Configuration
           </h3>
           <div className="space-y-4">
             <div>
-              <label className="text-xs font-semibold text-slate-500 block mb-2">
-                Operation Mode
-              </label>
-              <select defaultValue="Assist (Draft Actions, Require Approval)" className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:border-blue-500/50 shadow-sm">
-                <option>Inform (Monitoring & Alerts Only)</option>
-                <option>
-                  Assist (Draft Actions, Require Approval)
-                </option>
-                <option>Automate (Execute Low-Risk Actions)</option>
-              </select>
+              <label className="text-xs font-semibold text-slate-500 block mb-1.5">SMTP Host</label>
+              <input
+                type="text"
+                value={smtp.smtp_host}
+                onChange={(e) => setSmtp((p) => ({ ...p, smtp_host: e.target.value }))}
+                className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:border-blue-500/50 shadow-sm"
+                placeholder="smtp.example.com"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs font-semibold text-slate-500 block mb-1.5">Port</label>
+                <input
+                  type="text"
+                  value={smtp.smtp_port}
+                  onChange={(e) => setSmtp((p) => ({ ...p, smtp_port: e.target.value }))}
+                  className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:border-blue-500/50 shadow-sm"
+                  placeholder="465"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-slate-500 block mb-1.5">Username</label>
+                <input
+                  type="text"
+                  value={smtp.smtp_user}
+                  onChange={(e) => setSmtp((p) => ({ ...p, smtp_user: e.target.value }))}
+                className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:border-blue-500/50 shadow-sm"
+                />
+              </div>
             </div>
             <div>
-              <label className="text-xs font-semibold text-slate-500 block mb-2">
-                Action Approval Threshold
+              <label className="text-xs font-semibold text-slate-500 block mb-1.5">
+                Password <span className="text-slate-400 font-normal">(leave blank to keep current)</span>
               </label>
+              <input
+                type="password"
+                value={smtp.smtp_pass}
+                onChange={(e) => setSmtp((p) => ({ ...p, smtp_pass: e.target.value }))}
+                className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:border-blue-500/50 shadow-sm"
+                placeholder="••••••••"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-slate-500 block mb-1.5">From Address</label>
+              <input
+                type="text"
+                value={smtp.smtp_from}
+                onChange={(e) => setSmtp((p) => ({ ...p, smtp_from: e.target.value }))}
+                className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:border-blue-500/50 shadow-sm"
+                placeholder="CyberQuote Alerts <alerts@example.com>"
+              />
+            </div>
+            <div className="pt-2 border-t border-slate-100">
               <div className="flex items-center gap-4">
-                <input
-                  type="range"
-                  min="0"
-                  max="100"
-                  defaultValue="80"
-                  className="flex-1 accent-blue-600"
-                />
-                <span className="text-sm font-medium text-blue-600">80%</span>
+                <label className="flex items-center gap-2 text-sm cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={notifications.email_enabled}
+                    onChange={(e) => setNotifications((p) => ({ ...p, email_enabled: e.target.checked }))}
+                    className="accent-blue-600"
+                  />
+                  <span className="text-slate-700">Email Notifications</span>
+                </label>
+                <label className="flex items-center gap-2 text-sm cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={notifications.whatsapp_enabled}
+                    onChange={(e) => setNotifications((p) => ({ ...p, whatsapp_enabled: e.target.checked }))}
+                    className="accent-blue-600"
+                  />
+                  <span className="text-slate-700">WhatsApp</span>
+                </label>
               </div>
-              <p className="text-xs text-slate-500 mt-1">
-                Actions with AI confidence below this threshold require human
-                approval.
-              </p>
             </div>
           </div>
         </div>
@@ -74,15 +281,16 @@ export function Settings() {
                <div className="flex items-center gap-4">
                  <input
                    type="range"
-                   min="0"
-                   max="100"
-                   defaultValue="15"
+                   min="1"
+                   max="50"
+                   value={thresholds.anomaly_threshold}
+                   onChange={(e) => setThresholds((p) => ({ ...p, anomaly_threshold: parseInt(e.target.value) }))}
                    className="flex-1 accent-blue-600"
                  />
-                 <span className="text-sm font-medium text-blue-600">15% Deviation</span>
+                 <span className="text-sm font-medium text-blue-600 w-24 text-right">{thresholds.anomaly_threshold}% Deviation</span>
                </div>
              </div>
-             
+
              <div>
                <label className="text-xs font-semibold text-slate-500 block mb-2">
                  Stockout Risk Threshold
@@ -90,46 +298,88 @@ export function Settings() {
                <div className="flex items-center gap-4">
                  <input
                    type="range"
-                   min="0"
+                   min="10"
                    max="100"
-                   defaultValue="70"
+                   value={thresholds.stockout_threshold}
+                   onChange={(e) => setThresholds((p) => ({ ...p, stockout_threshold: parseInt(e.target.value) }))}
                    className="flex-1 accent-blue-600"
                  />
-                 <span className="text-sm font-medium text-blue-600">&gt; 70% Probability</span>
+                 <span className="text-sm font-medium text-blue-600 w-24 text-right">&gt; {thresholds.stockout_threshold}% Prob</span>
                </div>
-             </div>
+            </div>
 
-             <div className="pt-4 border-t border-slate-200">
-                <label className="text-xs font-semibold text-slate-500 block mb-3">
-                  SLA Mapping by Severity
+            <div className="pt-4 border-t border-slate-200">
+               <label className="text-xs font-semibold text-slate-500 block mb-3">
+                 SLA Mapping by Severity
+               </label>
+               <div className="space-y-2">
+                 <div className="flex items-center justify-between text-sm">
+                   <span className="text-slate-700">HIGH Severity</span>
+                   <select
+                     value={slaMapping.sla_high}
+                     onChange={(e) => setSlaMapping((p) => ({ ...p, sla_high: e.target.value }))}
+                     className="bg-white border border-slate-200 rounded px-2 py-1 text-xs outline-none focus:border-blue-500"
+                   >
+                     <option value="1">1 Hour</option>
+                     <option value="4">4 Hours</option>
+                     <option value="24">24 Hours</option>
+                   </select>
+                 </div>
+                 <div className="flex items-center justify-between text-sm">
+                   <span className="text-slate-700">MEDIUM Severity</span>
+                   <select
+                     value={slaMapping.sla_medium}
+                     onChange={(e) => setSlaMapping((p) => ({ ...p, sla_medium: e.target.value }))}
+                     className="bg-white border border-slate-200 rounded px-2 py-1 text-xs outline-none focus:border-blue-500"
+                   >
+                     <option value="4">4 Hours</option>
+                     <option value="24">24 Hours</option>
+                     <option value="48">48 Hours</option>
+                   </select>
+                 </div>
+                 <div className="flex items-center justify-between text-sm">
+                   <span className="text-slate-700">LOW Severity</span>
+                   <select
+                     value={slaMapping.sla_low}
+                     onChange={(e) => setSlaMapping((p) => ({ ...p, sla_low: e.target.value }))}
+                     className="bg-white border border-slate-200 rounded px-2 py-1 text-xs outline-none focus:border-blue-500"
+                   >
+                     <option value="24">24 Hours</option>
+                     <option value="48">48 Hours</option>
+                     <option value="72">72 Hours</option>
+                   </select>
+                 </div>
+               </div>
+            </div>
+
+            <div className="pt-4 border-t border-slate-200 space-y-3">
+              <div>
+                <label className="text-xs font-semibold text-slate-500 block mb-2">
+                  SLA Warning Threshold ({thresholds.sla_warning}% elapsed)
                 </label>
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-slate-700">HIGH Severity (e.g. Critical Stockout)</span>
-                    <select className="bg-white border border-slate-200 rounded px-2 py-1 text-xs outline-none focus:border-blue-500">
-                      <option>1 Hour</option>
-                      <option>4 Hours</option>
-                      <option>24 Hours</option>
-                    </select>
-                  </div>
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-slate-700">MEDIUM Severity (e.g. Sales Drop)</span>
-                    <select defaultValue="24 Hours" className="bg-white border border-slate-200 rounded px-2 py-1 text-xs outline-none focus:border-blue-500">
-                      <option>4 Hours</option>
-                      <option>24 Hours</option>
-                      <option>48 Hours</option>
-                    </select>
-                  </div>
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-slate-700">LOW Severity (e.g. Trend Alert)</span>
-                    <select defaultValue="72 Hours" className="bg-white border border-slate-200 rounded px-2 py-1 text-xs outline-none focus:border-blue-500">
-                      <option>24 Hours</option>
-                      <option>48 Hours</option>
-                      <option>72 Hours</option>
-                    </select>
-                  </div>
-                </div>
-             </div>
+                <input
+                  type="range"
+                  min="10"
+                  max="90"
+                  value={thresholds.sla_warning}
+                  onChange={(e) => setThresholds((p) => ({ ...p, sla_warning: parseInt(e.target.value) }))}
+                  className="w-full accent-blue-600"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-slate-500 block mb-2">
+                  SLA Escalation Threshold ({thresholds.sla_escalation}% elapsed)
+                </label>
+                <input
+                  type="range"
+                  min="20"
+                  max="99"
+                  value={thresholds.sla_escalation}
+                  onChange={(e) => setThresholds((p) => ({ ...p, sla_escalation: parseInt(e.target.value) }))}
+                  className="w-full accent-blue-600"
+                />
+              </div>
+            </div>
           </div>
         </div>
 
@@ -143,31 +393,51 @@ export function Settings() {
               <label className="text-xs font-semibold text-slate-500 block mb-2">
                 Primary Model Provider
               </label>
-              <select defaultValue="google" className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:border-blue-500/50 shadow-sm">
-                <option value="google">Google (Gemini 1.5 Pro)</option>
-                <option value="openai">OpenAI (GPT-4o)</option>
-                <option value="anthropic">Anthropic (Claude 3.5 Sonnet)</option>
-                <option value="custom">Custom Endpoint (Ollama / Local)</option>
+              <select
+                value={aiSettings.operation_mode}
+                onChange={(e) => setAiSettings((p) => ({ ...p, operation_mode: e.target.value }))}
+                className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:border-blue-500/50 shadow-sm"
+              >
+                <option value="inform">Inform (Monitoring & Alerts Only)</option>
+                <option value="assist">Assist (Draft Actions, Require Approval)</option>
+                <option value="automate">Automate (Execute Low-Risk Actions)</option>
               </select>
             </div>
             <div>
               <label className="text-xs font-semibold text-slate-500 block mb-2">
-                Fallback Strategy
+                Action Approval Threshold
               </label>
-              <select defaultValue="auto" className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:border-blue-500/50 shadow-sm">
-                <option value="auto">Auto-route on Rate Limit (Recommended)</option>
-                <option value="strict">Strict (Fail if primary is down)</option>
-              </select>
+              <div className="flex items-center gap-4">
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  value={aiSettings.action_threshold}
+                  onChange={(e) => setAiSettings((p) => ({ ...p, action_threshold: parseInt(e.target.value) }))}
+                  className="flex-1 accent-blue-600"
+                />
+                <span className="text-sm font-medium text-blue-600">{aiSettings.action_threshold}%</span>
+              </div>
+              <p className="text-xs text-slate-500 mt-1">
+                Actions with AI confidence below this threshold require human approval.
+              </p>
             </div>
-             <div className="flex items-center justify-between pt-2 border-t border-slate-200">
+            <div className="flex items-center justify-between pt-2 border-t border-slate-200">
                 <div>
                    <p className="text-sm font-medium text-slate-900">Semantic Caching</p>
                    <p className="text-xs text-slate-500">Cache similar queries to reduce latency & cost.</p>
                 </div>
-                <div className="w-10 h-5 bg-blue-600 rounded-full relative cursor-pointer">
-                   <div className="w-4 h-4 bg-white rounded-full absolute right-0.5 top-0.5 shadow-sm"></div>
-                </div>
-             </div>
+                <button
+                  onClick={() => setAiSettings((p) => ({ ...p, semantic_caching: !p.semantic_caching }))}
+                  className={`w-10 h-5 rounded-full relative cursor-pointer transition-colors ${
+                    aiSettings.semantic_caching ? "bg-blue-600" : "bg-slate-300"
+                  }`}
+                >
+                   <div className={`w-4 h-4 bg-white rounded-full absolute top-0.5 shadow-sm transition-all ${
+                    aiSettings.semantic_caching ? "right-0.5" : "right-4"
+                  }`} />
+                </button>
+            </div>
           </div>
         </div>
 
@@ -182,35 +452,58 @@ export function Settings() {
                    <p className="text-sm font-medium text-slate-900">Agent Action Allowlist</p>
                    <p className="text-xs text-slate-500">Only permitted API paths are executed.</p>
                 </div>
-                <div className="w-10 h-5 bg-blue-600 rounded-full relative cursor-pointer">
-                   <div className="w-4 h-4 bg-white rounded-full absolute right-0.5 top-0.5 shadow-sm"></div>
-                </div>
+                <button
+                  onClick={() => setSecurity((p) => ({ ...p, agent_allowlist: !p.agent_allowlist }))}
+                  className={`w-10 h-5 rounded-full relative cursor-pointer transition-colors ${
+                    security.agent_allowlist ? "bg-blue-600" : "bg-slate-300"
+                  }`}
+                >
+                   <div className={`w-4 h-4 bg-white rounded-full absolute top-0.5 shadow-sm transition-all ${
+                    security.agent_allowlist ? "right-0.5" : "right-4"
+                  }`} />
+                </button>
              </div>
              <div className="flex items-center justify-between">
                 <div>
                    <p className="text-sm font-medium text-slate-900">Prompt Injection Filter</p>
                    <p className="text-xs text-slate-500">LLM Gateway content safety screening.</p>
                 </div>
-                <div className="w-10 h-5 bg-blue-600 rounded-full relative cursor-pointer">
-                   <div className="w-4 h-4 bg-white rounded-full absolute right-0.5 top-0.5 shadow-sm"></div>
-                </div>
+                <button
+                  onClick={() => setSecurity((p) => ({ ...p, prompt_injection_filter: !p.prompt_injection_filter }))}
+                  className={`w-10 h-5 rounded-full relative cursor-pointer transition-colors ${
+                    security.prompt_injection_filter ? "bg-blue-600" : "bg-slate-300"
+                  }`}
+                >
+                   <div className={`w-4 h-4 bg-white rounded-full absolute top-0.5 shadow-sm transition-all ${
+                    security.prompt_injection_filter ? "right-0.5" : "right-4"
+                  }`} />
+                </button>
              </div>
              <div className="flex items-center justify-between">
                 <div>
                    <p className="text-sm font-medium text-slate-900">Immutable Audit Logging</p>
                    <p className="text-xs text-slate-500">Store agent traces in compliance vault.</p>
                 </div>
-                <div className="w-10 h-5 bg-blue-600 rounded-full relative cursor-pointer">
-                   <div className="w-4 h-4 bg-white rounded-full absolute right-0.5 top-0.5 shadow-sm"></div>
-                </div>
+                <button
+                  onClick={() => setSecurity((p) => ({ ...p, audit_logging: !p.audit_logging }))}
+                  className={`w-10 h-5 rounded-full relative cursor-pointer transition-colors ${
+                    security.audit_logging ? "bg-blue-600" : "bg-slate-300"
+                  }`}
+                >
+                   <div className={`w-4 h-4 bg-white rounded-full absolute top-0.5 shadow-sm transition-all ${
+                    security.audit_logging ? "right-0.5" : "right-4"
+                  }`} />
+                </button>
              </div>
           </div>
         </div>
+
+        {/* RBAC */}
         <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
           <h3 className="text-sm font-semibold text-slate-900 flex items-center gap-2 mb-6">
             <Lock className="w-4 h-4 text-blue-600" /> Role-Based Access Control (RBAC)
           </h3>
-          <div className="space-y-4">
+          <div className="space-y-3">
             <div className="flex items-center justify-between p-3 rounded-lg bg-slate-50 border border-slate-200">
               <div>
                 <p className="text-sm font-medium text-slate-900">Platform Admin</p>
@@ -220,7 +513,6 @@ export function Settings() {
                 Full Access
               </span>
             </div>
-            
             <div className="flex items-center justify-between p-3 rounded-lg bg-slate-50 border border-slate-200">
               <div>
                 <p className="text-sm font-medium text-slate-900">Regional Manager</p>
@@ -230,7 +522,6 @@ export function Settings() {
                 Regional Scoped
               </span>
             </div>
-
             <div className="flex items-center justify-between p-3 rounded-lg bg-slate-50 border border-slate-200">
               <div>
                 <p className="text-sm font-medium text-slate-900">Franchisee</p>
@@ -240,7 +531,6 @@ export function Settings() {
                 Outlet Scoped
               </span>
             </div>
-            
             <div className="mt-4 pt-4 border-t border-slate-200">
               <p className="text-xs text-slate-500 leading-relaxed">
                 RBAC is currently active. The active role restricts data visibility (e.g., Franchisees cannot see network-wide anomalies or manager workflows). You can simulate these permissions using the profile switcher in the sidebar.
@@ -248,6 +538,7 @@ export function Settings() {
             </div>
           </div>
         </div>
+
       </div>
     </div>
   );
