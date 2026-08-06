@@ -196,7 +196,7 @@ export function Dashboard({ activeRole }: { activeRole: Role }) {
     <div className="space-y-6">
       {/* Period Filter */}
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-slate-900">Regional Dashboard</h1>
+        <h1 className="text-2xl font-bold text-slate-900">{activeRole} Dashboard</h1>
         <div className="flex gap-1 bg-slate-100 p-1 rounded-lg">
           {[
             { key: 'today', label: 'Today' },
