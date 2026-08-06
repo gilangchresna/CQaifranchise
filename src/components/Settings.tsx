@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 
 const EDGE_FUNCTIONS_URL = "https://ploqeifazcgzwjzmukgp.supabase.co/functions/v1";
-const SUPABASE_URL = "https://ploqeifazcgzwjzmukgp.supabase.co";
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 
 export function Settings() {
   const [saving, setSaving] = useState(false);
@@ -70,18 +70,27 @@ export function Settings() {
   }, []);
 
   async function loadSettings() {
+    setLoading(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
       if (!token) return;
 
-      const res = await fetch(`${EDGE_FUNCTIONS_URL}/settings-get`, {
-        headers: { Authorization: `Bearer ${token}` },
+      const restUrl = `${SUPABASE_URL}/rest/v1`;
+      const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+      const res = await fetch(`${restUrl}/settings`, {
+        headers: {
+          "apikey": anonKey,
+          "Authorization": `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
       });
       if (!res.ok) return;
 
-      const data = await res.json();
-      const s = data.settings || {};
+      const rows = await res.json();
+      const s: Record<string, string> = {};
+      for (const row of rows || []) s[row.key] = row.value || "";
 
       setSmtp({
         smtp_host: s.smtp_host || "mail.cyberquote.co.id",
@@ -141,11 +150,14 @@ export function Settings() {
 
       // Upsert each setting via PostgREST (no edge function needed)
       const errors: string[] = [];
+      const restUrl = `${SUPABASE_URL}/rest/v1`;
+      const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
       for (const [key, value] of Object.entries(settingsToSave)) {
-        const res = await fetch(`${SUPABASE_URL}/rest/v1/settings?key=eq.${encodeURIComponent(key)}`, {
+        const res = await fetch(`${restUrl}/settings?key=eq.${encodeURIComponent(key)}`, {
           method: "GET",
           headers: {
-            "apikey": `${SUPABASE_URL}.supabase.in`,
+            "apikey": anonKey,
             "Authorization": `Bearer ${token}`,
             "Content-Type": "application/json",
           },
@@ -154,10 +166,10 @@ export function Settings() {
 
         if (existing?.length > 0) {
           // Update existing
-          const updateRes = await fetch(`${SUPABASE_URL}/rest/v1/settings?key=eq.${encodeURIComponent(key)}`, {
+          const updateRes = await fetch(`${restUrl}/settings?key=eq.${encodeURIComponent(key)}`, {
             method: "PATCH",
             headers: {
-              "apikey": `${SUPABASE_URL}.supabase.in`,
+              "apikey": anonKey,
               "Authorization": `Bearer ${token}`,
               "Content-Type": "application/json",
               "Prefer": "return=minimal",
@@ -167,10 +179,10 @@ export function Settings() {
           if (!updateRes.ok) errors.push(`Failed to update ${key}`);
         } else {
           // Insert new
-          const insertRes = await fetch(`${SUPABASE_URL}/rest/v1/settings`, {
+          const insertRes = await fetch(`${restUrl}/settings`, {
             method: "POST",
             headers: {
-              "apikey": `${SUPABASE_URL}.supabase.in`,
+              "apikey": anonKey,
               "Authorization": `Bearer ${token}`,
               "Content-Type": "application/json",
               "Prefer": "return=minimal",
