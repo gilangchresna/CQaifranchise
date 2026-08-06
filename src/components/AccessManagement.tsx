@@ -37,7 +37,7 @@ export function AccessManagement({ activeRole }: AccessManagementProps) {
     setLoading(true);
     setError(null);
     try {
-      const result = await callEdgeFunction('users-list');
+      const result = await callEdgeFunction('users-list', undefined, { method: 'GET' });
       if (result.error) {
         setError(result.error);
       } else {

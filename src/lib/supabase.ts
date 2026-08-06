@@ -13,17 +13,18 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey)
 export const EDGE_FUNCTIONS_URL = `${supabaseUrl}/functions/v1`
 
 // Helper to call Edge Functions
-export async function callEdgeFunction(functionName: string, body?: any) {
+export async function callEdgeFunction(functionName: string, body?: any, options?: { method?: string }) {
   const { data: { session } } = await supabase.auth.getSession()
-  
+
+  const method = options?.method || (body ? 'POST' : 'GET');
   const response = await fetch(`${EDGE_FUNCTIONS_URL}/${functionName}`, {
-    method: 'POST',
+    method,
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${session?.access_token || ''}`,
     },
-    body: body ? JSON.stringify(body) : undefined,
-  })
-  
-  return response.json()
+    body: method === 'POST' && body ? JSON.stringify(body) : undefined,
+  });
+
+  return response.json();
 }
