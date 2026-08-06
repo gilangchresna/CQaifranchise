@@ -494,21 +494,32 @@ async function sendNotification(
 
 /**
  * Send direct notification via custom SMTP server (cyberquote.co.id)
+ * Reads SMTP credentials from settings table (no env vars needed)
  */
 async function sendDirectEmail(
+  supabase: any,
   toEmail: string,
   subject: string,
   textContent: string,
   htmlContent: string
 ): Promise<{ success: boolean; error?: string }> {
-  const smtpHost = Deno.env.get("SMTP_HOST");
-  const smtpPort = parseInt(Deno.env.get("SMTP_PORT") || "465");
-  const smtpUser = Deno.env.get("SMTP_USER");
-  const smtpPass = Deno.env.get("SMTP_PASS");
-  const smtpFrom = Deno.env.get("SMTP_FROM") || "alerts@cqaifranchise.com";
+  // Read SMTP config from settings table
+  const { data: rows } = await supabase
+    .from("settings")
+    .select("key, value")
+    .in("key", ["smtp_host", "smtp_port", "smtp_user", "smtp_pass", "smtp_from"]);
+
+  const cfg: Record<string, string> = {};
+  for (const r of rows || []) cfg[r.key] = r.value || "";
+
+  const smtpHost = cfg.smtp_host;
+  const smtpPort = parseInt(cfg.smtp_port || "465");
+  const smtpUser = cfg.smtp_user;
+  const smtpPass = cfg.smtp_pass;
+  const smtpFrom = cfg.smtp_from || "alerts@cqaifranchise.com";
 
   if (!smtpHost || !smtpUser || !smtpPass) {
-    return { success: false, error: "SMTP credentials not configured" };
+    return { success: false, error: "SMTP credentials not configured in settings table" };
   }
 
   try {
@@ -825,7 +836,7 @@ serve(async (req: Request) => {
         let success = false;
 
         if (channel === "EMAIL" && recipient.email) {
-          const result = await sendDirectEmail(recipient.email, subject, emailText, emailHtml);
+          const result = await sendDirectEmail(supabase, recipient.email, subject, emailText, emailHtml);
           success = result.success;
           if (!success && result.error) {
             errors.push(`Email to ${recipient.email}: ${result.error}`);
