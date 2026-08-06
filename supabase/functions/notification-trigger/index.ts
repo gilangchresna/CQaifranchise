@@ -493,7 +493,7 @@ async function sendNotification(
 }
 
 /**
- * Send direct notification (bypasses notification-send for more control)
+ * Send direct notification via custom SMTP server (cyberquote.co.id)
  */
 async function sendDirectEmail(
   toEmail: string,
@@ -501,40 +501,107 @@ async function sendDirectEmail(
   textContent: string,
   htmlContent: string
 ): Promise<{ success: boolean; error?: string }> {
-  const sendGridKey = Deno.env.get("SENDGRID_API_KEY");
-  const fromEmail = Deno.env.get("SENDGRID_FROM_EMAIL") || "noreply@cyberquote.com";
+  const smtpHost = Deno.env.get("SMTP_HOST");
+  const smtpPort = parseInt(Deno.env.get("SMTP_PORT") || "465");
+  const smtpUser = Deno.env.get("SMTP_USER");
+  const smtpPass = Deno.env.get("SMTP_PASS");
+  const smtpFrom = Deno.env.get("SMTP_FROM") || "alerts@cqaifranchise.com";
 
-  if (!sendGridKey) {
-    return { success: false, error: "SendGrid API key not configured" };
+  if (!smtpHost || !smtpUser || !smtpPass) {
+    return { success: false, error: "SMTP credentials not configured" };
   }
 
   try {
-    const response = await fetch("https://api.sendgrid.com/v3/mail/send", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${sendGridKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        personalizations: [{ to: [{ email: toEmail }] }],
-        from: { email: fromEmail },
-        subject,
-        content: [
-          { type: "text/plain", value: textContent },
-          { type: "text/html", value: htmlContent },
-        ],
-      }),
+    // Connect via TLS (port 465)
+    const conn = await Deno.connectTls({
+      hostname: smtpHost,
+      port: smtpPort,
     });
 
-    if (!response.ok) {
-      const error = await response.text();
-      return { success: false, error };
+    const writer = conn.writable.getWriter();
+    const reader = conn.readable.getReader();
+    const decoder = new TextDecoder();
+
+    // Read server greeting
+    await readResponse(reader, decoder);
+
+    // SMTP conversation
+    await sendCommand(writer, "EHLO localhost");
+    await readResponse(reader, decoder);
+
+    // AUTH LOGIN
+    await sendCommand(writer, "AUTH LOGIN");
+    await readResponse(reader, decoder);
+    await sendCommand(writer, btoa(smtpUser));
+    await readResponse(reader, decoder);
+    await sendCommand(writer, btoa(smtpPass));
+    const authResp = await readResponse(reader, decoder);
+    if (!authResp.startsWith("235")) {
+      conn.close();
+      return { success: false, error: `AUTH failed: ${authResp}` };
     }
 
+    // MAIL FROM
+    await sendCommand(writer, `MAIL FROM:<${smtpUser}>`);
+    await readResponse(reader, decoder);
+
+    // RCPT TO
+    await sendCommand(writer, `RCPT TO:<${toEmail}>`);
+    await readResponse(reader, decoder);
+
+    // DATA
+    await sendCommand(writer, "DATA");
+    await readResponse(reader, decoder);
+
+    // Build MIME email
+    const boundary = `----_Part_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    const emailContent = [
+      `From: ${smtpFrom}`,
+      `To: ${toEmail}`,
+      `Subject: ${subject}`,
+      `MIME-Version: 1.0`,
+      `Content-Type: multipart/alternative; boundary="${boundary}"`,
+      "",
+      `--${boundary}`,
+      `Content-Type: text/plain; charset="UTF-8"`,
+      "",
+      textContent,
+      "",
+      `--${boundary}`,
+      `Content-Type: text/html; charset="UTF-8"`,
+      "",
+      htmlContent,
+      "",
+      `--${boundary}--`,
+      "",
+      ".",
+    ].join("\r\n");
+
+    await writer.write(new TextEncoder().encode(emailContent + "\r\n"));
+    await writer.flush();
+    await readResponse(reader, decoder);
+
+    // QUIT
+    await sendCommand(writer, "QUIT");
+    await readResponse(reader, decoder);
+
+    conn.close();
     return { success: true };
-  } catch (error) {
+  } catch (error: any) {
     return { success: false, error: error.message };
   }
+}
+
+async function sendCommand(writer: Deno.Writer, cmd: string): Promise<void> {
+  const encoder = new TextEncoder();
+  await writer.write(encoder.encode(cmd + "\r\n"));
+  await writer.flush();
+}
+
+async function readResponse(reader: Deno.Reader, decoder: TextDecoder): Promise<string> {
+  const { value } = await reader.read();
+  if (!value) return "";
+  return decoder.decode(value).trim();
 }
 
 async function sendDirectWhatsApp(
