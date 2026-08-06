@@ -6,16 +6,53 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+async function verifyAuth(req: Request) {
+  const authHeader = req.headers.get("Authorization");
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    return { authorized: false, error: "Unauthorized", status: 401 };
+  }
+  const token = authHeader.substring(7);
+  if (!token) return { authorized: false, error: "Missing token", status: 401 };
+  try {
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const response = await fetch(`${supabaseUrl}/auth/v1/user`, {
+      headers: { "Authorization": `Bearer ${token}`, "apikey": serviceKey },
+    });
+    if (!response.ok) return { authorized: false, error: "Invalid token", status: 401 };
+    const userData = await response.json();
+    return {
+      authorized: true,
+      user: {
+        id: userData.id,
+        email: userData.email,
+        role: userData.user_metadata?.role || "FRANCHISEE_OWNER",
+      },
+    };
+  } catch {
+    return { authorized: false, error: "Auth failed", status: 401 };
+  }
+}
+
 serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
-  
+
+  const authResult = await verifyAuth(req);
+  if (!authResult.authorized) {
+    return new Response(JSON.stringify({ error: authResult.error }), {
+      status: authResult.status,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+  const user = authResult.user!;
+
   const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
-  
+
   try {
     const url = new URL(req.url);
-    const period = url.searchParams.get('period') || '7d';
+    const period = url.searchParams.get("period") || "7d";
     
     // Real-time "today" — reflects live data as it arrives.
     // DEMO_DATE_OVERRIDE (YYYY-MM-DD) can still be set in env for staging/demo
@@ -60,18 +97,45 @@ serve(async (req: Request) => {
         daysInPeriod = 7;
     }
     
+    // Get user's accessible outlets (FRANCHISEE_OWNER/STAF­F sees only their outlets)
+    let allowedOutletIds: number[] | null = null;
+    if (user.role === "FRANCHISEE_OWNER" || user.role === "FRANCHISEE_STAFF") {
+      const { data: userOutlets } = await supabase
+        .from("user_outlets")
+        .select("outlet_id")
+        .eq("user_id", user.id);
+      if (!userOutlets || userOutlets.length === 0) {
+        return Response.json({
+          period, period_label: periodLabel,
+          date_range: { start: startDate, end: todayStr },
+          records_fetched: 0,
+          totals: { revenue: 0, settlement: 0, transactions: 0, avg_transaction: 0, avg_daily: 0 },
+          comparison: { previous_period_revenue: 0, variance_percent: 0, trend: "up" },
+          metrics: { outlets: 0, outlets_with_sales: 0, active_alerts: 0, low_stock: 0 },
+          daily_breakdown: [],
+          payment_breakdown: [],
+          platform_breakdown: [],
+        }, { headers: corsHeaders });
+      }
+      allowedOutletIds = userOutlets.map((uo: any) => uo.outlet_id);
+    }
+
     // Fetch ALL data with pagination (fix for 1000 row limit)
     let allSales: any[] = [];
     let offset = 0;
     const limit = 1000;
-    
+
     while (true) {
-      const { data: batch, error } = await supabase
+      let q = supabase
         .from("sales_transactions")
         .select("date, amount, settlement_amount, transaction_count, payment_method, platform, outlet_id")
         .gte("date", startDate)
         .lte("date", todayStr)
         .range(offset, offset + limit - 1);
+
+      if (allowedOutletIds) q = q.in("outlet_id", allowedOutletIds);
+
+      const { data: batch, error } = await q;
       
       if (error || !batch || batch.length === 0) break;
       
@@ -105,10 +169,22 @@ serve(async (req: Request) => {
     // Calculate avg daily
     const avgDaily = Object.keys(dailySales).length > 0 ? totalSettlement / Object.keys(dailySales).length : 0;
     
-    // Get metrics
-    const { count: outletCount } = await supabase.from("outlets").select("*", { count: "exact", head: true });
-    const { count: alertsCount } = await supabase.from("alerts").select("*", { count: "exact", head: true });
-    const { data: lowStock } = await supabase.from("inventory").select("id").lt("current_stock", 25);
+    // Get metrics (scoped to franchisee's outlets if applicable)
+    let outletCount: number | null = null;
+    if (allowedOutletIds) {
+      outletCount = allowedOutletIds.length;
+    } else {
+      const { count } = await supabase.from("outlets").select("*", { count: "exact", head: true });
+      outletCount = count;
+    }
+    const alertsQuery = supabase.from("alerts").select("*", { count: "exact", head: true });
+    const lowStockQuery = supabase.from("inventory").select("id");
+    if (allowedOutletIds) {
+      alertsQuery.in("outlet_id", allowedOutletIds);
+      lowStockQuery.in("outlet_id", allowedOutletIds);
+    }
+    const { count: alertsCount } = await alertsQuery;
+    const { data: lowStock } = await lowStockQuery.lt("current_stock", 25);
     
     // Comparison period (previous period)
     const compareStartDate = new Date(new Date(startDate).getTime() - daysInPeriod * 86400000).toISOString().split('T')[0];
