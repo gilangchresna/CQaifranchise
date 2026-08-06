@@ -57,8 +57,7 @@ export function Workforce({ activeRole }: { activeRole: Role }) {
         .from('staff')
         .select(`
           *,
-          outlet:outlets(id, name, code, region:regions(name)),
-          employees:employee_id.employees(employee_id, performance_score, attendance_rate, hire_date)
+          outlet:outlets(id, name, code, region:regions(name))
         `)
         .order('name');
 
@@ -67,9 +66,8 @@ export function Workforce({ activeRole }: { activeRole: Role }) {
       // Flatten employee data
       const staffWithEmployee = (data || []).map((s: any) => ({
         ...s,
-        employee_id: s.employee_id,
-        performance_score: s.employees?.performance_score || s.performance_score || 75,
-        attendance_rate: s.employees?.attendance_rate || s.attendance_rate || 95,
+        performance_score: s.performance_score || 75,
+        attendance_rate: s.attendance_rate || 95,
       }));
 
       setStaff(staffWithEmployee);

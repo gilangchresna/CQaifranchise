@@ -32,7 +32,7 @@ serve(async (req) => {
   // Get alerts with outlet info, filtered by user scope
   const { data, error } = await supabase
     .from('alerts')
-    .select('*, outlets(name, code, region_id)')
+    .select('*, outlet(name, code, region:regions(name, code)')
     .order('created_at', { ascending: false })
     .limit(100);
 

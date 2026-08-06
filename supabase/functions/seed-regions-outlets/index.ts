@@ -63,20 +63,25 @@ serve(async (req) => {
     // 5. Seed outlets
     const outletData = (oc ?? []).map((o: any) => {
       const regionId = regionIdMap[o.region] || 1;
-      // Derive city from region name
+      const PLACEHOLDER_FRANCHISEE = "00000000-0000-0000-0000-000000000001";
       const city = o.region === "Kuala Lumpur" ? "Kuala Lumpur"
         : o.region === "Bandung" ? "Bandung"
         : o.region === "Surabaya" ? "Surabaya"
         : o.region === "Bangkok" ? "Bangkok"
         : o.region === "Jakarta" ? "Jakarta"
         : "Singapore";
+      let friendlyName = o.outlet_code;
+      if (o.region === "Jakarta") {
+        const cleaned = o.outlet_code.replace(/_/g, " ").replace(/-/g, " ");
+        friendlyName = cleaned;
+      }
       return {
         id: o.outlet_id,
         region_id: regionId,
         franchisee_id: PLACEHOLDER_FRANCHISEE,
-        name: `${o.region} ${o.outlet_type} Outlet`,
+        name: friendlyName,
         code: o.outlet_code,
-        address: `${city}, ${o.region}`,
+        address: city + ", " + o.region,
         city,
         phone: null,
         status: "ACTIVE",
