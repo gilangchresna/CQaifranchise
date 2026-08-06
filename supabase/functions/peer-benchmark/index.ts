@@ -27,7 +27,7 @@ serve(async (req: Request) => {
   const outletType = url.searchParams.get("type");
   const locationType = url.searchParams.get("location");
   const period = url.searchParams.get("period") || "daily";
-  const date = url.searchParams.get("date") || new Date().toISOString().split("T")[0];
+  const requestedDate = url.searchParams.get("date") || new Date().toISOString().split("T")[0];
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -36,20 +36,49 @@ serve(async (req: Request) => {
     const supabase = createClient(supabaseUrl, serviceKey);
 
     // =========================================
-    // GET PEER METRICS (no join - compute locally)
+    // GET PEER METRICS
+    // Query the requested date; if empty, fall back to the most recent available date
+    // so stale seed data still shows instead of an empty chart.
     // =========================================
     let query = supabase
       .from("peer_metrics")
       .select("*")
-      .eq("metric_date", date)
+      .eq("metric_date", requestedDate)
+      .eq("period_type", period)
+      .order("metric_date", { ascending: false })
+      .limit(1); // check if data exists for requested date
+
+    let { data: dateCheck } = await query;
+
+    let dataDate = requestedDate;
+    if (!dateCheck || dateCheck.length === 0) {
+      // No data for requested date — fetch latest available
+      const { data: latest } = await supabase
+        .from("peer_metrics")
+        .select("metric_date")
+        .eq("period_type", period)
+        .order("metric_date", { ascending: false })
+        .limit(1);
+      if (latest && latest.length > 0) {
+        dataDate = latest[0].metric_date;
+      }
+    } else {
+      dataDate = requestedDate;
+    }
+
+    // Now fetch all metrics for the resolved dataDate
+    let metricsQuery = supabase
+      .from("peer_metrics")
+      .select("*")
+      .eq("metric_date", dataDate)
       .eq("period_type", period)
       .order("revenue", { ascending: false });
 
-    if (region) query = query.eq("peer_region", region);
-    if (outletType) query = query.eq("peer_type", outletType);
-    if (locationType) query = query.eq("peer_location", locationType);
+    if (region) metricsQuery = metricsQuery.eq("peer_region", region);
+    if (outletType) metricsQuery = metricsQuery.eq("peer_type", outletType);
+    if (locationType) metricsQuery = metricsQuery.eq("peer_location", locationType);
 
-    const { data: peerMetrics, error: metricsError } = await query;
+    const { data: peerMetrics, error: metricsError } = await metricsQuery;
 
     if (metricsError) throw metricsError;
 
@@ -87,7 +116,7 @@ serve(async (req: Request) => {
     // BUILD RESPONSE
     // =========================================
     const response = {
-      date,
+      date: dataDate,
       period,
       peer_groups: {
         region: region || "all",
