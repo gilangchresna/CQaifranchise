@@ -139,7 +139,7 @@ export function Financing({ activeRole }: { activeRole: Role }) {
   async function fetchApplications() {
     const { data } = await supabase
       .from('financing_applications')
-      .select('*')
+      .select('*, outlet:outlet_id(name, code)')
       .order('created_at', { ascending: false });
     setApplications(data || []);
   }
@@ -308,6 +308,7 @@ export function Financing({ activeRole }: { activeRole: Role }) {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider border-b border-slate-200">
+                    <th className="px-6 py-3">Outlet</th>
                     <th className="px-6 py-3">Purpose</th>
                     <th className="px-6 py-3">Requested</th>
                     <th className="px-6 py-3">Lender Ref</th>
@@ -321,6 +322,9 @@ export function Financing({ activeRole }: { activeRole: Role }) {
                     const Icon = style.icon;
                     return (
                       <tr key={app.id} className="border-b border-slate-100 last:border-0">
+                        <td className="px-6 py-4 text-slate-700">
+                          {app.outlet?.name ? `${app.outlet.name} (${app.outlet.code})` : '—'}
+                        </td>
                         <td className="px-6 py-4 font-medium text-slate-900">{app.purpose.replaceAll('_', ' ')}</td>
                         <td className="px-6 py-4 text-slate-700">
                           {app.currency} {Number(app.requested_amount).toLocaleString()}

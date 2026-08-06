@@ -35,8 +35,8 @@ interface PeerBenchmarkData {
   period: string;
   aggregates: Aggregates;
   outlets: PeerOutlet[];
-  top_performers: Array<{ outlet_code: string; revenue: number; peer_score: number; vs_peer_pct: number }>;
-  underperformers: Array<{ outlet_code: string; revenue: number; vs_peer_pct: number; gap_to_avg: number }>;
+  top_performers: Array<{ outlet_code: string; outlet_name?: string; revenue: number; peer_score: number; vs_peer_pct: number }>;
+  underperformers: Array<{ outlet_code: string; outlet_name?: string; revenue: number; vs_peer_pct: number; gap_to_avg: number }>;
 }
 
 // EDGE_FUNCTIONS_URL is imported from supabase.ts
@@ -241,7 +241,7 @@ export function PeerBenchmark() {
             <div>
               <p className="text-sm text-gray-500">vs Peer Avg</p>
               <p className={`text-2xl font-bold ${displayData.aggregates.avg_vs_peer_pct >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                {displayData.aggregates.avg_vs_peer_pct >= 0 ? '+' : ''}{displayData.aggregates.avg_vs_peer_pct}%
+                {displayData.aggregates.avg_vs_peer_pct >= 0 ? '+' : ''}{displayData.aggregates.avg_vs_peer_pct.toFixed(1)}%
               </p>
             </div>
           </div>
@@ -262,8 +262,8 @@ export function PeerBenchmark() {
               {displayData.top_performers.map((outlet, idx) => (
                 <div key={idx} className="bg-white/70 p-3 rounded-lg">
                   <div className="flex justify-between items-center">
-                    <span className="font-semibold">{outlet.outlet_code}</span>
-                    <span className="text-green-600 font-bold">+{outlet.vs_peer_pct}%</span>
+                    <span className="font-semibold">{outlet.outlet_name || outlet.outlet_code}</span>
+                    <span className="text-green-600 font-bold">+{Number(outlet.vs_peer_pct).toFixed(1)}%</span>
                   </div>
                   <p className="text-sm text-gray-600">Revenue: {formatRevenue(outlet.revenue, selectedRegion)} | Score: {outlet.peer_score}</p>
                 </div>
@@ -286,8 +286,8 @@ export function PeerBenchmark() {
               {displayData.underperformers.map((outlet, idx) => (
                 <div key={idx} className="bg-white/70 p-3 rounded-lg">
                   <div className="flex justify-between items-center">
-                    <span className="font-semibold">{outlet.outlet_code}</span>
-                    <span className="text-red-600 font-bold">{outlet.vs_peer_pct}%</span>
+                    <span className="font-semibold">{outlet.outlet_name || outlet.outlet_code}</span>
+                    <span className="text-red-600 font-bold">{Number(outlet.vs_peer_pct).toFixed(1)}%</span>
                   </div>
                   <p className="text-sm text-gray-600">Gap: {formatRevenue(Math.abs(outlet.gap_to_avg), selectedRegion)}</p>
                 </div>
@@ -313,6 +313,7 @@ export function PeerBenchmark() {
                 <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Revenue</th>
                 <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">vs Peer Avg</th>
                 <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Rank</th>
+                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Outlet Name</th>
                 <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Staff Productivity</th>
                 <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
               </tr>
@@ -331,7 +332,10 @@ export function PeerBenchmark() {
                       }`}>
                         {outlet.rank || '?'}
                       </div>
-                      <span className="font-medium">{outlet.outlet_code}</span>
+                      <div>
+                        <div className="font-medium">{outlet.outlet_code}</div>
+                        <div className="text-xs text-gray-400">{outlet.outlet_name || '-'}</div>
+                      </div>
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-right">
@@ -339,14 +343,17 @@ export function PeerBenchmark() {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-right">
                     <span className={outlet.vs_peer_pct >= 0 ? 'text-green-600' : 'text-red-600'}>
-                      {outlet.vs_peer_pct >= 0 ? '+' : ''}{outlet.vs_peer_pct}%
+                      {outlet.vs_peer_pct >= 0 ? '+' : ''}{Number(outlet.vs_peer_pct).toFixed(1)}%
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-center">
                     #{outlet.rank || '-'}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-right">
-                    ${outlet.staff_productivity?.toFixed(2) || '-'}
+                    {outlet.outlet_name || outlet.outlet_code}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-right">
+                    ${outlet.staff_productivity?.toFixed(0) || '-'}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-center">
                     <span className={`px-2 py-1 rounded-full text-xs font-medium border ${getStatusColor(outlet.status)}`}>
@@ -387,13 +394,13 @@ function getMockData(): PeerBenchmarkData {
       { outlet_id: 5, outlet_code: 'BDG-005', revenue: 1234, peer_avg_revenue: 1680, vs_peer_pct: -26.5, rank: 4, percentile: 22, staff_productivity: 308.5, inventory_turnover: 4.5, peer_score: 55.8, status: 'underperforming' },
     ],
     top_performers: [
-      { outlet_code: 'BKK-007', revenue: 3420, peer_score: 92.1, vs_peer_pct: 18.3 },
-      { outlet_code: 'SAP-003', revenue: 3156, peer_score: 88.7, vs_peer_pct: 9.2 },
+      { outlet_code: 'BKK-007', outlet_name: 'Mookata Woodlands', revenue: 3420, peer_score: 92.1, vs_peer_pct: 18.3 },
+      { outlet_code: 'SAP-003', outlet_name: 'SAP Singapore Premium', revenue: 3156, peer_score: 88.7, vs_peer_pct: 9.2 },
     ],
     underperformers: [
-      { outlet_code: 'MYB-002', revenue: 1923, vs_peer_pct: -17.9, gap_to_avg: 419 },
-      { outlet_code: 'JKT-004', revenue: 1445, vs_peer_pct: -14.0, gap_to_avg: 235 },
-      { outlet_code: 'BDG-005', revenue: 1234, vs_peer_pct: -26.5, gap_to_avg: 446 },
+      { outlet_code: 'MYB-002', outlet_name: 'MYB Singapore Standard', revenue: 1923, vs_peer_pct: -17.9, gap_to_avg: 419 },
+      { outlet_code: 'JKT-004', outlet_name: 'JKT-004 Jakarta Mall', revenue: 1445, vs_peer_pct: -14.0, gap_to_avg: 235 },
+      { outlet_code: 'BDG-005', outlet_name: 'BDG-005 Bandung Central', revenue: 1234, vs_peer_pct: -26.5, gap_to_avg: 446 },
     ],
   };
 }
