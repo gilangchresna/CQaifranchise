@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 
 const EDGE_FUNCTIONS_URL = "https://ploqeifazcgzwjzmukgp.supabase.co/functions/v1";
+const SUPABASE_URL = "https://ploqeifazcgzwjzmukgp.supabase.co";
 
 export function Settings() {
   const [saving, setSaving] = useState(false);
@@ -115,7 +116,12 @@ export function Settings() {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
+      if (!token) {
+        setSaveStatus("error");
+        return;
+      }
 
+      // Build upsert payloads — one per key
       const settingsToSave: Record<string, string> = {
         smtp_host: smtp.smtp_host,
         smtp_port: smtp.smtp_port,
@@ -129,27 +135,56 @@ export function Settings() {
         sla_escalation_threshold: String(thresholds.sla_escalation),
       };
 
-      // Only include password if changed
       if (smtp.smtp_pass.trim() !== "") {
         settingsToSave.smtp_pass = smtp.smtp_pass;
       }
 
-      const res = await fetch(`${EDGE_FUNCTIONS_URL}/settings-save`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ settings: settingsToSave }),
-      });
+      // Upsert each setting via PostgREST (no edge function needed)
+      const errors: string[] = [];
+      for (const [key, value] of Object.entries(settingsToSave)) {
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/settings?key=eq.${encodeURIComponent(key)}`, {
+          method: "GET",
+          headers: {
+            "apikey": `${SUPABASE_URL}.supabase.in`,
+            "Authorization": `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        });
+        const existing = await res.json();
 
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        throw new Error(errData.error || `Save failed: ${res.status}`);
+        if (existing?.length > 0) {
+          // Update existing
+          const updateRes = await fetch(`${SUPABASE_URL}/rest/v1/settings?key=eq.${encodeURIComponent(key)}`, {
+            method: "PATCH",
+            headers: {
+              "apikey": `${SUPABASE_URL}.supabase.in`,
+              "Authorization": `Bearer ${token}`,
+              "Content-Type": "application/json",
+              "Prefer": "return=minimal",
+            },
+            body: JSON.stringify({ value, updated_at: new Date().toISOString() }),
+          });
+          if (!updateRes.ok) errors.push(`Failed to update ${key}`);
+        } else {
+          // Insert new
+          const insertRes = await fetch(`${SUPABASE_URL}/rest/v1/settings`, {
+            method: "POST",
+            headers: {
+              "apikey": `${SUPABASE_URL}.supabase.in`,
+              "Authorization": `Bearer ${token}`,
+              "Content-Type": "application/json",
+              "Prefer": "return=minimal",
+            },
+            body: JSON.stringify({ key, value, category: "notifications", updated_at: new Date().toISOString() }),
+          });
+          if (!insertRes.ok) errors.push(`Failed to insert ${key}`);
+        }
       }
 
+      if (errors.length > 0) throw new Error(errors.join("; "));
+
       setSaveStatus("success");
-      setSmtp((prev) => ({ ...prev, smtp_pass: "" })); // clear password field after save
+      setSmtp((p) => ({ ...p, smtp_pass: "" }));
     } catch (err: any) {
       console.error("Settings save error:", err);
       setSaveStatus("error");
