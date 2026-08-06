@@ -106,3 +106,4 @@
     at Y4 (https://c-qaifranchise.vercel.app/assets/index-B6F5Dejh.js:48:116319)
     at d0 (https://c-qaifranchise.vercel.app/assets/index-B6F5Dejh.js:48:116149)
     at R1 (https://c-qaifranchise.vercel.app/assets/index-B6F5Dejh.js:48:112930)
+[60766879ms] [ERROR] Failed to load resource: the server responded with a status of 405 () @ https://ploqeifazcgzwjzmukgp.supabase.co/functions/v1/users-list:0
