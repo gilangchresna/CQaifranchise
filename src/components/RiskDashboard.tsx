@@ -101,6 +101,7 @@ export function RiskDashboard({ activeRole }: { activeRole: Role }) {
             current_stock: inv.current_stock,
             min_stock: inv.min_stock,
             days_until_stockout: daysUntilStockout,
+            risk_score: riskPercent,
             risk_level: riskLevel,
             last_restock: inv.last_restock_at,
           };
