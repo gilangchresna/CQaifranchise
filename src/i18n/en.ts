@@ -28,6 +28,7 @@ export const en = {
   nav: {
     dashboard: "Dashboard",
     networkDirectory: "Network Directory",
+    regionalTitle: "Regional Dashboard",
     areaOutlets: "Area Outlets",
     globalDashboard: "Global Dashboard",
     globalWorkforce: "Global Workforce",

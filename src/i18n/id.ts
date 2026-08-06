@@ -28,6 +28,7 @@ export const id = {
   nav: {
     dashboard: "Dasbor",
     networkDirectory: "Direktori Jaringan",
+    regionalTitle: "Dasbor Regional",
     areaOutlets: "Outlet Area",
     globalDashboard: "Dasbor Global",
     globalWorkforce: "Tenaga Kerja Global",
