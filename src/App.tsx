@@ -61,34 +61,35 @@ export default function App() {
   // Authenticated - show full app
 
   const renderContent = () => {
-    switch (activeTab) {
-      case "Dashboard":
-        return <Dashboard activeRole={activeRole} />;
-      case "Outlets":
+    switch (activeTab.toLowerCase()) {
+      case "dashboard":
+      case "franchise":
+        return <Dashboard activeRole="Franchisee" />;
+      case "outlets":
         return <Outlets activeRole={activeRole} />;
-      case "Workforce":
+      case "workforce":
         return <Workforce activeRole={activeRole} />;
-      case "Workflows":
+      case "workflows":
         return <Workflows activeRole={activeRole} />;
-      case "Agents":
+      case "agents":
         return <Agents activeRole={activeRole} />;
-      case "Risk":
+      case "risk":
         return <RiskDashboard activeRole={activeRole} />;
-      case "Knowledge":
+      case "knowledge":
         return <KnowledgeBaseAdmin />;
-      case "Peer":
+      case "peer":
         return <PeerBenchmark />;
-      case "Approval":
+      case "approval":
         return <ApprovalWorkflows />;
-      case "Integrations":
+      case "integrations":
         return <Integrations activeRole={activeRole} />;
-      case "Models":
+      case "models":
         return <Models activeRole={activeRole} />;
-      case "Access":
+      case "access":
         return <AccessManagement activeRole={activeRole} />;
-      case "Settings":
+      case "settings":
         return <Settings />;
-      case "Financing":
+      case "financing":
         return <Financing activeRole={activeRole} />;
       default:
         return <Dashboard activeRole={activeRole} />;
