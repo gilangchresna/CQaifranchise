@@ -1,27 +1,27 @@
 import React, { useState, useEffect } from "react";
 import { supabase } from "../lib/supabase";
 import {
-  Settings as SettingsIcon,
-  Save,
-  Server,
-  Shield,
-  BrainCircuit,
-  Database,
-  Lock,
   Mail,
+  Bell,
+  BrainCircuit,
+  Shield,
   CheckCircle,
   AlertCircle,
+  Save,
 } from "lucide-react";
 
-const EDGE_FUNCTIONS_URL = "https://ploqeifazcgzwjzmukgp.supabase.co/functions/v1";
+type Tab = "notifications" | "thresholds" | "ai-security";
+
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 
 export function Settings() {
+  const [activeTab, setActiveTab] = useState<Tab>("notifications");
   const [saving, setSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<"idle" | "success" | "error">("idle");
   const [loading, setLoading] = useState(true);
+  const [errorMsg, setErrorMsg] = useState("");
 
-  // SMTP Settings state
+  // SMTP
   const [smtp, setSmtp] = useState({
     smtp_host: "mail.cyberquote.co.id",
     smtp_port: "465",
@@ -30,39 +30,32 @@ export function Settings() {
     smtp_from: "CyberQuote Alerts <stefanus.gilang@cyberquote.co.id>",
   });
 
-  // Notification Settings state
-  const [notifications, setNotifications] = useState({
-    email_enabled: true,
-    whatsapp_enabled: false,
-  });
+  // Notification toggles
+  const [notif, setNotif] = useState({ email: true, whatsapp: false });
 
-  // Threshold Settings state
+  // Thresholds
   const [thresholds, setThresholds] = useState({
-    anomaly_threshold: 15,
-    stockout_threshold: 70,
-    sla_warning: 50,
-    sla_escalation: 75,
+    anomaly: 15,
+    stockout: 70,
+    slaWarning: 50,
+    slaEscalation: 75,
+    slaHigh: "1",
+    slaMedium: "24",
+    slaLow: "72",
   });
 
-  // AI Settings state
-  const [aiSettings, setAiSettings] = useState({
-    operation_mode: "assist",
-    action_threshold: 80,
-    semantic_caching: true,
+  // AI
+  const [ai, setAi] = useState({
+    mode: "assist",
+    threshold: 80,
+    caching: true,
   });
 
-  // Security Settings state
+  // Security toggles
   const [security, setSecurity] = useState({
-    agent_allowlist: true,
-    prompt_injection_filter: true,
-    audit_logging: true,
-  });
-
-  // SLA severity mapping
-  const [slaMapping, setSlaMapping] = useState({
-    sla_high: "1",
-    sla_medium: "24",
-    sla_low: "72",
+    allowlist: true,
+    injectionFilter: true,
+    auditLog: true,
   });
 
   useEffect(() => {
@@ -72,17 +65,17 @@ export function Settings() {
   async function loadSettings() {
     setLoading(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
       const token = session?.access_token;
       if (!token) return;
 
-      const restUrl = `${SUPABASE_URL}/rest/v1`;
       const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-
-      const res = await fetch(`${restUrl}/settings`, {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/settings`, {
         headers: {
-          "apikey": anonKey,
-          "Authorization": `Bearer ${token}`,
+          apikey: anonKey,
+          Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
         },
       });
@@ -90,29 +83,46 @@ export function Settings() {
 
       const rows = await res.json();
       const s: Record<string, string> = {};
-      for (const row of rows || []) s[row.key] = row.value || "";
+      for (const r of rows || []) s[r.key] = r.value || "";
 
       setSmtp({
         smtp_host: s.smtp_host || "mail.cyberquote.co.id",
         smtp_port: s.smtp_port || "465",
         smtp_user: s.smtp_user || "stefanus.gilang@cyberquote.co.id",
-        smtp_pass: "", // never expose password
-        smtp_from: s.smtp_from || "CyberQuote Alerts <stefanus.gilang@cyberquote.co.id>",
+        smtp_pass: "",
+        smtp_from:
+          s.smtp_from ||
+          "CyberQuote Alerts <stefanus.gilang@cyberquote.co.id>",
       });
 
-      setNotifications({
-        email_enabled: s.email_notifications_enabled !== "false",
-        whatsapp_enabled: s.whatsapp_notifications_enabled === "true",
+      setNotif({
+        email: s.email_notifications_enabled !== "false",
+        whatsapp: s.whatsapp_notifications_enabled === "true",
       });
 
       setThresholds({
-        anomaly_threshold: Math.round((parseFloat(s.anomaly_threshold || "0.15") * 100)),
-        stockout_threshold: Math.round((parseFloat(s.stockout_threshold || "0.7") * 100)),
-        sla_warning: parseInt(s.sla_warning_threshold || "50"),
-        sla_escalation: parseInt(s.sla_escalation_threshold || "75"),
+        anomaly: Math.round((parseFloat(s.anomaly_threshold || "0.15") * 100)),
+        stockout: Math.round((parseFloat(s.stockout_threshold || "0.7") * 100)),
+        slaWarning: parseInt(s.sla_warning_threshold || "50"),
+        slaEscalation: parseInt(s.sla_escalation_threshold || "75"),
+        slaHigh: s.sla_high || "1",
+        slaMedium: s.sla_medium || "24",
+        slaLow: s.sla_low || "72",
+      });
+
+      setAi({
+        mode: s.ai_mode || "assist",
+        threshold: Math.round(parseFloat(s.ai_threshold || "0.8") * 100),
+        caching: s.ai_caching !== "false",
+      });
+
+      setSecurity({
+        allowlist: s.sec_allowlist !== "false",
+        injectionFilter: s.sec_injection_filter !== "false",
+        auditLog: s.sec_audit_log !== "false",
       });
     } catch (err) {
-      console.error("Failed to load settings:", err);
+      console.error("Load settings error:", err);
     } finally {
       setLoading(false);
     }
@@ -121,75 +131,99 @@ export function Settings() {
   async function handleSave() {
     setSaving(true);
     setSaveStatus("idle");
+    setErrorMsg("");
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
       const token = session?.access_token;
       if (!token) {
         setSaveStatus("error");
+        setErrorMsg("Not authenticated");
         return;
       }
 
-      // Build upsert payloads — one per key
-      const settingsToSave: Record<string, string> = {
+      const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+      const restUrl = `${SUPABASE_URL}/rest/v1`;
+
+      const settingsToUpsert: Record<string, string> = {
         smtp_host: smtp.smtp_host,
         smtp_port: smtp.smtp_port,
         smtp_user: smtp.smtp_user,
         smtp_from: smtp.smtp_from,
-        email_notifications_enabled: String(notifications.email_enabled),
-        whatsapp_notifications_enabled: String(notifications.whatsapp_enabled),
-        anomaly_threshold: String(thresholds.anomaly_threshold / 100),
-        stockout_threshold: String(thresholds.stockout_threshold / 100),
-        sla_warning_threshold: String(thresholds.sla_warning),
-        sla_escalation_threshold: String(thresholds.sla_escalation),
+        email_notifications_enabled: String(notif.email),
+        whatsapp_notifications_enabled: String(notif.whatsapp),
+        anomaly_threshold: String(thresholds.anomaly / 100),
+        stockout_threshold: String(thresholds.stockout / 100),
+        sla_warning_threshold: String(thresholds.slaWarning),
+        sla_escalation_threshold: String(thresholds.slaEscalation),
+        sla_high: thresholds.slaHigh,
+        sla_medium: thresholds.slaMedium,
+        sla_low: thresholds.slaLow,
+        ai_mode: ai.mode,
+        ai_threshold: String(ai.threshold / 100),
+        ai_caching: String(ai.caching),
+        sec_allowlist: String(security.allowlist),
+        sec_injection_filter: String(security.injectionFilter),
+        sec_audit_log: String(security.auditLog),
       };
 
       if (smtp.smtp_pass.trim() !== "") {
-        settingsToSave.smtp_pass = smtp.smtp_pass;
+        settingsToUpsert.smtp_pass = smtp.smtp_pass;
       }
 
-      // Upsert each setting via PostgREST (no edge function needed)
       const errors: string[] = [];
-      const restUrl = `${SUPABASE_URL}/rest/v1`;
-      const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-      for (const [key, value] of Object.entries(settingsToSave)) {
-        const res = await fetch(`${restUrl}/settings?key=eq.${encodeURIComponent(key)}`, {
-          method: "GET",
-          headers: {
-            "apikey": anonKey,
-            "Authorization": `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-        });
-        const existing = await res.json();
+      for (const [key, value] of Object.entries(settingsToUpsert)) {
+        // Check if exists
+        const checkRes = await fetch(
+          `${restUrl}/settings?key=eq.${encodeURIComponent(key)}`,
+          {
+            headers: {
+              apikey: anonKey,
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
+          }
+        );
+        const existing = await checkRes.json();
 
         if (existing?.length > 0) {
-          // Update existing
-          const updateRes = await fetch(`${restUrl}/settings?key=eq.${encodeURIComponent(key)}`, {
-            method: "PATCH",
-            headers: {
-              "apikey": anonKey,
-              "Authorization": `Bearer ${token}`,
-              "Content-Type": "application/json",
-              "Prefer": "return=minimal",
-            },
-            body: JSON.stringify({ value, updated_at: new Date().toISOString() }),
-          });
-          if (!updateRes.ok) errors.push(`Failed to update ${key}`);
+          const r = await fetch(
+            `${restUrl}/settings?key=eq.${encodeURIComponent(key)}`,
+            {
+              method: "PATCH",
+              headers: {
+                apikey: anonKey,
+                Authorization: `Bearer ${token}`,
+                "Content-Type": "application/json",
+                Prefer: "return=minimal",
+              },
+              body: JSON.stringify({
+                value,
+                updated_at: new Date().toISOString(),
+              }),
+            }
+          );
+          if (!r.ok) errors.push(`Update ${key} failed`);
         } else {
-          // Insert new
-          const insertRes = await fetch(`${restUrl}/settings`, {
+          const r = await fetch(`${restUrl}/settings`, {
             method: "POST",
             headers: {
-              "apikey": anonKey,
-              "Authorization": `Bearer ${token}`,
+              apikey: anonKey,
+              Authorization: `Bearer ${token}`,
               "Content-Type": "application/json",
-              "Prefer": "return=minimal",
+              Prefer: "return=minimal",
             },
-            body: JSON.stringify({ key, value, category: "notifications", updated_at: new Date().toISOString() }),
+            body: JSON.stringify({
+              key,
+              value,
+              category: "config",
+              updated_at: new Date().toISOString(),
+            }),
           });
-          if (!insertRes.ok) errors.push(`Failed to insert ${key}`);
+          if (!r.ok) errors.push(`Insert ${key} failed`);
         }
       }
 
@@ -200,16 +234,23 @@ export function Settings() {
     } catch (err: any) {
       console.error("Settings save error:", err);
       setSaveStatus("error");
+      setErrorMsg(err.message);
     } finally {
       setSaving(false);
     }
   }
 
+  const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
+    { id: "notifications", label: "Notifications", icon: <Bell className="w-4 h-4" /> },
+    { id: "thresholds", label: "Thresholds & SLA", icon: <AlertCircle className="w-4 h-4" /> },
+    { id: "ai-security", label: "AI & Security", icon: <Shield className="w-4 h-4" /> },
+  ];
+
   return (
-    <div className="space-y-6 max-w-6xl mx-auto">
+    <div className="space-y-5 max-w-5xl mx-auto">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-slate-900">Platform Settings & Governance</h2>
+        <h2 className="text-lg font-semibold text-slate-900">Settings</h2>
         <div className="flex items-center gap-3">
           {saveStatus === "success" && (
             <span className="flex items-center gap-1 text-sm text-green-600">
@@ -218,12 +259,12 @@ export function Settings() {
           )}
           {saveStatus === "error" && (
             <span className="flex items-center gap-1 text-sm text-red-600">
-              <AlertCircle className="w-4 h-4" /> Save failed — see error in console
+              <AlertCircle className="w-4 h-4" /> {errorMsg || "Save failed"}
             </span>
           )}
           <button
             onClick={handleSave}
-            disabled={saving}
+            disabled={saving || loading}
             className="rounded-md px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-medium transition-all flex items-center gap-2"
           >
             <Save className="w-3 h-3" />
@@ -232,364 +273,445 @@ export function Settings() {
         </div>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-2">
+      {/* Tabs */}
+      <div className="flex gap-1 border-b border-slate-200">
+        {tabs.map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition-all border-b-2 -mb-px ${
+              activeTab === tab.id
+                ? "border-blue-600 text-blue-600"
+                : "border-transparent text-slate-500 hover:text-slate-700"
+            }`}
+          >
+            {tab.icon}
+            {tab.label}
+          </button>
+        ))}
+      </div>
 
-        {/* SMTP / Email Configuration */}
-        <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-          <h3 className="text-sm font-semibold text-slate-900 flex items-center gap-2 mb-6">
-            <Mail className="w-4 h-4 text-blue-600" /> Email / SMTP Configuration
-          </h3>
-          <div className="space-y-4">
-            <div>
-              <label className="text-xs font-semibold text-slate-500 block mb-1.5">SMTP Host</label>
-              <input
-                type="text"
-                value={smtp.smtp_host}
-                onChange={(e) => setSmtp((p) => ({ ...p, smtp_host: e.target.value }))}
-                className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:border-blue-500/50 shadow-sm"
-                placeholder="smtp.example.com"
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
+      {/* Tab Content */}
+      {activeTab === "notifications" && (
+        <div className="grid gap-5 md:grid-cols-2">
+          {/* SMTP Card */}
+          <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+            <h3 className="text-sm font-semibold text-slate-900 flex items-center gap-2 mb-4">
+              <Mail className="w-4 h-4 text-blue-600" />
+              SMTP / Email Server
+            </h3>
+            <div className="space-y-3">
               <div>
-                <label className="text-xs font-semibold text-slate-500 block mb-1.5">Port</label>
+                <label className="text-xs font-semibold text-slate-500 block mb-1">
+                  SMTP Host
+                </label>
                 <input
                   type="text"
-                  value={smtp.smtp_port}
-                  onChange={(e) => setSmtp((p) => ({ ...p, smtp_port: e.target.value }))}
-                  className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:border-blue-500/50 shadow-sm"
-                  placeholder="465"
+                  value={smtp.smtp_host}
+                  onChange={(e) =>
+                    setSmtp((p) => ({ ...p, smtp_host: e.target.value }))
+                  }
+                  className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:border-blue-500 shadow-sm"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-semibold text-slate-500 block mb-1">
+                    Port
+                  </label>
+                  <input
+                    type="text"
+                    value={smtp.smtp_port}
+                    onChange={(e) =>
+                      setSmtp((p) => ({ ...p, smtp_port: e.target.value }))
+                    }
+                    className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:border-blue-500 shadow-sm"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-slate-500 block mb-1">
+                    Username
+                  </label>
+                  <input
+                    type="text"
+                    value={smtp.smtp_user}
+                    onChange={(e) =>
+                      setSmtp((p) => ({ ...p, smtp_user: e.target.value }))
+                    }
+                    className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:border-blue-500 shadow-sm"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-slate-500 block mb-1">
+                  Password{" "}
+                  <span className="font-normal text-slate-400">
+                    (leave blank to keep current)
+                  </span>
+                </label>
+                <input
+                  type="password"
+                  value={smtp.smtp_pass}
+                  onChange={(e) =>
+                    setSmtp((p) => ({ ...p, smtp_pass: e.target.value }))
+                  }
+                  className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:border-blue-500 shadow-sm"
+                  placeholder="••••••••"
                 />
               </div>
               <div>
-                <label className="text-xs font-semibold text-slate-500 block mb-1.5">Username</label>
+                <label className="text-xs font-semibold text-slate-500 block mb-1">
+                  From Address
+                </label>
                 <input
                   type="text"
-                  value={smtp.smtp_user}
-                  onChange={(e) => setSmtp((p) => ({ ...p, smtp_user: e.target.value }))}
-                className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:border-blue-500/50 shadow-sm"
+                  value={smtp.smtp_from}
+                  onChange={(e) =>
+                    setSmtp((p) => ({ ...p, smtp_from: e.target.value }))
+                  }
+                  className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:border-blue-500 shadow-sm"
                 />
               </div>
             </div>
-            <div>
-              <label className="text-xs font-semibold text-slate-500 block mb-1.5">
-                Password <span className="text-slate-400 font-normal">(leave blank to keep current)</span>
-              </label>
-              <input
-                type="password"
-                value={smtp.smtp_pass}
-                onChange={(e) => setSmtp((p) => ({ ...p, smtp_pass: e.target.value }))}
-                className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:border-blue-500/50 shadow-sm"
-                placeholder="••••••••"
-              />
-            </div>
-            <div>
-              <label className="text-xs font-semibold text-slate-500 block mb-1.5">From Address</label>
-              <input
-                type="text"
-                value={smtp.smtp_from}
-                onChange={(e) => setSmtp((p) => ({ ...p, smtp_from: e.target.value }))}
-                className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:border-blue-500/50 shadow-sm"
-                placeholder="CyberQuote Alerts <alerts@example.com>"
-              />
-            </div>
-            <div className="pt-2 border-t border-slate-100">
-              <div className="flex items-center gap-4">
-                <label className="flex items-center gap-2 text-sm cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={notifications.email_enabled}
-                    onChange={(e) => setNotifications((p) => ({ ...p, email_enabled: e.target.checked }))}
-                    className="accent-blue-600"
+          </div>
+
+          {/* Notification Channels Card */}
+          <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+            <h3 className="text-sm font-semibold text-slate-900 flex items-center gap-2 mb-4">
+              <Bell className="w-4 h-4 text-blue-600" />
+              Notification Channels
+            </h3>
+            <div className="space-y-4">
+              <div className="flex items-center justify-between p-3 rounded-lg bg-slate-50 border border-slate-200">
+                <div>
+                  <p className="text-sm font-medium text-slate-900">Email Notifications</p>
+                  <p className="text-xs text-slate-500">Send alerts via SMTP email</p>
+                </div>
+                <button
+                  onClick={() => setNotif((p) => ({ ...p, email: !p.email }))}
+                  className={`w-10 h-5 rounded-full relative cursor-pointer transition-colors ${
+                    notif.email ? "bg-blue-600" : "bg-slate-300"
+                  }`}
+                >
+                  <div
+                    className={`w-4 h-4 bg-white rounded-full absolute top-0.5 shadow-sm transition-all ${
+                      notif.email ? "right-0.5" : "right-4"
+                    }`}
                   />
-                  <span className="text-slate-700">Email Notifications</span>
-                </label>
-                <label className="flex items-center gap-2 text-sm cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={notifications.whatsapp_enabled}
-                    onChange={(e) => setNotifications((p) => ({ ...p, whatsapp_enabled: e.target.checked }))}
-                    className="accent-blue-600"
+                </button>
+              </div>
+
+              <div className="flex items-center justify-between p-3 rounded-lg bg-slate-50 border border-slate-200">
+                <div>
+                  <p className="text-sm font-medium text-slate-900">WhatsApp</p>
+                  <p className="text-xs text-slate-500">Send alerts via WhatsApp</p>
+                </div>
+                <button
+                  onClick={() => setNotif((p) => ({ ...p, whatsapp: !p.whatsapp }))}
+                  className={`w-10 h-5 rounded-full relative cursor-pointer transition-colors ${
+                    notif.whatsapp ? "bg-blue-600" : "bg-slate-300"
+                  }`}
+                >
+                  <div
+                    className={`w-4 h-4 bg-white rounded-full absolute top-0.5 shadow-sm transition-all ${
+                      notif.whatsapp ? "right-0.5" : "right-4"
+                    }`}
                   />
-                  <span className="text-slate-700">WhatsApp</span>
-                </label>
+                </button>
+              </div>
+
+              <div className="pt-3 border-t border-slate-200">
+                <p className="text-xs text-slate-500 leading-relaxed">
+                  Email uses SMTP server configured on the left. WhatsApp requires Twilio credentials (coming soon).
+                </p>
               </div>
             </div>
           </div>
         </div>
+      )}
 
-        {/* Workflow & SLA Settings */}
-        <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-          <h3 className="text-sm font-semibold text-slate-900 flex items-center gap-2 mb-6">
-            <SettingsIcon className="w-4 h-4 text-blue-600" /> Operational Thresholds & SLAs
-          </h3>
-          <div className="space-y-4">
-             <div>
-               <label className="text-xs font-semibold text-slate-500 block mb-2">
-                 Sales Anomaly Threshold
-               </label>
-               <div className="flex items-center gap-4">
-                 <input
-                   type="range"
-                   min="1"
-                   max="50"
-                   value={thresholds.anomaly_threshold}
-                   onChange={(e) => setThresholds((p) => ({ ...p, anomaly_threshold: parseInt(e.target.value) }))}
-                   className="flex-1 accent-blue-600"
-                 />
-                 <span className="text-sm font-medium text-blue-600 w-24 text-right">{thresholds.anomaly_threshold}% Deviation</span>
-               </div>
-             </div>
-
-             <div>
-               <label className="text-xs font-semibold text-slate-500 block mb-2">
-                 Stockout Risk Threshold
-               </label>
-               <div className="flex items-center gap-4">
-                 <input
-                   type="range"
-                   min="10"
-                   max="100"
-                   value={thresholds.stockout_threshold}
-                   onChange={(e) => setThresholds((p) => ({ ...p, stockout_threshold: parseInt(e.target.value) }))}
-                   className="flex-1 accent-blue-600"
-                 />
-                 <span className="text-sm font-medium text-blue-600 w-24 text-right">&gt; {thresholds.stockout_threshold}% Prob</span>
-               </div>
-            </div>
-
-            <div className="pt-4 border-t border-slate-200">
-               <label className="text-xs font-semibold text-slate-500 block mb-3">
-                 SLA Mapping by Severity
-               </label>
-               <div className="space-y-2">
-                 <div className="flex items-center justify-between text-sm">
-                   <span className="text-slate-700">HIGH Severity</span>
-                   <select
-                     value={slaMapping.sla_high}
-                     onChange={(e) => setSlaMapping((p) => ({ ...p, sla_high: e.target.value }))}
-                     className="bg-white border border-slate-200 rounded px-2 py-1 text-xs outline-none focus:border-blue-500"
-                   >
-                     <option value="1">1 Hour</option>
-                     <option value="4">4 Hours</option>
-                     <option value="24">24 Hours</option>
-                   </select>
-                 </div>
-                 <div className="flex items-center justify-between text-sm">
-                   <span className="text-slate-700">MEDIUM Severity</span>
-                   <select
-                     value={slaMapping.sla_medium}
-                     onChange={(e) => setSlaMapping((p) => ({ ...p, sla_medium: e.target.value }))}
-                     className="bg-white border border-slate-200 rounded px-2 py-1 text-xs outline-none focus:border-blue-500"
-                   >
-                     <option value="4">4 Hours</option>
-                     <option value="24">24 Hours</option>
-                     <option value="48">48 Hours</option>
-                   </select>
-                 </div>
-                 <div className="flex items-center justify-between text-sm">
-                   <span className="text-slate-700">LOW Severity</span>
-                   <select
-                     value={slaMapping.sla_low}
-                     onChange={(e) => setSlaMapping((p) => ({ ...p, sla_low: e.target.value }))}
-                     className="bg-white border border-slate-200 rounded px-2 py-1 text-xs outline-none focus:border-blue-500"
-                   >
-                     <option value="24">24 Hours</option>
-                     <option value="48">48 Hours</option>
-                     <option value="72">72 Hours</option>
-                   </select>
-                 </div>
-               </div>
-            </div>
-
-            <div className="pt-4 border-t border-slate-200 space-y-3">
+      {activeTab === "thresholds" && (
+        <div className="grid gap-5 md:grid-cols-2">
+          {/* Alert Thresholds */}
+          <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+            <h3 className="text-sm font-semibold text-slate-900 mb-4">
+              Alert Thresholds
+            </h3>
+            <div className="space-y-5">
               <div>
-                <label className="text-xs font-semibold text-slate-500 block mb-2">
-                  SLA Warning Threshold ({thresholds.sla_warning}% elapsed)
-                </label>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-xs font-semibold text-slate-500">
+                    Sales Anomaly Deviation
+                  </label>
+                  <span className="text-sm font-medium text-blue-600">
+                    {thresholds.anomaly}%
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min="1"
+                  max="50"
+                  value={thresholds.anomaly}
+                  onChange={(e) =>
+                    setThresholds((p) => ({
+                      ...p,
+                      anomaly: parseInt(e.target.value),
+                    }))
+                  }
+                  className="w-full accent-blue-600"
+                />
+                <p className="text-xs text-slate-400 mt-1">
+                  Alert when daily revenue deviates {thresholds.anomaly}%+ from average
+                </p>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-xs font-semibold text-slate-500">
+                    Stockout Risk Probability
+                  </label>
+                  <span className="text-sm font-medium text-blue-600">
+                    &gt;{thresholds.stockout}%
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min="10"
+                  max="100"
+                  value={thresholds.stockout}
+                  onChange={(e) =>
+                    setThresholds((p) => ({
+                      ...p,
+                      stockout: parseInt(e.target.value),
+                    }))
+                  }
+                  className="w-full accent-blue-600"
+                />
+                <p className="text-xs text-slate-400 mt-1">
+                  Alert when predicted stockout probability exceeds {thresholds.stockout}%
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* SLA Config */}
+          <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+            <h3 className="text-sm font-semibold text-slate-900 mb-4">
+              SLA & Escalation
+            </h3>
+            <div className="space-y-5">
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-xs font-semibold text-slate-500">
+                    Warning at
+                  </label>
+                  <span className="text-sm font-medium text-amber-600">
+                    {thresholds.slaWarning}% elapsed
+                  </span>
+                </div>
                 <input
                   type="range"
                   min="10"
                   max="90"
-                  value={thresholds.sla_warning}
-                  onChange={(e) => setThresholds((p) => ({ ...p, sla_warning: parseInt(e.target.value) }))}
-                  className="w-full accent-blue-600"
+                  value={thresholds.slaWarning}
+                  onChange={(e) =>
+                    setThresholds((p) => ({
+                      ...p,
+                      slaWarning: parseInt(e.target.value),
+                    }))
+                  }
+                  className="w-full accent-amber-500"
                 />
               </div>
+
               <div>
-                <label className="text-xs font-semibold text-slate-500 block mb-2">
-                  SLA Escalation Threshold ({thresholds.sla_escalation}% elapsed)
-                </label>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-xs font-semibold text-slate-500">
+                    Escalate at
+                  </label>
+                  <span className="text-sm font-medium text-red-600">
+                    {thresholds.slaEscalation}% elapsed
+                  </span>
+                </div>
                 <input
                   type="range"
                   min="20"
                   max="99"
-                  value={thresholds.sla_escalation}
-                  onChange={(e) => setThresholds((p) => ({ ...p, sla_escalation: parseInt(e.target.value) }))}
-                  className="w-full accent-blue-600"
+                  value={thresholds.slaEscalation}
+                  onChange={(e) =>
+                    setThresholds((p) => ({
+                      ...p,
+                      slaEscalation: parseInt(e.target.value),
+                    }))
+                  }
+                  className="w-full accent-red-600"
                 />
+              </div>
+
+              <div className="pt-3 border-t border-slate-200 space-y-2">
+                <label className="text-xs font-semibold text-slate-500 block">
+                  Response Time by Severity
+                </label>
+                {[
+                  { key: "slaHigh", label: "HIGH / P0" },
+                  { key: "slaMedium", label: "MEDIUM / P1" },
+                  { key: "slaLow", label: "LOW / P2" },
+                ].map(({ key, label }) => (
+                  <div key={key} className="flex items-center justify-between">
+                    <span className="text-sm text-slate-700">{label}</span>
+                    <select
+                      value={thresholds[key as keyof typeof thresholds] as string}
+                      onChange={(e) =>
+                        setThresholds((p) => ({
+                          ...p,
+                          [key]: e.target.value,
+                        }))
+                      }
+                      className="bg-white border border-slate-200 rounded px-2 py-1 text-xs outline-none focus:border-blue-500"
+                    >
+                      <option value="1">1 Hour</option>
+                      <option value="4">4 Hours</option>
+                      <option value="24">24 Hours</option>
+                      <option value="48">48 Hours</option>
+                      <option value="72">72 Hours</option>
+                    </select>
+                  </div>
+                ))}
               </div>
             </div>
           </div>
         </div>
+      )}
 
-        {/* LLM Gateway Configuration */}
-        <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-          <h3 className="text-sm font-semibold text-slate-900 flex items-center gap-2 mb-6">
-            <BrainCircuit className="w-4 h-4 text-blue-600" /> LLM Gateway & Provider
-          </h3>
-          <div className="space-y-4">
-            <div>
-              <label className="text-xs font-semibold text-slate-500 block mb-2">
-                Primary Model Provider
-              </label>
-              <select
-                value={aiSettings.operation_mode}
-                onChange={(e) => setAiSettings((p) => ({ ...p, operation_mode: e.target.value }))}
-                className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:border-blue-500/50 shadow-sm"
-              >
-                <option value="inform">Inform (Monitoring & Alerts Only)</option>
-                <option value="assist">Assist (Draft Actions, Require Approval)</option>
-                <option value="automate">Automate (Execute Low-Risk Actions)</option>
-              </select>
-            </div>
-            <div>
-              <label className="text-xs font-semibold text-slate-500 block mb-2">
-                Action Approval Threshold
-              </label>
-              <div className="flex items-center gap-4">
+      {activeTab === "ai-security" && (
+        <div className="grid gap-5 md:grid-cols-2">
+          {/* AI Model */}
+          <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+            <h3 className="text-sm font-semibold text-slate-900 flex items-center gap-2 mb-4">
+              <BrainCircuit className="w-4 h-4 text-blue-600" />
+              AI Copilot
+            </h3>
+            <div className="space-y-4">
+              <div>
+                <label className="text-xs font-semibold text-slate-500 block mb-2">
+                  Operation Mode
+                </label>
+                <select
+                  value={ai.mode}
+                  onChange={(e) => setAi((p) => ({ ...p, mode: e.target.value }))}
+                  className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:border-blue-500 shadow-sm"
+                >
+                  <option value="inform">Inform — Alerts & Monitoring only</option>
+                  <option value="assist">
+                    Assist — Draft actions, require approval
+                  </option>
+                  <option value="automate">
+                    Automate — Execute low-risk actions
+                  </option>
+                </select>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-xs font-semibold text-slate-500">
+                    Approval Threshold
+                  </label>
+                  <span className="text-sm font-medium text-blue-600">{ai.threshold}%</span>
+                </div>
                 <input
                   type="range"
                   min="0"
                   max="100"
-                  value={aiSettings.action_threshold}
-                  onChange={(e) => setAiSettings((p) => ({ ...p, action_threshold: parseInt(e.target.value) }))}
-                  className="flex-1 accent-blue-600"
+                  value={ai.threshold}
+                  onChange={(e) =>
+                    setAi((p) => ({ ...p, threshold: parseInt(e.target.value) }))
+                  }
+                  className="w-full accent-blue-600"
                 />
-                <span className="text-sm font-medium text-blue-600">{aiSettings.action_threshold}%</span>
+                <p className="text-xs text-slate-400 mt-1">
+                  Actions below {ai.threshold}% AI confidence need human approval
+                </p>
               </div>
-              <p className="text-xs text-slate-500 mt-1">
-                Actions with AI confidence below this threshold require human approval.
-              </p>
-            </div>
-            <div className="flex items-center justify-between pt-2 border-t border-slate-200">
+
+              <div className="flex items-center justify-between pt-2 border-t border-slate-200">
                 <div>
-                   <p className="text-sm font-medium text-slate-900">Semantic Caching</p>
-                   <p className="text-xs text-slate-500">Cache similar queries to reduce latency & cost.</p>
+                  <p className="text-sm font-medium text-slate-900">Semantic Caching</p>
+                  <p className="text-xs text-slate-500">Cache similar queries</p>
                 </div>
                 <button
-                  onClick={() => setAiSettings((p) => ({ ...p, semantic_caching: !p.semantic_caching }))}
+                  onClick={() => setAi((p) => ({ ...p, caching: !p.caching }))}
                   className={`w-10 h-5 rounded-full relative cursor-pointer transition-colors ${
-                    aiSettings.semantic_caching ? "bg-blue-600" : "bg-slate-300"
+                    ai.caching ? "bg-blue-600" : "bg-slate-300"
                   }`}
                 >
-                   <div className={`w-4 h-4 bg-white rounded-full absolute top-0.5 shadow-sm transition-all ${
-                    aiSettings.semantic_caching ? "right-0.5" : "right-4"
-                  }`} />
+                  <div
+                    className={`w-4 h-4 bg-white rounded-full absolute top-0.5 shadow-sm transition-all ${
+                      ai.caching ? "right-0.5" : "right-4"
+                    }`}
+                  />
                 </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Security */}
+          <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+            <h3 className="text-sm font-semibold text-slate-900 flex items-center gap-2 mb-4">
+              <Shield className="w-4 h-4 text-blue-600" />
+              Security Guardrails
+            </h3>
+            <div className="space-y-3">
+              {[
+                {
+                  key: "allowlist" as const,
+                  label: "Agent Action Allowlist",
+                  desc: "Only permit configured API paths",
+                },
+                {
+                  key: "injectionFilter" as const,
+                  label: "Prompt Injection Filter",
+                  desc: "Screen input for injection attacks",
+                },
+                {
+                  key: "auditLog" as const,
+                  label: "Immutable Audit Log",
+                  desc: "Store all agent actions for compliance",
+                },
+              ].map(({ key, label, desc }) => (
+                <div
+                  key={key}
+                  className="flex items-center justify-between p-3 rounded-lg bg-slate-50 border border-slate-200"
+                >
+                  <div>
+                    <p className="text-sm font-medium text-slate-900">{label}</p>
+                    <p className="text-xs text-slate-500">{desc}</p>
+                  </div>
+                  <button
+                    onClick={() =>
+                      setSecurity((p) => ({ ...p, [key]: !p[key] }))
+                    }
+                    className={`w-10 h-5 rounded-full relative cursor-pointer transition-colors flex-shrink-0 ${
+                      security[key] ? "bg-blue-600" : "bg-slate-300"
+                    }`}
+                  >
+                    <div
+                      className={`w-4 h-4 bg-white rounded-full absolute top-0.5 shadow-sm transition-all ${
+                        security[key] ? "right-0.5" : "right-4"
+                      }`}
+                    />
+                  </button>
+                </div>
+              ))}
+
+              <div className="pt-3 border-t border-slate-200">
+                <p className="text-xs text-slate-500 leading-relaxed">
+                  RBAC is enforced at the database level. Roles: HQ_ADMIN (full access), REGIONAL_MANAGER (scoped to region), FRANCHISEE_OWNER (single outlet).
+                </p>
+              </div>
             </div>
           </div>
         </div>
-
-        {/* Security & Governance */}
-        <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-          <h3 className="text-sm font-semibold text-slate-900 flex items-center gap-2 mb-6">
-            <Shield className="w-4 h-4 text-blue-600" /> Security Guardrails
-          </h3>
-          <div className="space-y-4">
-             <div className="flex items-center justify-between">
-                <div>
-                   <p className="text-sm font-medium text-slate-900">Agent Action Allowlist</p>
-                   <p className="text-xs text-slate-500">Only permitted API paths are executed.</p>
-                </div>
-                <button
-                  onClick={() => setSecurity((p) => ({ ...p, agent_allowlist: !p.agent_allowlist }))}
-                  className={`w-10 h-5 rounded-full relative cursor-pointer transition-colors ${
-                    security.agent_allowlist ? "bg-blue-600" : "bg-slate-300"
-                  }`}
-                >
-                   <div className={`w-4 h-4 bg-white rounded-full absolute top-0.5 shadow-sm transition-all ${
-                    security.agent_allowlist ? "right-0.5" : "right-4"
-                  }`} />
-                </button>
-             </div>
-             <div className="flex items-center justify-between">
-                <div>
-                   <p className="text-sm font-medium text-slate-900">Prompt Injection Filter</p>
-                   <p className="text-xs text-slate-500">LLM Gateway content safety screening.</p>
-                </div>
-                <button
-                  onClick={() => setSecurity((p) => ({ ...p, prompt_injection_filter: !p.prompt_injection_filter }))}
-                  className={`w-10 h-5 rounded-full relative cursor-pointer transition-colors ${
-                    security.prompt_injection_filter ? "bg-blue-600" : "bg-slate-300"
-                  }`}
-                >
-                   <div className={`w-4 h-4 bg-white rounded-full absolute top-0.5 shadow-sm transition-all ${
-                    security.prompt_injection_filter ? "right-0.5" : "right-4"
-                  }`} />
-                </button>
-             </div>
-             <div className="flex items-center justify-between">
-                <div>
-                   <p className="text-sm font-medium text-slate-900">Immutable Audit Logging</p>
-                   <p className="text-xs text-slate-500">Store agent traces in compliance vault.</p>
-                </div>
-                <button
-                  onClick={() => setSecurity((p) => ({ ...p, audit_logging: !p.audit_logging }))}
-                  className={`w-10 h-5 rounded-full relative cursor-pointer transition-colors ${
-                    security.audit_logging ? "bg-blue-600" : "bg-slate-300"
-                  }`}
-                >
-                   <div className={`w-4 h-4 bg-white rounded-full absolute top-0.5 shadow-sm transition-all ${
-                    security.audit_logging ? "right-0.5" : "right-4"
-                  }`} />
-                </button>
-             </div>
-          </div>
-        </div>
-
-        {/* RBAC */}
-        <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-          <h3 className="text-sm font-semibold text-slate-900 flex items-center gap-2 mb-6">
-            <Lock className="w-4 h-4 text-blue-600" /> Role-Based Access Control (RBAC)
-          </h3>
-          <div className="space-y-3">
-            <div className="flex items-center justify-between p-3 rounded-lg bg-slate-50 border border-slate-200">
-              <div>
-                <p className="text-sm font-medium text-slate-900">Platform Admin</p>
-                <p className="text-xs text-slate-500">Full system & settings access</p>
-              </div>
-              <span className="inline-flex items-center gap-1.5 rounded-md bg-purple-50 border border-purple-200 px-2 py-1 text-[10px] font-medium text-purple-700 uppercase tracking-wider">
-                Full Access
-              </span>
-            </div>
-            <div className="flex items-center justify-between p-3 rounded-lg bg-slate-50 border border-slate-200">
-              <div>
-                <p className="text-sm font-medium text-slate-900">Regional Manager</p>
-                <p className="text-xs text-slate-500">Cross-outlet analytics & overrides</p>
-              </div>
-              <span className="inline-flex items-center gap-1.5 rounded-md bg-blue-50 border border-blue-200 px-2 py-1 text-[10px] font-medium text-blue-700 uppercase tracking-wider">
-                Regional Scoped
-              </span>
-            </div>
-            <div className="flex items-center justify-between p-3 rounded-lg bg-slate-50 border border-slate-200">
-              <div>
-                <p className="text-sm font-medium text-slate-900">Franchisee</p>
-                <p className="text-xs text-slate-500">Single-outlet operations only</p>
-              </div>
-              <span className="inline-flex items-center gap-1.5 rounded-md bg-green-50 border border-green-200 px-2 py-1 text-[10px] font-medium text-green-700 uppercase tracking-wider">
-                Outlet Scoped
-              </span>
-            </div>
-            <div className="mt-4 pt-4 border-t border-slate-200">
-              <p className="text-xs text-slate-500 leading-relaxed">
-                RBAC is currently active. The active role restricts data visibility (e.g., Franchisees cannot see network-wide anomalies or manager workflows). You can simulate these permissions using the profile switcher in the sidebar.
-              </p>
-            </div>
-          </div>
-        </div>
-
-      </div>
+      )}
     </div>
   );
 }
