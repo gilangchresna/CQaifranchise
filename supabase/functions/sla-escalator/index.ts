@@ -35,8 +35,27 @@ const corsHeaders = {
 };
 
 // Default thresholds (percentage of SLA time elapsed)
-const DEFAULT_WARNING_THRESHOLD = 50;  // 50% elapsed = warning
-const DEFAULT_ESCALATION_THRESHOLD = 75; // 75% elapsed = escalate
+let DEFAULT_WARNING_THRESHOLD = 50;  // 50% elapsed = warning
+let DEFAULT_ESCALATION_THRESHOLD = 75; // 75% elapsed = escalate
+
+/**
+ * Load SLA thresholds from settings table (runtime override)
+ */
+async function loadSlaThresholds(supabase: any) {
+  const { data: rows } = await supabase
+    .from("settings")
+    .select("key, value")
+    .in("key", ["sla_warning_threshold", "sla_escalation_threshold"]);
+
+  for (const r of rows || []) {
+    const v = parseInt(r.value);
+    if (!isNaN(v)) {
+      if (r.key === "sla_warning_threshold") DEFAULT_WARNING_THRESHOLD = v;
+      if (r.key === "sla_escalation_threshold") DEFAULT_ESCALATION_THRESHOLD = v;
+    }
+  }
+  console.log(`SLA thresholds: warning=${DEFAULT_WARNING_THRESHOLD}%, escalation=${DEFAULT_ESCALATION_THRESHOLD}%`);
+}
 
 // Status that indicates a case is still open
 const OPEN_STATUSES = ["NEW", "ACKNOWLEDGED", "IN_PROGRESS"];
@@ -282,6 +301,9 @@ serve(async (req: Request) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+    // Load SLA thresholds from settings table
+    await loadSlaThresholds(supabase);
 
     // Build query for open cases with SLA deadlines
     let casesQuery = supabase

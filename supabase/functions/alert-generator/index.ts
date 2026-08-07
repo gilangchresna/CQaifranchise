@@ -34,8 +34,8 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// Severity thresholds
-const SEVERITY_THRESHOLDS = {
+// Severity thresholds (defaults — overridden by settings table at runtime)
+let SEVERITY_THRESHOLDS = {
   P0_CRITICAL: 0.9,   // score >= 0.9
   P1_HIGH: 0.7,       // score >= 0.7
   P2_MEDIUM: 0.5,     // score >= 0.5
@@ -64,6 +64,24 @@ interface AlertGeneratorResponse {
   score?: number;
   reason?: string;
   message?: string;
+}
+
+/**
+ * Load severity thresholds from settings table (runtime override)
+ */
+async function loadSeverityThresholds(supabase: any) {
+  const { data: rows } = await supabase
+    .from("settings")
+    .select("key, value")
+    .in("key", ["p0_threshold", "p1_threshold", "p2_threshold", "anomaly_threshold"]);
+
+  for (const r of rows || []) {
+    const v = parseFloat(r.value);
+    if (r.key === "p0_threshold" && !isNaN(v)) SEVERITY_THRESHOLDS.P0_CRITICAL = v;
+    if (r.key === "p1_threshold" && !isNaN(v)) SEVERITY_THRESHOLDS.P1_HIGH = v;
+    if (r.key === "p2_threshold" && !isNaN(v)) SEVERITY_THRESHOLDS.P2_MEDIUM = v;
+    if (r.key === "anomaly_threshold" && !isNaN(v)) SEVERITY_THRESHOLDS.P1_HIGH = v; // anomaly threshold = P1 high
+  }
 }
 
 /**
@@ -280,7 +298,10 @@ serve(async (req: Request) => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Get outlet info
+    // Load severity thresholds from settings table
+    await loadSeverityThresholds(supabase);
+
+    // Validate required fields
     const { data: outlet, error: outletError } = await supabase
       .from("outlets")
       .select("id, name, code, status, regions(name, code)")

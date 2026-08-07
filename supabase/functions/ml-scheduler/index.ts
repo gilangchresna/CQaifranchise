@@ -35,9 +35,31 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// Alert thresholds
-const ANOMALY_THRESHOLD = 0.7;    // Score >= 0.7 triggers alert
-const STOCKOUT_HIGH_THRESHOLD = "HIGH";  // HIGH risk triggers alert
+// Alert thresholds (defaults — overridden by settings table at runtime)
+let ANOMALY_THRESHOLD = 0.7;
+let STOCKOUT_HIGH_THRESHOLD = "HIGH";
+
+/**
+ * Load thresholds from settings table (runtime override)
+ */
+async function loadThresholds(supabase: any) {
+  const { data: rows } = await supabase
+    .from("settings")
+    .select("key, value")
+    .in("key", ["anomaly_threshold", "stockout_threshold", "p0_threshold", "p2_threshold"]);
+
+  for (const r of rows || []) {
+    if (r.key === "anomaly_threshold") {
+      ANOMALY_THRESHOLD = parseFloat(r.value) || 0.7;
+    }
+    if (r.key === "stockout_threshold") {
+      // Map threshold to risk level: <0.3=LOW, 0.3-0.6=MEDIUM, >0.6=HIGH
+      const t = parseFloat(r.value) || 0.7;
+      STOCKOUT_HIGH_THRESHOLD = t > 0.6 ? "HIGH" : t > 0.3 ? "MEDIUM" : "LOW";
+    }
+  }
+  console.log(`Thresholds loaded: anomaly=${ANOMALY_THRESHOLD}, stockout=${STOCKOUT_HIGH_THRESHOLD}`);
+}
 
 interface MlSchedulerRequest {
   outlet_ids?: number[];
@@ -169,6 +191,9 @@ serve(async (req: Request) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+    // Load thresholds from settings table
+    await loadThresholds(supabase);
 
     // Create scheduler run record
     const { data: runRecord, error: runError } = await supabase
