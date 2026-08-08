@@ -150,16 +150,34 @@ app.post('/test', async (req, res) => {
     }
 
     const s = await getSettings();
+    console.log('📧 Email test request to:', to);
+    console.log('   SMTP config:', { host: s.smtp_host, port: s.smtp_port });
 
-    if (!s.smtp_user || !s.smtp_pass) {
+    if (!s.smtp_host) {
       return res.status(400).json({
         success: false,
-        error: 'SMTP credentials not configured. Please set smtp_user and smtp_pass in Settings.'
+        error: 'SMTP host not configured. Please set smtp_host in Settings.'
       });
     }
 
+    if (!s.smtp_user) {
+      return res.status(400).json({
+        success: false,
+        error: 'SMTP username not configured. Please set smtp_user in Settings.'
+      });
+    }
+
+    if (!s.smtp_pass) {
+      return res.status(400).json({
+        success: false,
+        error: 'SMTP password not configured. Please set smtp_pass in Settings and Save.'
+      });
+    }
+
+    console.log('🔄 Creating transporter...');
     const transporter = await createTransporter();
 
+    console.log('📤 Sending email...');
     const info = await transporter.sendMail({
       from: s.smtp_from || s.smtp_user,
       to: to,
@@ -182,6 +200,7 @@ app.post('/test', async (req, res) => {
       `
     });
 
+    console.log('✅ Email sent:', info.messageId);
     res.json({
       success: true,
       message: `✅ Test email sent to ${to}`,
@@ -189,8 +208,28 @@ app.post('/test', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Email error:', error);
-    res.status(500).json({ success: false, error: error.message });
+    console.error('❌ Email error:', error.code, error.message);
+    console.error('   Full error:', error);
+
+    let errorDetail = error.message;
+
+    // Provide more helpful error messages
+    if (error.code === 'EAUTH' || error.message.includes('authentication')) {
+      errorDetail = `Authentication failed. Check smtp_user and smtp_pass. Original: ${error.message}`;
+    } else if (error.code === 'ECONNREFUSED') {
+      errorDetail = `Connection refused to ${error.command || 'SMTP server'}. Check smtp_host and smtp_port.`;
+    } else if (error.code === 'ETIMEDOUT') {
+      errorDetail = `Connection timed out. Check smtp_host is correct and server is reachable.`;
+    } else if (error.code === 'ENOTFOUND') {
+      errorDetail = `DNS lookup failed for SMTP host. Check smtp_host in Settings.`;
+    } else if (error.code === 'ESOCKET') {
+      errorDetail = `Socket error. SSL/TLS issue? Try port 587 instead of 465.`;
+    }
+
+    res.status(500).json({
+      success: false,
+      error: errorDetail
+    });
   }
 });
 
