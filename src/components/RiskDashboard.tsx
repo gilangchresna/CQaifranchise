@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from "react";
-import { 
+import {
   AlertTriangle, TrendingDown, Package, Clock, Zap,
   ChevronRight, Filter, RefreshCw, BarChart3, Activity,
   ArrowUpRight, ArrowDownRight, AlertCircle, CheckCircle2,
-  XCircle, Eye, X
+  XCircle, Eye, X, Wifi, WifiOff
 } from "lucide-react";
 import { cn } from "@/src/lib/utils";
 import { Role } from "@/src/types";
@@ -53,9 +53,27 @@ export function RiskDashboard({ activeRole }: { activeRole: Role }) {
   const [filterLevel, setFilterLevel] = useState<string>('all');
   const [filterOutlet, setFilterOutlet] = useState<string>('all');
   const [viewMode, setViewMode] = useState<'grid' | 'list' | 'outlets'>('grid');
+  const [realtimeStatus, setRealtimeStatus] = useState<'connected' | 'connecting' | 'disconnected'>('connecting');
 
   useEffect(() => {
     fetchRiskData();
+
+    // Realtime subscription for inventory changes
+    const channel = supabase
+      .channel('risk-inventory')
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'inventory'
+      }, () => {
+        fetchRiskData();
+      })
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') setRealtimeStatus('connected');
+        else if (status === 'CLOSED' || status === 'CHANNEL_ERROR') setRealtimeStatus('disconnected');
+      });
+
+    return () => { supabase.removeChannel(channel); };
   }, []);
 
   async function fetchRiskData() {
@@ -169,6 +187,14 @@ export function RiskDashboard({ activeRole }: { activeRole: Role }) {
             <AlertTriangle className="w-5 h-5 text-red-600" />
             ML Stockout Risk Dashboard
           </h2>
+          <div className="flex items-center gap-1.5 text-xs font-medium" title="Realtime data feed">
+            {realtimeStatus === 'connected' && <Wifi className="w-3.5 h-3.5 text-green-500" />}
+            {realtimeStatus === 'connecting' && <Activity className="w-3.5 h-3.5 text-yellow-500 animate-pulse" />}
+            {realtimeStatus === 'disconnected' && <WifiOff className="w-3.5 h-3.5 text-red-500" />}
+            <span className={realtimeStatus === 'connected' ? 'text-green-600' : realtimeStatus === 'connecting' ? 'text-yellow-600' : 'text-red-600'}>
+              {realtimeStatus === 'connected' ? 'Live' : realtimeStatus === 'connecting' ? 'Connecting...' : 'Offline'}
+            </span>
+          </div>
           <p className="text-sm text-slate-500 mt-1">
             AI-powered inventory risk prediction using Z-score anomaly detection
           </p>

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Server, Plug, Database, RefreshCw, Webhook, CheckCircle2, AlertCircle, HardDrive, TerminalSquare, Send, Activity, Info, Zap, Heart, XCircle } from 'lucide-react';
+import { Server, Plug, Database, RefreshCw, Webhook, CheckCircle2, AlertCircle, HardDrive, TerminalSquare, Send, Activity, Info, Zap, Heart, XCircle, Wifi, WifiOff } from 'lucide-react';
 import { Role } from '@/src/types';
 import { supabase, EDGE_FUNCTIONS_URL } from '@/src/lib/supabase';
 
@@ -37,9 +37,27 @@ export function Integrations({ activeRole }: { activeRole: Role }) {
   const [healthStatus, setHealthStatus] = useState<any>(null);
   const [isCheckingHealth, setIsCheckingHealth] = useState(false);
   const [showHealthModal, setShowHealthModal] = useState(false);
+  const [realtimeStatus, setRealtimeStatus] = useState<'connected' | 'connecting' | 'disconnected'>('connecting');
 
   useEffect(() => {
     fetchIntegrations();
+
+    // Realtime subscription for integrations table
+    const channel = supabase
+      .channel('integrations-changes')
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'integrations'
+      }, () => {
+        fetchIntegrations();
+      })
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') setRealtimeStatus('connected');
+        else if (status === 'CLOSED' || status === 'CHANNEL_ERROR') setRealtimeStatus('disconnected');
+      });
+
+    return () => { supabase.removeChannel(channel); };
   }, []);
 
   async function fetchIntegrations() {
@@ -210,6 +228,14 @@ export function Integrations({ activeRole }: { activeRole: Role }) {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-lg font-semibold text-slate-900">System Integrations</h2>
+        <div className="flex items-center gap-1.5 text-xs font-medium" title="Realtime data feed">
+          {realtimeStatus === 'connected' && <Wifi className="w-3.5 h-3.5 text-green-500" />}
+          {realtimeStatus === 'connecting' && <Activity className="w-3.5 h-3.5 text-yellow-500 animate-pulse" />}
+          {realtimeStatus === 'disconnected' && <WifiOff className="w-3.5 h-3.5 text-red-500" />}
+          <span className={realtimeStatus === 'connected' ? 'text-green-600' : realtimeStatus === 'connecting' ? 'text-yellow-600' : 'text-red-600'}>
+            {realtimeStatus === 'connected' ? 'Live' : realtimeStatus === 'connecting' ? 'Connecting...' : 'Offline'}
+          </span>
+        </div>
           <p className="text-sm text-slate-500 mt-1">Manage external systems, data pipelines, and MCP servers</p>
         </div>
         <div className="flex items-center gap-3">

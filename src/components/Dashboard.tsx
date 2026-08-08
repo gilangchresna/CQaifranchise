@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { StatCard } from "./StatCard";
 import { AlertsList } from "./AlertsList";
 import { AICopilot } from "./AICopilot";
-import { Store, TrendingDown, PackageX, Activity, Bot } from "lucide-react";
+import { Store, TrendingDown, PackageX, Activity, Bot, Wifi, WifiOff } from "lucide-react";
 import {
   LineChart,
   Line,
@@ -81,10 +81,82 @@ export function Dashboard({ activeRole }: { activeRole: Role }) {
     status: string;
   }>>({});
   const [error, setError] = useState<string | null>(null);
+  const [realtimeStatus, setRealtimeStatus] = useState<'connected' | 'connecting' | 'disconnected'>('connecting');
 
   useEffect(() => {
     fetchDashboardData();
+
+    // Realtime subscriptions for live data updates
+    const alertsChannel = supabase
+      .channel('dashboard-alerts')
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'alerts'
+      }, () => {
+        // Refresh alerts on any change
+        fetchAlerts();
+      })
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') setRealtimeStatus('connected');
+        else if (status === 'CLOSED' || status === 'CHANNEL_ERROR') setRealtimeStatus('disconnected');
+      });
+
+    const outletsChannel = supabase
+      .channel('dashboard-outlets')
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'outlets'
+      }, () => {
+        // Refresh outlets on any change
+        fetchOutlets();
+      })
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') setRealtimeStatus('connected');
+        else if (status === 'CLOSED' || status === 'CHANNEL_ERROR') setRealtimeStatus('disconnected');
+      });
+
+    return () => {
+      supabase.removeChannel(alertsChannel);
+      supabase.removeChannel(outletsChannel);
+    };
   }, [activeRole, selectedPeriod]);
+
+  async function fetchAlerts() {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+      const token = session.access_token;
+      const res = await fetch(`${EDGE_FUNCTIONS_URL}/alerts-list`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setAlerts(data.data || []);
+      }
+    } catch (e) { /* silent */ }
+  }
+
+  async function fetchOutlets() {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+      const token = session.access_token;
+      const res = await fetch(`${EDGE_FUNCTIONS_URL}/franchises-list`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const fetched: Outlet[] = (data.outlets || []).map((o: any) => ({
+          id: o.id, name: o.name, code: o.code,
+          status: o.status,
+          region: o.region || { name: 'Unknown', code: 'UNK' },
+        }));
+        setOutlets(fetched);
+      }
+    } catch (e) { /* silent */ }
+  }
 
   async function fetchDashboardData() {
     setLoading(true);
@@ -197,6 +269,14 @@ export function Dashboard({ activeRole }: { activeRole: Role }) {
       {/* Period Filter */}
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-slate-900">{activeRole} Dashboard</h1>
+        <div className="flex items-center gap-1.5 text-xs font-medium" title="Realtime data feed">
+          {realtimeStatus === 'connected' && <Wifi className="w-3.5 h-3.5 text-green-500" />}
+          {realtimeStatus === 'connecting' && <Activity className="w-3.5 h-3.5 text-yellow-500 animate-pulse" />}
+          {realtimeStatus === 'disconnected' && <WifiOff className="w-3.5 h-3.5 text-red-500" />}
+          <span className={realtimeStatus === 'connected' ? 'text-green-600' : realtimeStatus === 'connecting' ? 'text-yellow-600' : 'text-red-600'}>
+            {realtimeStatus === 'connected' ? 'Live' : realtimeStatus === 'connecting' ? 'Connecting...' : 'Offline'}
+          </span>
+        </div>
         <div className="flex gap-1 bg-slate-100 p-1 rounded-lg">
           {[
             { key: 'today', label: 'Today' },
