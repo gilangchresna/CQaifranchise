@@ -167,7 +167,7 @@ export function Settings() {
       }
 
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      const res = await fetch(`${supabaseUrl}/functions/v1/smtp-test`, {
+      const res = await fetch(`${supabaseUrl}/functions/v1/email`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,

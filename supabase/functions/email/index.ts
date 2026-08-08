@@ -1,10 +1,10 @@
 /// <reference lib="deno.ns" />
 
 /**
- * SMTP Test Edge Function
+ * Email Test Edge Function
  * Tests email configuration - supports SMTP, SendGrid, Gmail
  *
- * POST /functions/v1/smtp-test
+ * POST /functions/v1/email
  *
  * Request Body:
  * {
@@ -121,8 +121,17 @@ async function sendViaGmail(
 }
 
 serve(async (req: Request) => {
+  // Handle CORS preflight - MUST return 200/204 with proper headers
   if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
+    return new Response(null, {
+      status: 204,
+      headers: {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+        "Access-Control-Allow-Methods": "POST, OPTIONS",
+        "Access-Control-Max-Age": "86400",
+      },
+    });
   }
 
   if (req.method !== "POST") {
