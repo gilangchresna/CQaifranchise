@@ -21,13 +21,22 @@ export function Settings() {
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
 
+  // Email Provider
+  const [emailProvider, setEmailProvider] = useState<"smtp" | "sendgrid" | "gmail">("smtp");
+
   // SMTP
   const [smtp, setSmtp] = useState({
     smtp_host: "mail.cyberquote.co.id",
     smtp_port: "465",
     smtp_user: "stefanus.gilang@cyberquote.co.id",
     smtp_pass: "",
-    smtp_from: "CyberQuote Alerts <stefanus.gilang@cyberquote.co.id>",
+    smtp_from: "stefanus.gilang@cyberquote.co.id",
+  });
+
+  // SendGrid
+  const [sendgrid, setSendgrid] = useState({
+    api_key: "",
+    from_email: "stefanus.gilang@cyberquote.co.id",
   });
 
   // Notification toggles
@@ -85,14 +94,20 @@ export function Settings() {
       const s: Record<string, string> = {};
       for (const r of rows || []) s[r.key] = r.value || "";
 
+      // Email provider
+      setEmailProvider((s.email_provider as "smtp" | "sendgrid" | "gmail") || "smtp");
+
       setSmtp({
         smtp_host: s.smtp_host || "mail.cyberquote.co.id",
         smtp_port: s.smtp_port || "465",
         smtp_user: s.smtp_user || "stefanus.gilang@cyberquote.co.id",
         smtp_pass: "",
-        smtp_from:
-          s.smtp_from ||
-          "CyberQuote Alerts <stefanus.gilang@cyberquote.co.id>",
+        smtp_from: s.smtp_from || "stefanus.gilang@cyberquote.co.id",
+      });
+
+      setSendgrid({
+        api_key: "",
+        from_email: s.sendgrid_from_email || s.smtp_user || "stefanus.gilang@cyberquote.co.id",
       });
 
       setNotif({
@@ -128,6 +143,51 @@ export function Settings() {
     }
   }
 
+  const [testingEmail, setTestingEmail] = useState(false);
+  const [testResult, setTestResult] = useState<{success: boolean; message: string} | null>(null);
+
+  async function handleTestEmail() {
+    setTestingEmail(true);
+    setTestResult(null);
+
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) {
+        setTestResult({ success: false, message: "Not authenticated" });
+        return;
+      }
+
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const res = await fetch(`${supabaseUrl}/functions/v1/smtp-test`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          provider: emailProvider,
+          to_email: smtp.smtp_user,
+          subject: "CyberQuote Email Test",
+          body: "This is a test email from CyberQuote settings page.",
+        }),
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        setTestResult({ success: true, message: "✅ Test email sent! Check inbox." });
+      } else {
+        setTestResult({ success: false, message: `❌ ${data.error || data.config_status}` });
+      }
+    } catch (err) {
+      setTestResult({ success: false, message: "❌ Failed to send test email. Please check your SMTP configuration and try again." });
+    } finally {
+      setTestingEmail(false);
+    }
+  }
+
   async function handleSave() {
     setSaving(true);
     setSaveStatus("idle");
@@ -148,10 +208,13 @@ export function Settings() {
       const restUrl = `${SUPABASE_URL}/rest/v1`;
 
       const settingsToUpsert: Record<string, string> = {
+        email_provider: emailProvider,
         smtp_host: smtp.smtp_host,
         smtp_port: smtp.smtp_port,
         smtp_user: smtp.smtp_user,
         smtp_from: smtp.smtp_from,
+        sendgrid_api_key: sendgrid.api_key,
+        sendgrid_from_email: sendgrid.from_email,
         email_notifications_enabled: String(notif.email),
         whatsapp_notifications_enabled: String(notif.whatsapp),
         anomaly_threshold: String(thresholds.anomaly / 100),
@@ -294,83 +357,169 @@ export function Settings() {
       {/* Tab Content */}
       {activeTab === "notifications" && (
         <div className="grid gap-5 md:grid-cols-2">
-          {/* SMTP Card */}
+          {/* Email Provider Card */}
           <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
             <h3 className="text-sm font-semibold text-slate-900 flex items-center gap-2 mb-4">
               <Mail className="w-4 h-4 text-blue-600" />
-              SMTP / Email Server
+              Email Provider
             </h3>
-            <div className="space-y-3">
+            <div className="space-y-4">
+              {/* Provider Selection */}
               <div>
                 <label className="text-xs font-semibold text-slate-500 block mb-1">
-                  SMTP Host
+                  Provider
                 </label>
-                <input
-                  type="text"
-                  value={smtp.smtp_host}
-                  onChange={(e) =>
-                    setSmtp((p) => ({ ...p, smtp_host: e.target.value }))
-                  }
+                <select
+                  value={emailProvider}
+                  onChange={(e) => setEmailProvider(e.target.value as "smtp" | "sendgrid" | "gmail")}
                   className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:border-blue-500 shadow-sm"
-                />
+                >
+                  <option value="smtp">SMTP Direct (mail.cyberquote.co.id)</option>
+                  <option value="sendgrid">SendGrid</option>
+                  <option value="gmail">Gmail SMTP</option>
+                </select>
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-semibold text-slate-500 block mb-1">
-                    Port
-                  </label>
-                  <input
-                    type="text"
-                    value={smtp.smtp_port}
-                    onChange={(e) =>
-                      setSmtp((p) => ({ ...p, smtp_port: e.target.value }))
-                    }
-                    className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:border-blue-500 shadow-sm"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-slate-500 block mb-1">
-                    Username
-                  </label>
-                  <input
-                    type="text"
-                    value={smtp.smtp_user}
-                    onChange={(e) =>
-                      setSmtp((p) => ({ ...p, smtp_user: e.target.value }))
-                    }
-                    className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:border-blue-500 shadow-sm"
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="text-xs font-semibold text-slate-500 block mb-1">
-                  Password{" "}
-                  <span className="font-normal text-slate-400">
-                    (leave blank to keep current)
-                  </span>
-                </label>
-                <input
-                  type="password"
-                  value={smtp.smtp_pass}
-                  onChange={(e) =>
-                    setSmtp((p) => ({ ...p, smtp_pass: e.target.value }))
-                  }
-                  className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:border-blue-500 shadow-sm"
-                  placeholder="••••••••"
-                />
-              </div>
-              <div>
-                <label className="text-xs font-semibold text-slate-500 block mb-1">
-                  From Address
-                </label>
-                <input
-                  type="text"
-                  value={smtp.smtp_from}
-                  onChange={(e) =>
-                    setSmtp((p) => ({ ...p, smtp_from: e.target.value }))
-                  }
-                  className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:border-blue-500 shadow-sm"
-                />
+
+              {/* SMTP Fields */}
+              {emailProvider === "smtp" && (
+                <>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-xs font-semibold text-slate-500 block mb-1">Host</label>
+                      <input
+                        type="text"
+                        value={smtp.smtp_host}
+                        onChange={(e) => setSmtp((p) => ({ ...p, smtp_host: e.target.value }))}
+                        className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:border-blue-500 shadow-sm"
+                        placeholder="mail.domain.com"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold text-slate-500 block mb-1">Port</label>
+                      <select
+                        value={smtp.smtp_port}
+                        onChange={(e) => setSmtp((p) => ({ ...p, smtp_port: e.target.value }))}
+                        className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:border-blue-500 shadow-sm"
+                      >
+                        <option value="465">465 (SSL)</option>
+                        <option value="587">587 (TLS)</option>
+                        <option value="25">25</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-slate-500 block mb-1">Username / Email</label>
+                    <input
+                      type="text"
+                      value={smtp.smtp_user}
+                      onChange={(e) => setSmtp((p) => ({ ...p, smtp_user: e.target.value }))}
+                      className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:border-blue-500 shadow-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-slate-500 block mb-1">
+                      Password / App Password
+                      <span className="font-normal text-slate-400"> (leave blank to keep)</span>
+                    </label>
+                    <input
+                      type="password"
+                      value={smtp.smtp_pass}
+                      onChange={(e) => setSmtp((p) => ({ ...p, smtp_pass: e.target.value }))}
+                      className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:border-blue-500 shadow-sm"
+                      placeholder="••••••••"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-slate-500 block mb-1">From Address</label>
+                    <input
+                      type="text"
+                      value={smtp.smtp_from}
+                      onChange={(e) => setSmtp((p) => ({ ...p, smtp_from: e.target.value }))}
+                      className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:border-blue-500 shadow-sm"
+                      placeholder="alerts@company.com"
+                    />
+                  </div>
+                </>
+              )}
+
+              {/* SendGrid Fields */}
+              {emailProvider === "sendgrid" && (
+                <>
+                  <div>
+                    <label className="text-xs font-semibold text-slate-500 block mb-1">API Key</label>
+                    <input
+                      type="password"
+                      value={sendgrid.api_key}
+                      onChange={(e) => setSendgrid((p) => ({ ...p, api_key: e.target.value }))}
+                      className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:border-blue-500 shadow-sm"
+                      placeholder="SG.xxxxxx..."
+                    />
+                    <p className="text-xs text-slate-400 mt-1">Get from sendgrid.com → API Keys</p>
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-slate-500 block mb-1">From Email</label>
+                    <input
+                      type="text"
+                      value={sendgrid.from_email}
+                      onChange={(e) => setSendgrid((p) => ({ ...p, from_email: e.target.value }))}
+                      className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:border-blue-500 shadow-sm"
+                      placeholder="alerts@company.com"
+                    />
+                  </div>
+                </>
+              )}
+
+              {/* Gmail Fields */}
+              {emailProvider === "gmail" && (
+                <>
+                  <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                    <p className="text-xs text-amber-800">
+                      ⚠️ Gmail requires <strong>App Password</strong>, not your regular password.
+                      Enable 2FA first, then create App Password at myaccount.google.com/apppasswords
+                    </p>
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-slate-500 block mb-1">Gmail Address</label>
+                    <input
+                      type="email"
+                      value={smtp.smtp_user}
+                      onChange={(e) => setSmtp((p) => ({ ...p, smtp_user: e.target.value }))}
+                      className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:border-blue-500 shadow-sm"
+                      placeholder="you@gmail.com"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-slate-500 block mb-1">App Password</label>
+                    <input
+                      type="password"
+                      value={smtp.smtp_pass}
+                      onChange={(e) => setSmtp((p) => ({ ...p, smtp_pass: e.target.value }))}
+                      className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:border-blue-500 shadow-sm"
+                      placeholder="xxxx xxxx xxxx xxxx"
+                    />
+                  </div>
+                </>
+              )}
+
+              {/* Test Button */}
+              <div className="pt-3 border-t border-slate-200">
+                <button
+                  type="button"
+                  onClick={handleTestEmail}
+                  disabled={testingEmail}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 disabled:opacity-50 rounded-lg text-sm font-medium text-slate-700 transition-colors"
+                >
+                  {testingEmail ? (
+                    <>⏳ Sending test...</>
+                  ) : (
+                    <>🧪 Send Test Email</>
+                  )}
+                </button>
+                {testResult && (
+                  <p className={`text-xs mt-2 ${testResult.success ? "text-green-600" : "text-red-600"}`}>
+                    {testResult.message}
+                  </p>
+                )}
               </div>
             </div>
           </div>
