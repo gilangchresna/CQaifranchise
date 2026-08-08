@@ -10,16 +10,16 @@ const app = express();
 app.use(express.json());
 app.use(cors());
 
-// Only need Supabase URL + Service Role Key (no SMTP in env)
-const SUPABASE_URL = process.env.SUPABASE_URL;
-const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+// Only need Supabase URL + Anon Key (RLS disabled, settings are public)
+const SUPABASE_URL = process.env.SUPABASE_URL || 'https://ploqeifazcgzwjzmukgp.supabase.co';
+const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBsb3FlaWZhemNnendqem11a2dwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM5Mjc5MzYsImV4cCI6MjA5OTUwMzkzNn0.78V9J0gKCYLLMvVEIg6VKhVXTRiO_Zv2NmsSIpxgPrM';
 
-if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY) {
-  console.error('❌ Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY');
+if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+  console.error('❌ Missing SUPABASE_URL or SUPABASE_ANON_KEY');
   process.exit(1);
 }
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 // Cache settings for 5 minutes
 let settingsCache = null;
