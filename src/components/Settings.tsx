@@ -145,8 +145,14 @@ export function Settings() {
 
   const [testingEmail, setTestingEmail] = useState(false);
   const [testResult, setTestResult] = useState<{success: boolean; message: string} | null>(null);
+  const [testEmail, setTestEmail] = useState("");
 
   async function handleTestEmail() {
+    if (!testEmail.trim()) {
+      setTestResult({ success: false, message: "❌ Enter recipient email address" });
+      return;
+    }
+
     setTestingEmail(true);
     setTestResult(null);
 
@@ -169,7 +175,7 @@ export function Settings() {
         },
         body: JSON.stringify({
           provider: emailProvider,
-          to_email: smtp.smtp_user,
+          to_email: testEmail,
           subject: "CyberQuote Email Test",
           body: "This is a test email from CyberQuote settings page.",
         }),
@@ -177,12 +183,12 @@ export function Settings() {
 
       const data = await res.json();
       if (data.success) {
-        setTestResult({ success: true, message: "✅ Test email sent! Check inbox." });
+        setTestResult({ success: true, message: `✅ Test email sent to ${testEmail}! Check inbox.` });
       } else {
         setTestResult({ success: false, message: `❌ ${data.error || data.config_status}` });
       }
     } catch (err) {
-      setTestResult({ success: false, message: "❌ Failed to send test email. Please check your SMTP configuration and try again." });
+      setTestResult({ success: false, message: "❌ Failed to send test email. Please check your configuration and try again." });
     } finally {
       setTestingEmail(false);
     }
@@ -503,6 +509,16 @@ export function Settings() {
 
               {/* Test Button */}
               <div className="pt-3 border-t border-slate-200">
+                <div className="mb-3">
+                  <label className="text-xs font-semibold text-slate-500 block mb-1">Test Recipient Email</label>
+                  <input
+                    type="email"
+                    value={testEmail}
+                    onChange={(e) => setTestEmail(e.target.value)}
+                    placeholder="test@example.com"
+                    className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:border-blue-500 shadow-sm"
+                  />
+                </div>
                 <button
                   type="button"
                   onClick={handleTestEmail}
@@ -510,7 +526,7 @@ export function Settings() {
                   className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 disabled:opacity-50 rounded-lg text-sm font-medium text-slate-700 transition-colors"
                 >
                   {testingEmail ? (
-                    <>⏳ Sending test...</>
+                    <>⏳ Sending...</>
                   ) : (
                     <>🧪 Send Test Email</>
                   )}
