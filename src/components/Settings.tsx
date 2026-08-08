@@ -157,38 +157,23 @@ export function Settings() {
     setTestResult(null);
 
     try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      const token = session?.access_token;
-      if (!token) {
-        setTestResult({ success: false, message: "Not authenticated" });
-        return;
-      }
-
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      const res = await fetch(`${supabaseUrl}/functions/v1/email`, {
+      const emailApiUrl = import.meta.env.VITE_EMAIL_API_URL || `${supabaseUrl.replace('supabase.co', 'functions-edge.supabase.co')}`;
+
+      const res = await fetch(`${emailApiUrl}/email/test`, {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          provider: emailProvider,
-          to_email: testEmail,
-          subject: "CyberQuote Email Test",
-          body: "This is a test email from CyberQuote settings page.",
-        }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ to: testEmail }),
       });
 
       const data = await res.json();
       if (data.success) {
-        setTestResult({ success: true, message: `✅ Test email sent to ${testEmail}! Check inbox.` });
+        setTestResult({ success: true, message: `✅ Test email sent to ${testEmail}!` });
       } else {
-        setTestResult({ success: false, message: `❌ ${data.error || data.config_status}` });
+        setTestResult({ success: false, message: `❌ ${data.error || 'Failed to send'}` });
       }
     } catch (err) {
-      setTestResult({ success: false, message: "❌ Failed to send test email. Please check your configuration and try again." });
+      setTestResult({ success: false, message: "❌ Failed to send test email." });
     } finally {
       setTestingEmail(false);
     }
