@@ -106,8 +106,12 @@ serve(async (req: Request) => {
         daysInPeriod = 7;
     }
     
-    // Get user's accessible outlets (FRANCHISEE_OWNER/STAFF sees only their outlets)
+    // Get user's accessible outlets
+    // FRANCHISEE: sees only their assigned outlets via user_outlets
+    // REGIONAL: sees all outlets (demo mode — real impl would filter by user's region)
+    // HQ: sees all outlets (no filter)
     let allowedOutletIds: number[] | null = null;
+
     if (effectiveRole === "FRANCHISEE_OWNER" || effectiveRole === "FRANCHISEE_STAFF") {
       const { data: userOutlets } = await supabase
         .from("user_outlets")
@@ -127,6 +131,10 @@ serve(async (req: Request) => {
         }, { headers: corsHeaders });
       }
       allowedOutletIds = userOutlets.map((uo: any) => uo.outlet_id);
+    } else if (effectiveRole === "REGIONAL_MANAGER") {
+      // Regional sees all outlets in demo mode
+      // (Production: filter by user's assigned region via region_id in user metadata)
+      allowedOutletIds = null; // see all outlets
     }
 
     // =========================================

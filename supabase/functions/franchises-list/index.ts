@@ -31,9 +31,15 @@ serve(async (req: Request) => {
         });
         if (userRes.ok) {
           const userData = await userRes.json();
-          // Use real JWT role; roleParam from URL is demo-only override
-          userRole = roleParam || userData.user_metadata?.role || "HQ_ADMIN";
-          userId = userData.id;
+          // Normalize: UI role names → DB role names (for demo mode role switching)
+          const roleMap: Record<string, string> = {
+            "HQ": "HQ_ADMIN",
+            "Regional": "REGIONAL_MANAGER",
+            "Franchisee": "FRANCHISEE_OWNER",
+          };
+          // Use roleParam from UI if present (demo mode), otherwise use real JWT role
+          userRole = roleParam ? (roleMap[roleParam] || roleParam) : userRole;
+          userId = userData?.id || null;
         }
       } catch { /* use defaults */ }
     }
@@ -57,6 +63,10 @@ serve(async (req: Request) => {
           outletsQuery = outletsQuery.eq("id", -1); // return empty
         }
       }
+    } else if (userRole === "REGIONAL_MANAGER") {
+      // Regional sees all outlets in demo mode
+      // (Production: filter by user's assigned region via region_id in user metadata)
+      // No filter — see all outlets
     }
 
     const { data: outlets } = await outletsQuery;
