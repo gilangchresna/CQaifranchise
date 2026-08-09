@@ -157,56 +157,27 @@ export function Settings() {
     setTestResult(null);
 
     try {
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      const emailApiUrl = import.meta.env.VITE_EMAIL_API_URL || `${supabaseUrl.replace('supabase.co', 'functions-edge.supabase.co')}`;
+      const baseUrl = window.location.origin;
+      const apiUrl = `/api/email/test`;
 
-      console.log('📧 Testing email...');
-      console.log('  API URL:', emailApiUrl);
-      console.log('  Provider:', emailProvider);
-      console.log('  To:', testEmail);
+      console.log('📧 Testing email via:', apiUrl);
 
-      const res = await fetch(`${emailApiUrl}/test`, {
+      const res = await fetch(apiUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ to: testEmail }),
       });
 
-      console.log('  Response status:', res.status);
-
       const data = await res.json();
-      console.log('  Response:', data);
 
       if (data.success) {
         setTestResult({ success: true, message: `✅ Test email sent to ${testEmail}!` });
       } else {
-        let errorMsg = data.error || 'Unknown error';
-
-        // Provide helpful error messages
-        if (errorMsg.includes('ECONNREFUSED')) {
-          errorMsg = '❌ Cannot connect to email server. Is the backend running?';
-        } else if (errorMsg.includes('ENOTFOUND')) {
-          errorMsg = '❌ Email server hostname not found. Check API URL.';
-        } else if (errorMsg.includes('authentication')) {
-          errorMsg = '❌ SMTP authentication failed. Check username/password in Settings.';
-        } else if (errorMsg.includes('Missing credentials')) {
-          errorMsg = '❌ SMTP credentials not set. Save SMTP settings first.';
-        } else if (errorMsg.includes('getaddrinfo')) {
-          errorMsg = '❌ Cannot resolve SMTP host. Check smtp_host in Settings.';
-        } else {
-          errorMsg = `❌ ${errorMsg}`;
-        }
-
-        setTestResult({ success: false, message: errorMsg });
+        setTestResult({ success: false, message: `❌ ${data.error || 'Failed to send'}` });
       }
     } catch (err) {
       console.error('Email test error:', err);
-      let errorMsg = '❌ Failed to connect to email service.';
-
-      if (err.message?.includes('fetch')) {
-        errorMsg = '❌ Cannot reach email server. Check if backend is running on port 3001.';
-      }
-
-      setTestResult({ success: false, message: errorMsg });
+      setTestResult({ success: false, message: "❌ Failed to send test email." });
     } finally {
       setTestingEmail(false);
     }

@@ -127,6 +127,22 @@ export function RiskDashboard({ activeRole }: { activeRole: Role }) {
       
       setRisks(mockRisks);
       setOutletRisks([]);
+
+      // Compute summary from real data
+      const totalOutlets = new Set((inventory || []).map((inv: any) => inv.outlet_id)).size;
+      const atRiskOutlets = new Set(mockRisks.map(r => r.outlet_id)).size;
+      const criticalItems = mockRisks.filter(r => r.risk_level === 'HIGH').length;
+      const avgRisk = mockRisks.length > 0
+        ? Math.round(mockRisks.reduce((s, r) => s + r.risk_score, 0) / mockRisks.length)
+        : 0;
+
+      setSummary({
+        total_outlets: totalOutlets,
+        at_risk_outlets: atRiskOutlets,
+        critical_items_total: criticalItems,
+        avg_risk_score: avgRisk,
+        top_risks: mockRisks.slice(0, 5),
+      });
     } catch (err) {
       console.error('Error fetching risk data:', err);
       setRisks([]);
