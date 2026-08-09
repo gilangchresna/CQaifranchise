@@ -13,28 +13,23 @@ serve(async (req: Request) => {
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-
-  // Use service role to query auth.users
   const supabase = createClient(supabaseUrl, serviceKey, {
     auth: { autoRefreshToken: false, persistSession: false },
   });
 
-  // Query all users
   const { data: users, error: usersError } = await supabase.auth.admin.listUsers();
 
   if (usersError || !users) {
-    return new Response(JSON.stringify({ error: usersError?.message || "No users" }), {
+    return new Response(JSON.stringify({ error: usersError?.message || "Failed to list users" }), {
       status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 
-  const franchiseeUsers = users.users.filter(u =>
-    u.user_metadata?.role === "FRANCHISEE_OWNER" ||
-    u.user_metadata?.role === "FRANCHISEE_STAFF"
-  );
+  // Find HQ_ADMIN users to get their user IDs
+  const hqUsers = users.users.filter(u => u.user_metadata?.role === "HQ_ADMIN");
 
-  if (franchiseeUsers.length === 0) {
-    return new Response(JSON.stringify({ message: "No franchisee users found", users: users.users.map(u => ({ id: u.id, email: u.email, role: u.user_metadata?.role })) }), {
+  if (hqUsers.length === 0) {
+    return new Response(JSON.stringify({ message: "No HQ users found", total: users.users.length }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
@@ -42,11 +37,12 @@ serve(async (req: Request) => {
   // Clear existing
   await supabase.from("user_outlets").delete().neq("id", 0);
 
-  // Insert user_outlets for each franchisee user
-  const inserts = franchiseeUsers.map(u => ({
+  // Map each HQ user to outlet 1 (WKW Singapore Standard) for demo purposes
+  // This allows the HQ user to see franchisee-scoped data when role-switching to Franchisee
+  const inserts = hqUsers.map(u => ({
     user_id: u.id,
-    outlet_id: 1, // Demo: all franchisees map to outlet 1 (WKW Singapore Standard)
-    role: u.user_metadata?.role || "FRANCHISEE_OWNER",
+    outlet_id: 1,
+    role: "HQ_ADMIN",
   }));
 
   const { error: insertError } = await supabase.from("user_outlets").insert(inserts);
@@ -58,9 +54,9 @@ serve(async (req: Request) => {
   }
 
   return new Response(JSON.stringify({
-    message: "user_outlets seeded",
+    message: "user_outlets seeded for demo",
     inserted: inserts.length,
-    users: franchiseeUsers.map(u => ({ id: u.id, email: u.email, role: u.user_metadata?.role })),
+    users: hqUsers.map(u => ({ id: u.id, email: u.email })),
   }), {
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });

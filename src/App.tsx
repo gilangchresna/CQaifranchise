@@ -64,7 +64,7 @@ export default function App() {
     switch (activeTab.toLowerCase()) {
       case "dashboard":
       case "franchise":
-        return <Dashboard activeRole="Franchisee" />;
+        return <Dashboard activeRole={activeRole} />;
       case "outlets":
         return <Outlets activeRole={activeRole} />;
       case "workforce":

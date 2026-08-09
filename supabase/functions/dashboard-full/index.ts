@@ -129,6 +129,39 @@ serve(async (req: Request) => {
       allowedOutletIds = userOutlets.map((uo: any) => uo.outlet_id);
     }
 
+    // =========================================
+    // GET OUTLET → REGION → CURRENCY MAPPING
+    // =========================================
+    const { data: allOutlets } = await supabase
+      .from("outlets")
+      .select("id, region_id");
+
+    const { data: allRegions } = await supabase
+      .from("regions")
+      .select("id, code, currency_code");
+
+    // Build outlet_id → currency map
+    const outletCurrency: Record<number, string> = {};
+    const regionCurrency: Record<number, string> = {};
+    const regionCode: Record<number, string> = {};
+
+    allRegions?.forEach((r: any) => {
+      regionCurrency[r.id] = r.currency_code || "SGD";
+      regionCode[r.id] = r.code || "SG";
+    });
+
+    allOutlets?.forEach((o: any) => {
+      outletCurrency[o.id] = regionCurrency[o.region_id] || "SGD";
+    });
+
+    // Static rates to SGD (MVP — in production would use live API)
+    const toSGD: Record<string, number> = {
+      "SGD": 1.0,
+      "IDR": 1 / 12500,   // Rp 12,500 = S$1
+      "THB": 1 / 27.5,    // ฿27.5 = S$1
+      "MYR": 1 / 3.4,     // RM 3.4 = S$1
+    };
+
     // Fetch ALL data with pagination (fix for 1000 row limit)
     let allSales: any[] = [];
     let offset = 0;
@@ -153,30 +186,36 @@ serve(async (req: Request) => {
       offset += limit;
     }
     
-    // Calculate totals
-    let totalRevenue = 0;
-    let totalSettlement = 0;
+    // Calculate totals (all amounts converted to SGD)
+    let totalRevenueSGD = 0;
+    let totalSettlementSGD = 0;
     let transactionCount = 0;
     const dailySales: Record<string, number> = {};
     const paymentBreakdown: Record<string, number> = {};
     const platformBreakdown: Record<string, number> = {};
     const outletsSet = new Set<number>();
-    
+
     allSales.forEach(t => {
-      const amount = Number(t.settlement_amount || t.amount);
-      totalRevenue += Number(t.amount);
-      totalSettlement += amount;
+      const rawAmount = Number(t.amount);
+      const rawSettlement = Number(t.settlement_amount) || rawAmount;
+      const currency = outletCurrency[t.outlet_id] || "SGD";
+      const rate = toSGD[currency] || 1.0;
+
+      // Convert to SGD for totals
+      totalRevenueSGD += rawAmount * rate;
+      totalSettlementSGD += rawSettlement * rate;
       transactionCount++;
       outletsSet.add(t.outlet_id);
-      
+
       const date = t.date?.split('T')[0];
-      dailySales[date] = (dailySales[date] || 0) + amount;
-      paymentBreakdown[t.payment_method] = (paymentBreakdown[t.payment_method] || 0) + amount;
-      platformBreakdown[t.platform || 'dine_in'] = (platformBreakdown[t.platform || 'dine_in'] || 0) + amount;
+      // Daily/breakdown in original currency (no conversion — for display only)
+      dailySales[date] = (dailySales[date] || 0) + rawAmount;
+      paymentBreakdown[t.payment_method] = (paymentBreakdown[t.payment_method] || 0) + rawAmount;
+      platformBreakdown[t.platform || 'dine_in'] = (platformBreakdown[t.platform || 'dine_in'] || 0) + rawAmount;
     });
     
-    // Calculate avg daily
-    const avgDaily = Object.keys(dailySales).length > 0 ? totalSettlement / Object.keys(dailySales).length : 0;
+    // Calculate avg daily (in SGD)
+    const avgDaily = Object.keys(dailySales).length > 0 ? totalSettlementSGD / Object.keys(dailySales).length : 0;
     
     // Get metrics (scoped to franchisee's outlets if applicable)
     let outletCount: number | null = null;
@@ -204,19 +243,23 @@ serve(async (req: Request) => {
     while (true) {
       const { data: batch } = await supabase
         .from("sales_transactions")
-        .select("settlement_amount")
+        .select("settlement_amount, amount, outlet_id")
         .gte("date", compareStartDate)
         .lte("date", compareEndDate)
         .range(compareOffset, compareOffset + limit - 1);
-      
+
       if (!batch || batch.length === 0) break;
       compareSales = compareSales.concat(batch);
       if (batch.length < limit) break;
       compareOffset += limit;
     }
-    
-    const compareTotal = compareSales.reduce((sum, t) => sum + Number(t.settlement_amount || t.amount), 0);
-    const variance = compareTotal > 0 ? ((totalSettlement - compareTotal) / compareTotal) * 100 : 0;
+
+    const compareTotal = compareSales.reduce((sum, t) => {
+      const raw = Number(t.settlement_amount) || Number(t.amount) || 0;
+      const currency = outletCurrency[t.outlet_id] || "SGD";
+      return sum + raw * (toSGD[currency] || 1.0);
+    }, 0);
+    const variance = compareTotal > 0 ? ((totalSettlementSGD - compareTotal) / compareTotal) * 100 : 0;
     
     return Response.json({
       period,
@@ -224,10 +267,10 @@ serve(async (req: Request) => {
       date_range: { start: startDate, end: todayStr },
       records_fetched: allSales.length,
       totals: {
-        revenue: Math.round(totalRevenue * 100) / 100,
-        settlement: Math.round(totalSettlement * 100) / 100,
+        revenue: Math.round(totalRevenueSGD * 100) / 100,
+        settlement: Math.round(totalSettlementSGD * 100) / 100,
         transactions: transactionCount,
-        avg_transaction: transactionCount > 0 ? Math.round((totalSettlement / transactionCount) * 100) / 100 : 0,
+        avg_transaction: transactionCount > 0 ? Math.round((totalSettlementSGD / transactionCount) * 100) / 100 : 0,
         avg_daily: Math.round(avgDaily * 100) / 100,
       },
       comparison: {
