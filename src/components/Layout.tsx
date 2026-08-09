@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Role } from "@/src/types";
 import UserMenu from "./UserMenu";
 import { LanguageSwitcher } from "./LanguageSwitcher";
@@ -33,6 +33,55 @@ interface LayoutProps {
 
 export function Layout({ children, activeRole, onRoleChange, activeTab, onTabChange }: LayoutProps) {
   const { t } = useI18n();
+  const [posLiveStatus, setPosLiveStatus] = useState<'live' | 'stale' | 'offline'>('offline');
+  const [lastTxnAt, setLastTxnAt] = useState<string | null>(null);
+
+  // ── POS Live Polling (Option B) ─────────────────────────────────────────────
+  // Poll system_status.last_txn_at every 10s — visible on ALL pages via header
+  useEffect(() => {
+    let intervalId: ReturnType<typeof setInterval>;
+
+    async function checkPosStatus() {
+      try {
+        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+        const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+        const res = await fetch(
+          `${supabaseUrl}/rest/v1/system_status?select=last_txn_at&id=eq.1`,
+          {
+            headers: {
+              apikey: anonKey,
+              Authorization: `Bearer ${anonKey}`,
+            },
+          }
+        );
+        if (!res.ok) return;
+        const rows = await res.json();
+        if (!rows || rows.length === 0) return;
+
+        const lastTx: string = rows[0].last_txn_at;
+        setLastTxnAt(lastTx);
+
+        const lastMs = new Date(lastTx).getTime();
+        const ageSec = (Date.now() - lastMs) / 1000;
+
+        if (ageSec <= 60) {
+          setPosLiveStatus('live');
+        } else if (ageSec <= 300) {
+          setPosLiveStatus('stale');     // >1min, <5min
+        } else {
+          setPosLiveStatus('offline');    // >5min
+        }
+      } catch {
+        // Network error — stay in whatever state
+      }
+    }
+
+    checkPosStatus();
+    intervalId = setInterval(checkPosStatus, 10_000);
+
+    return () => clearInterval(intervalId);
+  }, []);
+
   const navItems = (() => {
     switch (activeRole) {
       case "HQ":
@@ -114,7 +163,7 @@ export function Layout({ children, activeRole, onRoleChange, activeTab, onTabCha
 
         {/* Role Switcher */}
         <div className="border-t border-slate-200 p-4">
-          <p className="text-xs text-slate-400 font-semibold mb-2">{t.nav.activeRole}</p>
+          <p className="px-2 pb-2 text-xs text-slate-400 font-semibold mb-2">{t.nav.activeRole}</p>
           <div className="flex gap-1">
             {(["HQ", "Regional", "Franchisee"] as Role[]).map(role => (
               <button
@@ -138,10 +187,41 @@ export function Layout({ children, activeRole, onRoleChange, activeTab, onTabCha
         <header className="h-16 flex items-center justify-between border-b border-slate-200 bg-white px-8">
           <div className="flex items-center gap-4">
             <h1 className="text-base font-semibold text-slate-900">{activeRole} {t.dashboard.title}</h1>
-            <span className="flex items-center gap-1 px-2 py-1 rounded-md bg-green-50 border border-green-100">
-              <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-              <span className="text-xs font-medium text-green-700">{t.common.live}</span>
-            </span>
+
+            {/* ── POS Live/Offline Indicator (Option B — all pages) ── */}
+            <div className="flex items-center gap-1.5 text-xs font-medium" title="POS transaction feed">
+              {posLiveStatus === 'live' && (
+                <>
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+                  </span>
+                  <span className="text-green-600">Live</span>
+                </>
+              )}
+              {posLiveStatus === 'stale' && (
+                <>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-yellow-500"></span>
+                  <span className="text-yellow-600">Stale</span>
+                </>
+              )}
+              {posLiveStatus === 'offline' && (
+                <>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+                  <span className="text-red-600">Offline</span>
+                </>
+              )}
+              {lastTxnAt && (
+                <span className="text-slate-400 text-[10px]">
+                  {(() => {
+                    const ageSec = Math.round((Date.now() - new Date(lastTxnAt).getTime()) / 1000);
+                    if (ageSec < 60) return `${ageSec}s ago`;
+                    if (ageSec < 3600) return `${Math.round(ageSec / 60)}m ago`;
+                    return `${Math.round(ageSec / 3600)}h ago`;
+                  })()}
+                </span>
+              )}
+            </div>
           </div>
 
           <div className="flex items-center gap-3">
