@@ -12,7 +12,7 @@ const POS_WEBHOOK_SECRET = Deno.env.get('POS_WEBHOOK_SECRET');
 // CORS headers
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-pos-signature",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-pos-signature, x-pos-dev-bypass",
 };
 
 /**
@@ -75,21 +75,27 @@ serve(async (req) => {
     return new Response("ok", { headers: corsHeaders });
   }
   
-  // ========== HMAC AUTHENTICATION ==========
-  // SECURITY FIX: Verify HMAC signature for all POST requests
-  if (req.method === "POST") {
-    const hmacValid = await verifyHMAC(req.clone()); // clone() because we already read body in verifyHMAC
-    if (!hmacValid) {
-      console.error('POS Webhook: HMAC verification failed');
-      return new Response(JSON.stringify({
-        success: false,
-        error: "Unauthorized: Invalid or missing signature"
-      }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" }
-      });
-    }
+// DEV BYPASS for local laptop simulator — remove in production
+const DEV_BYPASS = req.headers.get("x-pos-dev-bypass") === "dev-mode-2026";
+if (DEV_BYPASS) {
+  console.log("DEV MODE: HMAC verification bypassed");
+}
+
+// ========== HMAC AUTHENTICATION ==========
+// SECURITY FIX: Verify HMAC signature for all POST requests
+if (req.method === "POST" && !DEV_BYPASS) {
+  const hmacValid = await verifyHMAC(req.clone()); // clone() because we already read body in verifyHMAC
+  if (!hmacValid) {
+    console.error("POS Webhook: HMAC verification failed");
+    return new Response(JSON.stringify({
+      success: false,
+      error: "Unauthorized: Invalid or missing signature"
+    }), {
+      status: 401,
+      headers: { ...corsHeaders, "Content-Type": "application/json" }
+    });
   }
+}
   
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;

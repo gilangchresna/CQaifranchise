@@ -13,7 +13,7 @@ import {
   ResponsiveContainer,
   Legend,
 } from "recharts";
-import { supabase, EDGE_FUNCTIONS_URL } from "@/src/lib/supabase";
+import { supabase, EDGE_FUNCTIONS_URL, supabaseUrl } from "@/src/lib/supabase";
 import { Role } from '@/src/types';
 
 interface DashboardStats {
@@ -82,6 +82,8 @@ export function Dashboard({ activeRole }: { activeRole: Role }) {
   }>>({});
   const [error, setError] = useState<string | null>(null);
   const [realtimeStatus, setRealtimeStatus] = useState<'connected' | 'connecting' | 'disconnected'>('connecting');
+  const [posLiveStatus, setPosLiveStatus] = useState<'live' | 'stale' | 'offline'>('offline');
+  const [lastTxnAt, setLastTxnAt] = useState<string | null>(null);
 
   useEffect(() => {
     fetchDashboardData();
@@ -122,6 +124,52 @@ export function Dashboard({ activeRole }: { activeRole: Role }) {
       supabase.removeChannel(outletsChannel);
     };
   }, [activeRole, selectedPeriod]);
+
+  // ── POS Live Polling (Option B) ──────────────────────────────────────────
+  // Poll system_status.last_txn_at every 10s to detect POS offline state
+  useEffect(() => {
+    let intervalId: ReturnType<typeof setInterval>;
+
+    async function checkPosStatus() {
+      try {
+        const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+        const res = await fetch(
+          `${supabaseUrl}/rest/v1/system_status?select=last_txn_at&id=eq.1`,
+          {
+            headers: {
+              apikey: anonKey,
+              Authorization: `Bearer ${anonKey}`,
+            },
+          }
+        );
+        if (!res.ok) return;
+        const rows = await res.json();
+        if (!rows || rows.length === 0) return;
+
+        const lastTx: string = rows[0].last_txn_at;
+        setLastTxnAt(lastTx);
+
+        const lastMs = new Date(lastTx).getTime();
+        const ageSec = (Date.now() - lastMs) / 1000;
+
+        if (ageSec <= 60) {
+          setPosLiveStatus('live');
+        } else if (ageSec <= 300) {
+          setPosLiveStatus('stale');   // >1min, <5min — last txn was >1min ago
+        } else {
+          setPosLiveStatus('offline'); // >5min — POS likely stopped
+        }
+      } catch {
+        // Network error — stay in whatever state we were in
+      }
+    }
+
+    // Poll immediately on mount, then every 10s
+    checkPosStatus();
+    intervalId = setInterval(checkPosStatus, 10_000);
+
+    return () => clearInterval(intervalId);
+  }, []);
 
   async function fetchAlerts() {
     try {
@@ -270,13 +318,43 @@ export function Dashboard({ activeRole }: { activeRole: Role }) {
       {/* Period Filter */}
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-slate-900">{activeRole} Dashboard</h1>
-        <div className="flex items-center gap-1.5 text-xs font-medium" title="Realtime data feed">
-          {realtimeStatus === 'connected' && <Wifi className="w-3.5 h-3.5 text-green-500" />}
-          {realtimeStatus === 'connecting' && <Activity className="w-3.5 h-3.5 text-yellow-500 animate-pulse" />}
-          {realtimeStatus === 'disconnected' && <WifiOff className="w-3.5 h-3.5 text-red-500" />}
-          <span className={realtimeStatus === 'connected' ? 'text-green-600' : realtimeStatus === 'connecting' ? 'text-yellow-600' : 'text-red-600'}>
-            {realtimeStatus === 'connected' ? 'Live' : realtimeStatus === 'connecting' ? 'Connecting...' : 'Offline'}
-          </span>
+        {/* POS Live / Offline Indicator (Option B — polls system_status.last_txn_at) */}
+        <div className="flex items-center gap-1.5 text-xs font-medium" title="POS transaction feed">
+          {posLiveStatus === 'live' && (
+            <>
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+              </span>
+              <span className="text-green-600">Live</span>
+            </>
+          )}
+          {posLiveStatus === 'stale' && (
+            <>
+              <span className="relative flex h-2 w-2">
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-yellow-500"></span>
+              </span>
+              <span className="text-yellow-600">Stale</span>
+            </>
+          )}
+          {posLiveStatus === 'offline' && (
+            <>
+              <span className="relative flex h-2 w-2">
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+              </span>
+              <span className="text-red-600">Offline</span>
+            </>
+          )}
+          {lastTxnAt && (
+            <span className="text-slate-400 text-[10px]">
+              {(() => {
+                const ageSec = Math.round((Date.now() - new Date(lastTxnAt).getTime()) / 1000);
+                if (ageSec < 60) return `${ageSec}s ago`;
+                if (ageSec < 3600) return `${Math.round(ageSec / 60)}m ago`;
+                return `${Math.round(ageSec / 3600)}h ago`;
+              })()}
+            </span>
+          )}
         </div>
         <div className="flex gap-1 bg-slate-100 p-1 rounded-lg">
           {[

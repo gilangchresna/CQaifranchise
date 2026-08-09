@@ -69,11 +69,11 @@ if __name__ == "__main__":
         print("ERROR: --secret required (set POS_WEBHOOK_SECRET env var)")
         sys.exit(1)
 
-    print(f"\nPOS Simulator -> L1 webhook\nURL: {args.url}\nOutlet: {args.outlet_id}\nPlatform: {args.platform}\nInterval: {args.interval}s\n")
+    print(f"\nPOS Simulator -> L1 webhook\nURL: {args.url}\nOutlet: {args.outlet}\nPlatform: {args.platform}\nInterval: {args.interval}s\n")
     n = 0
     while True:
         n += 1
-        ok, code, body = send(args.url, args.secret, args.outlet_id, args.platform)
+        ok, code, body = send(args.url, args.secret, args.outlet, args.platform)
         ts = datetime.now().strftime("%H:%M:%S")
         if ok:
             try:
