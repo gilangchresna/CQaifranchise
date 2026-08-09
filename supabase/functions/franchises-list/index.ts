@@ -17,8 +17,10 @@ serve(async (req: Request) => {
     const supabase = createClient(supabaseUrl, serviceKey);
 
     // Get role from Authorization header
+    const url = new URL(req.url);
+    const roleParam = url.searchParams.get("role"); // e.g. ?role=Franchisee from Dashboard
     const authHeader = req.headers.get("Authorization") || "";
-    let userRole = "HQ_ADMIN";
+    let userRole = roleParam || "HQ_ADMIN";
     let userId: string | null = null;
 
     if (authHeader.startsWith("Bearer ")) {
@@ -29,7 +31,8 @@ serve(async (req: Request) => {
         });
         if (userRes.ok) {
           const userData = await userRes.json();
-          userRole = userData.user_metadata?.role || "HQ_ADMIN";
+          // Use real JWT role; roleParam from URL is demo-only override
+          userRole = roleParam || userData.user_metadata?.role || "HQ_ADMIN";
           userId = userData.id;
         }
       } catch { /* use defaults */ }

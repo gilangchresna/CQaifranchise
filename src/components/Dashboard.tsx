@@ -173,7 +173,8 @@ export function Dashboard({ activeRole }: { activeRole: Role }) {
       const token = session.access_token;
 
       // Fetch dashboard stats with period parameter
-      const statsRes = await fetch(`${EDGE_FUNCTIONS_URL}/dashboard-full?period=${selectedPeriod}`, {
+      // Pass activeRole to allow edge function to scope data for demo role switching
+      const statsRes = await fetch(`${EDGE_FUNCTIONS_URL}/dashboard-full?period=${selectedPeriod}&role=${activeRole}`, {
         headers: { 
           'Authorization': `Bearer ${token}`  // FIX: Use session token, not anon key
         },
@@ -209,7 +210,7 @@ export function Dashboard({ activeRole }: { activeRole: Role }) {
       }
 
       // Fetch outlets for the outlet list
-      const outletsRes = await fetch(`${EDGE_FUNCTIONS_URL}/franchises-list`, {
+      const outletsRes = await fetch(`${EDGE_FUNCTIONS_URL}/franchises-list?role=${activeRole}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (outletsRes.ok) {

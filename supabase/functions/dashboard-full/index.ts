@@ -47,11 +47,20 @@ serve(async (req: Request) => {
     });
   }
   const user = authResult.user!;
+  const url = new URL(req.url);
+  // Demo override: allow ?role=Franchisee to simulate role in UI without re-login
+  const roleOverride = url.searchParams.get("role");
+  // Normalize: UI role names → DB role names
+  const roleMap: Record<string, string> = {
+    "HQ": "HQ_ADMIN",
+    "Regional": "REGIONAL_MANAGER",
+    "Franchisee": "FRANCHISEE_OWNER",
+  };
+  const effectiveRole = roleMap[roleOverride || ""] || roleOverride || user.role;
 
   const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
   try {
-    const url = new URL(req.url);
     const period = url.searchParams.get("period") || "7d";
     
     // Real-time "today" — reflects live data as it arrives.
@@ -97,9 +106,9 @@ serve(async (req: Request) => {
         daysInPeriod = 7;
     }
     
-    // Get user's accessible outlets (FRANCHISEE_OWNER/STAF­F sees only their outlets)
+    // Get user's accessible outlets (FRANCHISEE_OWNER/STAFF sees only their outlets)
     let allowedOutletIds: number[] | null = null;
-    if (user.role === "FRANCHISEE_OWNER" || user.role === "FRANCHISEE_STAFF") {
+    if (effectiveRole === "FRANCHISEE_OWNER" || effectiveRole === "FRANCHISEE_STAFF") {
       const { data: userOutlets } = await supabase
         .from("user_outlets")
         .select("outlet_id")
