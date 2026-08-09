@@ -112,12 +112,23 @@ serve(async (req) => {
     const { period = '7d', outlet_id } = body;
     const { startDate, endDate, periodLabel } = getDateRange(period);
 
-    // Get outlets
+    // =====================================================
+    // ROLE-BASED ACCESS FILTER
+    // - FRANCHISEE: outlets via user_outlets table
+    // - REGIONAL: outlets in user's region via user_profiles.region_id
+    // - HQ_ADMIN: all outlets
+    // =====================================================
     let outletsQuery = supabase.from('outlets').select('*, region:regions(*)').order('id');
     if (user.role === 'FRANCHISEE_OWNER' || user.role === 'FRANCHISEE_STAFF') {
       const { data: userOutlets } = await supabase.from('user_outlets').select('outlet_id').eq('user_id', user.id);
       if (userOutlets && userOutlets.length > 0) {
         outletsQuery = outletsQuery.in('id', userOutlets.map((uo: any) => uo.outlet_id));
+      }
+    } else if (user.role === 'REGIONAL_MANAGER') {
+      const { data: up } = await supabase
+        .from('user_profiles').select('region_id').eq('id', user.id).single();
+      if (up?.region_id) {
+        outletsQuery = outletsQuery.eq('region_id', up.region_id);
       }
     }
     const { data: outlets } = await outletsQuery;

@@ -106,11 +106,25 @@ serve(async (req: Request) => {
         daysInPeriod = 7;
     }
     
-    // Get user's accessible outlets
-    // FRANCHISEE: sees only their assigned outlets via user_outlets
-    // REGIONAL: sees all outlets (demo mode — real impl would filter by user's region)
-    // HQ: sees all outlets (no filter)
+    // =====================================================
+    // ROLE-BASED ACCESS FILTER
+    // Get user's accessible outlets based on role:
+    // - FRANCHISEE: outlets assigned via user_outlets table
+    // - REGIONAL: outlets in user's region via user_profiles.region_id
+    // - HQ_ADMIN: all outlets
+    // =====================================================
     let allowedOutletIds: number[] | null = null;
+
+    // Fetch user's region_id from user_profiles (for Regional Managers)
+    let userRegionId: number | null = null;
+    if (effectiveRole === "REGIONAL_MANAGER") {
+      const { data: up } = await supabase
+        .from("user_profiles")
+        .select("region_id")
+        .eq("id", user.id)
+        .single();
+      userRegionId = up?.region_id ?? null;
+    }
 
     if (effectiveRole === "FRANCHISEE_OWNER" || effectiveRole === "FRANCHISEE_STAFF") {
       const { data: userOutlets } = await supabase
@@ -132,10 +146,19 @@ serve(async (req: Request) => {
       }
       allowedOutletIds = userOutlets.map((uo: any) => uo.outlet_id);
     } else if (effectiveRole === "REGIONAL_MANAGER") {
-      // Regional sees all outlets in demo mode
-      // (Production: filter by user's assigned region via region_id in user metadata)
-      allowedOutletIds = null; // see all outlets
+      // Regional sees only outlets in their assigned region
+      if (userRegionId) {
+        const { data: regionalOutlets } = await supabase
+          .from("outlets")
+          .select("id")
+          .eq("region_id", userRegionId);
+        allowedOutletIds = (regionalOutlets || []).map((o: any) => o.id);
+      } else {
+        // No region assigned — fallback to all outlets (safety)
+        allowedOutletIds = null;
+      }
     }
+    // HQ_ADMIN: allowedOutletIds = null → all outlets
 
     // =========================================
     // GET OUTLET → REGION → CURRENCY MAPPING

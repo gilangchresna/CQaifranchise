@@ -64,9 +64,19 @@ serve(async (req: Request) => {
         }
       }
     } else if (userRole === "REGIONAL_MANAGER") {
-      // Regional sees all outlets in demo mode
-      // (Production: filter by user's assigned region via region_id in user metadata)
-      // No filter — see all outlets
+      // Regional sees only outlets in their assigned region via user_profiles.region_id
+      // (Production: filter by user's region — not demo mode anymore)
+      if (userId) {
+        const { data: up } = await supabase
+          .from("user_profiles")
+          .select("region_id")
+          .eq("id", userId)
+          .single();
+        if (up?.region_id) {
+          outletsQuery = outletsQuery.eq("region_id", up.region_id);
+        }
+        // regions filtered below based on allowed outlets
+      }
     }
 
     const { data: outlets } = await outletsQuery;
