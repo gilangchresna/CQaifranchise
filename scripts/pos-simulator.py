@@ -60,11 +60,171 @@ if ENV_FILE.exists():
             elif key in ("VITE_SUPABASE_URL", "SUPABASE_URL"):
                 SUPABASE_URL = val
 
-WEBHOOK_URL = (
-    f"{SUPABASE_URL}/functions/v1/pos-webhook"
-    if SUPABASE_URL
-    else "https://ploqeifazcgzwjzmukgp.supabase.co/functions/v1/pos-webhook"
-)
+WEBHOOK_URL = f"{SUPABASE_URL}/functions/v1/pos-webhook" if SUPABASE_URL else ""
+
+# ── Realistic Simulation Config ──────────────────────────────────
+# Outlet IDs per region (from seeded database)
+SG_OUTLETS  = list(range(156, 164)) + [1, 2, 3]  # Singapore: 156-163, WKW/MYB/SAP
+JKT_OUTLETS = [4] + list(range(1, 6))   # Jakarta: JKT-004 + JKT-001..005
+BDG_OUTLETS = [5]                           # Bandung
+SBY_OUTLETS = [6]                           # Surabaya
+BKK_OUTLETS = [7]                           # Bangkok
+KUL_OUTLETS = [8]                           # Kuala Lumpur
+ALL_OUTLETS = SG_OUTLETS + JKT_OUTLETS + BDG_OUTLETS + SBY_OUTLETS + BKK_OUTLETS + KUL_OUTLETS
+PREMIUM_OUTLETS = SG_OUTLETS  # Singapore = premium pricing tier
+
+# Weighted payment (qrcode/cash paling sering)
+PAYMENT_METHODS  = ["cash", "card", "qrcode", "ewallet"]
+PAYMENT_WEIGHTS  = [30, 20, 35, 15]   # cash, card, qrcode, ewallet
+
+PLATFORMS  = ["dine_in", "gofood", "grabfood", "shopeefood", "dine_in"]
+PLATFORM_WEIGHTS = [50, 20, 15, 10, 5]   # dine_in paling sering
+
+# Menu prices per tier
+MENU_STANDARD = [
+    {"name": "Nasi Goreng",       "price": 22000},
+    {"name": "Ayam Geprek",         "price": 20000},
+    {"name": "Mie Goreng",          "price": 18000},
+    {"name": "Es Teh Manis",        "price":  5000},
+    {"name": "Es Jeruk",            "price":  6000},
+    {"name": "Sate Ayam",           "price": 25000},
+    {"name": "Soto Ayam",           "price": 22000},
+    {"name": "Es Campur",           "price": 12000},
+    {"name": "Bakso",              "price": 20000},
+    {"name": "Rawon",              "price": 25000},
+]
+MENU_PREMIUM = [
+    {"name": "Nasi Goreng Premium",  "price": 28000},
+    {"name": "Ayam Geprek Matah",    "price": 25000},
+    {"name": "Mie Goreng Jawa",     "price": 22000},
+    {"name": "Es Teh Manis",        "price":  6000},
+    {"name": "Es Jeruk Peras",       "price":  7000},
+    {"name": "Sate Ayam 10 tusuk",   "price": 32000},
+    {"name": "Soto Special",          "price": 28000},
+    {"name": "Rendang Sapi",         "price": 38000},
+    {"name": "Pisang Goreng Keju",   "price": 15000},
+    {"name": "Es Campur SG style",   "price":  9000},
+]
+# Weighted choice helper
+def wchoice(opts, weights):
+    return random.choices(opts, weights=weights, k=1)[0]
+
+# ── Realistic transaction builder ─────────────────────────────────
+def build_realistic_txn(outlet_id: int, ts: datetime) -> dict:
+    """Build realistic txn: realistic menu items, PPN 11%, weighted payment/platform."""
+    menu = MENU_PREMIUM if outlet_id in PREMIUM_OUTLETS else MENU_STANDARD
+    items    = random.sample(menu, k=random.randint(1, min(4, len(menu))))
+    subtotal = sum(i["price"] for i in items)
+    tax      = round(subtotal * 0.11)
+
+    # Discount: 30% chance of 5-10%
+    discount = 0
+    if random.random() < 0.3:
+        discount = round(subtotal * random.choice([0.05, 0.10]))
+    amount = subtotal - discount + tax
+    cost  = round(amount * random.uniform(0.35, 0.55))
+
+    platform = wchoice(PLATFORMS, PLATFORM_WEIGHTS)
+    payment = wchoice(PAYMENT_METHODS, PAYMENT_WEIGHTS)
+    platform_fee = round(amount * random.uniform(0, 0.05)) if platform != "dine_in" else 0
+
+    return {
+        "transaction_id":   f"TXN-{uuid.uuid4().hex[:8].upper()}",
+        "outlet_id":        outlet_id,
+        "date":             ts.isoformat(),
+        "amount":           amount,
+        "discount":         discount,
+        "tax":              tax,
+        "cost":             cost,
+        "payment_method":    payment,
+        "platform":         platform,
+        "platform_fee":     platform_fee,
+        "customer_id":      f"CUST-{random.randint(100, 9999)}",
+        "staff_id":         None,
+        "transaction_count": random.randint(1, 3),
+    }
+
+# ── Full day simulation ──────────────────────────────────────────
+def run_day(date_str: str, outlet_ids: list, dev_mode: bool):
+    """Simulate business hours 7am-10pm per outlet."""
+    target = datetime.strptime(date_str, "%Y-%m-%d")
+    PEAK_HOURS  = list(range(11, 15)) + list(range(18, 22))   # busy: 11-14, 18-21
+    QUIET_HOURS = list(range(7, 11)) + list(range(15, 18))    # quiet: 7-10, 15-17
+
+    region_map = {oid: "SG" for oid in SG_OUTLETS}
+    region_map.update({oid: "JKT" for oid in JKT_OUTLETS})
+    region_map.update({oid: "BDG" for oid in BDG_OUTLETS})
+    region_map["BKK"] = "BKK" if oid not in region_map else region_map.get(oid, "SG")
+
+    def rregion(oid):
+        if oid in SG_OUTLETS: return "SG"
+        if oid in JKT_OUTLETS: return "JKT"
+        if oid in BDG_OUTLETS: return "BDG"
+        if oid in SBY_OUTLETS: return "SBY"
+        if oid in BKK_OUTLETS: return "BKK"
+        if oid in KUL_OUTLETS: return "KUL"
+        return "???"
+
+    print(f"\nDAY SIM: {date_str} | {len(outlet_ids)} outlets | DEV={dev_mode}")
+    ok_t, fail_t = 0, 0
+    for oid in sorted(outlet_ids):
+        ok_c, fail_c = 0, 0
+        for h in PEAK_HOURS:
+            n = random.randint(8, 14)
+            for _ in range(n):
+                ts = target.replace(hour=h, minute=random.randint(0, 59), second=random.randint(0, 59), tzinfo=timezone.utc)
+                ok, s, b = send(build_realistic_txn(oid, ts), dev_mode)
+                if ok: ok_c += 1
+                else: fail_c += 1
+        for h in QUIET_HOURS:
+            n = random.randint(2, 6)
+            for _ in range(n):
+                ts = target.replace(hour=h, minute=random.randint(0, 59), second=random.randint(0, 59), tzinfo=timezone.utc)
+                ok, s, b = send(build_realistic_txn(oid, ts), dev_mode)
+                if ok: ok_c += 1
+                else: fail_c += 1
+        region = rregion(oid)
+        print(f"  #{oid:3d} [{region}]  {ok_c} txns  fail={fail_c}")
+        ok_t += ok_c; fail_t += fail_c
+    print(f"\nTotal: {ok_t} OK  {fail_t} FAIL")
+
+# ── Continuous realistic loop ───────────────────────────────────
+def run_realistic(dev_mode: bool, interval: int):
+    """Loop with random outlet/platform/amount every N seconds."""
+    ok_t, fail_t = 0, 0
+    print(f"\nREALISTIC LOOP | interval={interval}s | DEV={dev_mode}")
+    while True:
+        oid = random.choice(ALL_OUTLETS)
+        ts  = datetime.now(timezone.utc)
+        ok, s, b = send(build_realistic_txn(oid, ts), dev_mode)
+        now = datetime.now().strftime("%H:%M:%S")
+        if ok:
+            ok_t += 1
+            try:
+                data = json.loads(b)
+                txn = data.get("data", {}).get("transaction_id", "?")
+            except Exception:
+                txn = "?"
+            region = "SG" if oid in SG_OUTLETS else "JKT"
+            print(f"[{now}] #{oid:3d} [{region}] ✅ {s}  OK={ok_t}  FAIL={fail_t}")
+        else:
+            fail_t += 1
+            print(f"[{now}] ❌ {s}: {b[:80]}  OK={ok_t}  FAIL={fail_t}")
+        time.sleep(interval)
+
+# ── All-outlets batch test ───────────────────────────────────
+def run_all_batch(count: int, dev_mode: bool):
+    """Fire N txns across random outlets."""
+    print(f"\nBATCH: {count} txns  DEV={dev_mode}")
+    ok_t, fail_t = 0, 0
+    for i in range(count):
+        oid = random.choice(ALL_OUTLETS)
+        ok, s, b = send(build_realistic_txn(oid, datetime.now(timezone.utc)), dev_mode)
+        if ok: ok_t += 1
+        else: fail_t += 1
+        if (i + 1) % 50 == 0:
+            print(f"  {i+1}/{count}  OK={ok_t}  FAIL={fail_t}")
+    print(f"\nBatch done: {ok_t} OK  {fail_t} FAIL")
 
 # ── Menu ──────────────────────────────────────────────────────────────────────
 MENU = [
@@ -384,7 +544,7 @@ def main():
 ╔══════════════════════════════════════════════════════════╗
 ║           🚀  CQaiFranchise POS SIMULATOR               ║
 ╠══════════════════════════════════════════════════════════╣
-║  Webhook : {WEBHOOK_URL}
+║  Webhook : {SUPABASE_URL}/functions/v1/pos-webhook
 ║  Outlet  : {args.outlet}
 ║  Platform: {args.platform}
 ║  Mode    : {mode}

@@ -73,8 +73,8 @@ function getCurrency(regionCode: string): CurrencyConfig {
     'BKK': 'THB',
     'KUL': 'MYR',
   };
-  const currencyCode = regionToCurrency[regionCode] || 'MYR';
-  return CURRENCY_MAP[currencyCode] || CURRENCY_MAP['MYR'];
+  const currencyCode = regionToCurrency[regionCode] || 'SGD';
+  return CURRENCY_MAP[currencyCode] || CURRENCY_MAP['SGD'];
 }
 
 /**
@@ -709,7 +709,7 @@ async function queryFranchiseData(ctx: SystemPromptContext): Promise<string | nu
         .slice(0, 7)
         .map(([date, amt]) => {
           const d = new Date(date);
-          return `${d.toLocaleDateString("en-MY", { weekday: 'short', month: 'short', day: 'numeric' })}: RM${amt.toFixed(2)}`;
+          return `${d.toLocaleDateString("en-SG", { weekday: 'short', month: 'short', day: 'numeric' })}: S$${amt.toLocaleString(undefined, {minimumFractionDigits:2})}`;
         }).join("\n  ");
 
       // Region breakdown: group by outlet's region
@@ -751,10 +751,10 @@ async function queryFranchiseData(ctx: SystemPromptContext): Promise<string | nu
         }).join("\n");
 
       dataSections.push(`SALES SUMMARY (Last 14 Days):
-  Today's Revenue: RM${todayRevenue.toFixed(2)} (${todayTransactions} transactions)
-  Total Revenue: RM${totalAmount.toFixed(2)}
+  Today's Revenue: S$${todayRevenue.toLocaleString(undefined, {minimumFractionDigits:2})} (${todayTransactions} transactions)
+  Total Revenue: S$${totalAmount.toLocaleString(undefined, {minimumFractionDigits:2})}
   Total Transactions: ${totalTransactions}
-  Average Daily: RM${avgDaily.toFixed(2)}
+  Average Daily: S$${avgDaily.toLocaleString(undefined, {minimumFractionDigits:2})}
   Anomalies Detected: ${anomalyCount}
 
 Recent Daily Sales (Last 7 Days):
