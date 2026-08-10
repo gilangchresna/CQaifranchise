@@ -1,60 +1,89 @@
-# Module: pos-webhook (Edge Function)
+# pos-webhook
 
-L2 webhook ingestion receiver. Validates HMAC, normalizes POS payload, inserts into `sales_transactions`. 258 lines.
+**Type:** Edge Function (Deno)
+**Path:** `supabase/functions/pos-webhook/index.ts`
+**Endpoint:** `POST /functions/v1/pos-webhook`
 
-## Responsibilities
+## Security
 
-- HMAC-SHA256 signature verification (or dev bypass)
-- Outlet existence check (`outlets` table FK)
-- Duplicate transaction rejection (UNIQUE on `transaction_id`)
-- Extract `hour` and `day_of_week` from timestamp
-- Compute financial fields: `net_amount`, `settlement_amount`, `profit`
-- Insert into `sales_transactions`
+### Authentication
+- **HMAC-SHA256** signature required in `x-pos-signature` header
+- Secret configured as `POS_WEBHOOK_SECRET` in Supabase Edge Functions secrets
 
-## Key Files
+### L1 Replay Protection
+- Rejects transactions with `date` older than **yesterday** (UTC)
+- Allows today and yesterday only
+- Returns `400 REPLAY_DETECTED` for stale dates
 
-- [`supabase/functions/pos-webhook/index.ts`](supabase/functions/pos-webhook/index.ts) — main edge function
+### CORS
+- `Access-Control-Allow-Origin: https://cqaifranchise.vercel.app` (production only)
 
-## Validated Fields
+## Request
 
-| Field | Validation |
-|-------|-----------|
-| `transaction_id` | Required, string, UNIQUE |
-| `outlet_id` | Required, positive integer, FK exists |
-| `amount` | Required, non-negative number |
-| `payment_method` | Must be in: cash, card, qrcode, ewallet, gofood, grabfood, shopeefood, dine_in |
-| `platform` | Must be in: dine_in, gofood, grabfood, shopeefood, pos |
-
-## HMAC Verification
-
-```typescript
-// Production: requires x-pos-signature header
-// Dev: x-pos-dev-bypass: "dev-mode-2026" skips HMAC
-
-const signature = req.headers.get('x-pos-signature');
-const body = await req.text();
-const expected = hmac.new(secret, body, sha256).hexdigest();
-if (!hmac.compareTimingEqual(signature, expected)) return 401;
-```
-
-## INSERT payload
-
-```typescript
+```json
 {
-  transaction_id, outlet_id, date,
-  amount, discount, tax, cost,
-  net_amount: amount - discount + tax,
-  platform_fee, settlement_amount: net_amount - platform_fee,
-  profit: net_amount - cost,
-  hour: new Date(date).getHours(),
-  day_of_week: new Date(date).getDay(),
-  payment_method, platform, customer_id, staff_id,
-  transaction_count, platform_order_id
+  "transaction_id": "TXN-2026-001",
+  "outlet_id": 164,
+  "date": "2026-08-11",
+  "amount": 45.50,
+  "payment_method": "qrcode",
+  "platform": "dine_in",
+  "discount": 0,
+  "tax": 0,
+  "cost": 0,
+  "platform_fee": 0
 }
 ```
 
-## Known Issues
+### Fields
+| Field | Required | Type | Notes |
+|-------|----------|------|-------|
+| `transaction_id` | ✅ | string | Unique per transaction |
+| `outlet_id` | ✅ | number | Must exist in `outlets` table |
+| `date` | ✅ | string | `YYYY-MM-DD`, today or yesterday |
+| `amount` | ✅ | number | Non-negative |
+| `payment_method` | | string | cash/card/qrcode/ewallet/gofood/grabfood/shopeefood/dine_in |
+| `platform` | | string | dine_in/gofood/grabfood/shopeefood/pos |
+| `discount` | | number | Default 0 |
+| `tax` | | number | Default 0 |
+| `cost` | | number | Default 0 |
+| `platform_fee` | | number | Default 0 |
 
-- `payment_method` field not in `sales_transactions` schema (PostgREST may reject)
-- `discount`, `tax`, `cost`, `net_amount`, `settlement_amount` may not exist in table
-- Currency not normalized — amount stored as-sent (assumes SGD in current DB)
+## Financial Fields (auto-calculated)
+
+| Field | Formula |
+|-------|---------|
+| `net_amount` | `amount - discount + tax` |
+| `settlement_amount` | `net_amount - platform_fee` |
+| `profit` | `net_amount - cost` |
+
+## Response
+
+```json
+// 200 OK
+{ "success": true, "message": "Transaction recorded", "data": { ... } }
+
+// 400 Bad Request
+{ "success": false, "code": "REPLAY_DETECTED", "error": "..." }
+{ "success": false, "errors": ["..."] }
+
+// 401 Unauthorized
+{ "success": false, "error": "Unauthorized: Invalid or missing signature" }
+
+// 409 Conflict
+{ "success": false, "error": "Duplicate transaction_id" }
+```
+
+## Testing
+
+```bash
+# Sign request with HMAC-SHA256
+BODY='{"transaction_id":"TEST-001","outlet_id":164,"date":"2026-08-11","amount":50}'
+SECRET="your-pos-webhook-secret"
+SIG=$(echo -n "$BODY" | openssl dgst -sha256 -hmac "$SECRET" | cut -d' ' -f2)
+
+curl -X POST "https://ploqeifazcgzwjzmukgp.supabase.co/functions/v1/pos-webhook" \
+  -H "Content-Type: application/json" \
+  -H "x-pos-signature: $SIG" \
+  -d "$BODY"
+```

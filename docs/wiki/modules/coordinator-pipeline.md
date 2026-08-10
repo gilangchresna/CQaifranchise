@@ -1,61 +1,65 @@
-# Module: coordinator-pipeline (Edge Function)
+# coordinator-pipeline
 
-L4 ML pipeline. Runs z-score anomaly detection + stockout prediction + alert generation. 178 lines. No auth (service role key).
+**Type:** Edge Function (Deno)
+**Path:** `supabase/functions/coordinator-pipeline/index.ts`
+**Endpoint:** `POST /functions/v1/coordinator-pipeline`
+**Auth:** None (internal service role)
+**Cron:** Every 15 minutes (pg_cron registered)
 
-## Responsibilities
+## Pipeline Steps
 
-- **STEP 1: Z-score anomaly detection** — for each outlet with ≥5 days of data, compute 30-day rolling mean/std, compare today vs baseline
-- **STEP 2: Stockout risk** — inventory depletion rate vs restock cadence
-- **STEP 3: Alert generation** — insert alerts if z-score ≥2.5 (CRITICAL) or ≥1.5 (WARNING)
-- **FX conversion** — all amounts converted to SGD at query time
+### Step 1 — Anomaly Detection
+- Fetches 30-day sales per outlet
+- Computes Z-score: `(today - mean) / std`
+- Classifies: CRITICAL (z ≥ 2.5), WARNING (z ≥ 1.5), OK
+- Writes to `ml_anomaly_scores` table
 
-## Key Files
+### Step 2 — Stockout Risk
+- Checks inventory where `current_stock < 25`
+- Computes `days_remaining = current_stock / (avg_txn_per_day)`
+- Classifies: HIGH (< 7 days), MEDIUM (< 14 days), LOW
+- Writes to `ml_stockout_risks` table
 
-- [`supabase/functions/coordinator-pipeline/index.ts`](supabase/functions/coordinator-pipeline/index.ts) — main ML pipeline
+### Step 3 — Alert Creation
+- Creates NEW alerts for outlets with CRITICAL anomaly in last 1 hour
+- Deduplicates: only if no existing NEW alert for same outlet + type
+- Alert types: SALES_ANOMALY, LOW_STOCK, HIGH_VALUE, RAPID_SUCCESSION
 
-## FX Conversion Rates (hardcoded)
+### Step 4 — Agent Task Log
+- Inserts record to `agent_tasks` table for observability
 
-```typescript
-function sgd(currency) {
-  if (currency === "SGD") return 1;
-  if (currency === "IDR") return 1 / 12500;   // IDR → SGD
-  if (currency === "THB") return 1 / 27.5;    // THB → SGD
-  if (currency === "MYR") return 1 / 3.4;     // MYR → SGD
-  return 1;
-}
-```
+## Response
 
-## Anomaly Logic
-
-```typescript
-// For each outlet, daily totals over 30 days:
-mean = sum / count
-variance = sum((val - mean)²) / count
-std = sqrt(variance)
-z = (todayAmount - mean) / std
-
-if |z| >= 2.5 → CRITICAL → is_anomaly = true
-if |z| >= 1.5 → WARNING
-else → OK
-
-// Percentile mapping
-CRITICAL → 97th percentile
-WARNING  → 75th percentile
-OK       → 25th percentile
-```
-
-## Output
-
-```typescript
+```json
 {
-  anomaly: { critical: N, warning: N, ok: N },
-  stockout: { high_risk: N, medium: N, low: N },
-  alerts_generated: N,
-  today_total_sgd: number,
-  outlets_analyzed: N
+  "success": true,
+  "timestamp": "2026-08-11T10:15:00Z",
+  "pipeline": {
+    "anomaly": { "critical": 2, "warning": 5, "ok": 13 },
+    "stockout": { "high": 3, "medium": 7, "checked": 20 },
+    "alerts": { "created": 1 }
+  }
 }
 ```
 
-## Cron Setup
+## Configuration
 
-Runs via Supabase pg_cron. Triggered every 1 minute. No auth required (service role).
+| Setting | Value |
+|---------|-------|
+| Anomaly Z-score threshold | 2.5 (CRITICAL), 1.5 (WARNING) |
+| Stockout threshold | < 25 units |
+| Alert deduplication window | 1 hour |
+| FX rates | SGD=1, IDR=1/12500, THB=1/27.5, MYR=1/3.4 |
+
+## Cron Registration
+
+```sql
+SELECT cron.schedule(
+  'coordinator-pipeline',
+  '*/15 * * * *',
+  $$SELECT net.http_post(
+    url=>'https://ploqeifazcgzwjzmukgp.supabase.co/functions/v1/coordinator-pipeline',
+    headers=>'{"Content-Type": "application/json"}',
+    body=>'{}'
+  )$$);
+```

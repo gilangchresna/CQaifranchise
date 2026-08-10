@@ -1,43 +1,90 @@
-# CQaiFranchise — AI Franchise CyberQuote
+# CQaiFranchise Wiki
 
-AI-driven franchise monitoring platform for PT CyberQuote Indonesia. Provides real-time visibility into sales, inventory, and staffing anomalies across franchise outlets, with AI-generated explanations (Athena) and automated workflow (Alert → Case → Resolution).
+Technical documentation for the CyberQuote AI Franchise Operations Platform.
 
-Deployed at **cqaifranchise.vercel.app** (frontend) + **Supabase Edge Functions** (backend). AI powered by Claude via Bluepack (ai.bluepack.my.id).
+## Quick Links
 
-## Key Concepts
+| Topic | Doc |
+|--------|-----|
+| Architecture | [architecture.md](architecture.md) |
+| Database Schema | [database-schema.md](database-schema.md) |
+| API Reference | [api-reference.md](api-reference.md) |
+| Getting Started | [getting-started.md](getting-started.md) |
 
-- **L1–L7 Architecture** — 7-layer franchise monitoring blueprint from source systems to presentation
-- **Athena AI** — conversational AI copilot (Claude via Bluepack) for natural-language explanations
-- **Hermes Agent** — orchestration layer for alert triage, case routing, and SLA monitoring
-- **Multi-tenant** — Supabase RLS enforces tenant isolation across franchise groups
-- **Real-time** — live transaction feed + dashboard polling every 10s
+## Module Reference
 
-## Entry Points
+### Edge Functions
 
-- [`src/App.tsx`](src/App.tsx) — React SPA entry point, role-based routing
-- [`supabase/functions/pos-webhook/index.ts`](supabase/functions/pos-webhook/index.ts) — L2 webhook ingestion
-- [`supabase/functions/coordinator-pipeline/index.ts`](supabase/functions/coordinator-pipeline/index.ts) — L4 ML pipeline (cron)
-- [`supabase/functions/athena-chat/index.ts`](supabase/functions/athena-chat/index.ts) — L5/L7 Athena chat AI
+| Module | File | Description |
+|---------|------|-------------|
+| **POS Ingestion** | | |
+| pos-webhook | `pos-webhook/index.ts` | POS transaction ingestion with HMAC auth + replay protection |
+| pos-simulator | `pos-simulator/index.ts` | Live transaction simulation (demo/testing) |
+| **ML Pipelines** | | |
+| coordinator-pipeline | `coordinator-pipeline/index.ts` | ML pipeline: anomaly + stockout + alert creation (cron: 15min) |
+| ml-anomaly-v2 | `ml-anomaly-v2/index.ts` | Isolation Forest anomaly scoring per outlet |
+| ml-accuracy-tracker | `ml-accuracy-tracker/index.ts` | TP/FP/FN logging + precision/recall/F1 metrics |
+| seed-outlet-features | `seed-outlet-features/index.ts` | ETL: aggregate sales_transactions → outlet_features |
+| **Cases & Alerts** | | |
+| alerts-list | `alerts-list/index.ts` | List alerts with role-based filtering |
+| case-create | `case-create/index.ts` | Create case from alert |
+| cases-list | `cases-list/index.ts` | List cases with role-based filtering |
+| case-update | `case-update/index.ts` | Update case status/assignee/priority |
+| **SLA & Escalation** | | |
+| sla-escalator | `sla-escalator/index.ts` | SLA monitoring + escalation chain (cron: 15min) |
+| **AI & Agents** | | |
+| athena-chat | `athena-chat/index.ts` | Claude-powered chat interface |
+| agent-coordinator | `agent-coordinator/index.ts` | Task routing to ML agents |
+| **BI & Dashboard** | | |
+| dashboard-full | `dashboard-full/index.ts` | Real-time KPIs + daily breakdown |
+| **Utilities** | | |
+| case-create | `case-create/index.ts` | Case creation from alerts |
+| notification-send | `notification-send/index.ts` | Email/notification dispatch |
 
-## High-Level Architecture
+### Sequences
 
-See [architecture.md](architecture.md) for full 7-layer system diagram.
+- [Alert → Case workflow](sequences.md)
+- [POS → webhook → alert flow](sequences.md)
+- [SLA escalation chain](sequences.md)
 
-## Module Map
+## Architecture
 
-| Module | Purpose |
-|--------|---------|
-| [`Dashboard.tsx`](modules/dashboard.md) | Main KPI dashboard with charts, stat cards, live feed |
-| [`FloatingChat.tsx`](modules/floating-chat.md) | Floating AI chat button + window |
-| [`AlertsList.tsx`](modules/alerts-list.md) | Alert queue with accept/dismiss actions |
-| [`LiveTransactionFeed.tsx`](modules/live-transaction-feed.md) | Real-time transaction scrolling feed |
-| [`pos-webhook`](modules/pos-webhook.md) | L2 webhook receiver, HMAC validation, normalize |
-| [`coordinator-pipeline`](modules/coordinator-pipeline.md) | L4 ML: z-score anomaly + stockout + alert gen |
-| [`athena-chat`](modules/athena-chat.md) | L5/L7 Claude chat with KB context + FX currency |
-| [`agent-coordinator`](modules/agent-coordinator.md) | L5 task router, routes tasks to agents |
-| [`case-create`](modules/case-create.md) | L6 workflow: create case from alert |
-| [`backend/`](modules/backend-python.md) | Python FastAPI alternative backend (not active) |
+```
+L1: POS Systems + ERP + HR Vendors
+L2: Integration Adapters (pos-webhook)
+L3: Data Pipeline (coordinator-pipeline, batch-import)
+L4: Core Business Ops (cases, alerts, inventory)
+L5: BI + ML (dashboard, ml-accuracy-tracker)
+L6: AI Agents (athena-chat, agent-coordinator)
+L7: User Interface (React SPA)
+```
 
-## Getting Started
+## Cron Jobs
 
-See [getting-started.md](getting-started.md).
+| Job | Schedule | Function |
+|-----|---------|----------|
+| coordinator-pipeline | `*/15 * * * *` | ML anomaly + stockout + alerts |
+| sla-escalator | `*/15 * * * *` | SLA check + escalation |
+
+## Database Tables
+
+| Table | Purpose |
+|-------|---------|
+| `outlets` | Franchise outlet registry |
+| `regions` | Region definitions (SG, JKT, BDG, etc.) |
+| `sales_transactions` | All POS transactions |
+| `inventory` | Per-outlet stock levels |
+| `alerts` | Triggered alerts (NEW/ACKNOWLEDGED/RESOLVED) |
+| `cases` | Cases from alerts (NEW/IN_PROGRESS/RESOLVED/CLOSED) |
+| `outlet_features` | Computed ML features per outlet |
+| `ml_anomaly_scores` | Anomaly Z-scores per outlet |
+| `ml_accuracy_logs` | TP/FP/FN for model evaluation |
+| `sla_escalation_runs` | Escalation run history |
+
+## Security
+
+- CORS narrowed to `https://cqaifranchise.vercel.app` on all edge functions
+- HMAC-SHA256 required for pos-webhook
+- JWT auth required for all user-facing endpoints
+- SERVICE_ROLE_KEY used only in internal edge functions
+- Replay protection: pos-webhook rejects dates older than yesterday

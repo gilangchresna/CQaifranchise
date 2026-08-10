@@ -1,40 +1,68 @@
-# Module: AlertsList.tsx
+# alerts-list
 
-Alert queue UI with accept/dismiss actions. 310 lines. Fetches from `alerts-list` edge function, renders as action cards.
+**Type:** Edge Function (Deno)
+**Path:** `supabase/functions/alerts-list/index.ts`
+**Endpoint:** `GET /functions/v1/alerts-list`
+**Auth:** JWT Bearer token required
 
-## Responsibilities
+## CORS
+- `Access-Control-Allow-Origin: https://cqaifranchise.vercel.app`
 
-- Fetch alerts from `alerts-list` edge function
-- Filter by user role (HQ_ADMIN sees all, others scoped)
-- "Accept" → creates case via `case-create` edge function
-- "Dismiss" → marks alert as dismissed
-- Severity-colored icons and priority badges
+## Query Parameters
 
-## Alert Data Model
+| Param | Type | Default | Notes |
+|-------|------|---------|-------|
+| `status` | string | — | Filter by status (NEW/ACKNOWLEDGED/RESOLVED/CLOSED) |
+| `severity` | string | — | P0_CRITICAL/P1_HIGH/P2_MEDIUM/P3_LOW |
+| `outlet_id` | number | — | Filter by outlet |
+| `limit` | number | 100 | Max 200 |
 
-```typescript
-interface Alert {
-  id: number
-  type: 'ANOMALY' | 'STOCKOUT' | 'STAFF' | 'FINANCIAL' | 'SYSTEM'
-  severity: 'P0_CRITICAL' | 'P1_HIGH' | 'P2_MEDIUM' | 'P3_LOW'
-  status: 'NEW' | 'ACKNOWLEDGED' | 'IN_PROGRESS' | 'RESOLVED' | 'DISMISSED'
-  title: string
-  description: string
-  outlet: { name, code, region: { name, code } }
-  created_at: string
+## Response
+
+```json
+{
+  "data": [
+    {
+      "id": 126,
+      "type": "LOW_STOCK",
+      "severity": "P1_HIGH",
+      "status": "NEW",
+      "title": "Low Stock — KOPI-001 (Espresso Beans)",
+      "description": "Outlet SG-01: Espresso beans stock at 8 units, below minimum.",
+      "triggered_at": "2026-08-11T10:00:00Z",
+      "outlet": {
+        "name": "SG-01",
+        "code": "SG-01",
+        "region": { "name": "Singapore", "code": "SG" }
+      }
+    }
+  ],
+  "total": 30
 }
 ```
 
-## Related
+## Role-Based Filtering (C9)
 
-- [`supabase/functions/alerts-list/index.ts`](supabase/functions/alerts-list/index.ts) — backend API
-- [`supabase/functions/case-create/index.ts`](supabase/functions/case-create/index.ts) — L6 workflow: create case from alert
+| Role | Scope |
+|------|-------|
+| HQ_ADMIN | All non-RESOLVED alerts |
+| REGIONAL_MANAGER | Alerts from their region |
+| FRANCHISEE_OWNER / STAFF | Alerts from their assigned outlets |
 
-## Case Priority Mapping
+## Status Values
 
-```typescript
-P0_CRITICAL → URGENT
-P1_HIGH     → HIGH
-P2_MEDIUM   → MEDIUM
-P3_LOW      → LOW
-```
+| Status | Meaning |
+|--------|--------|
+| `NEW` | Just triggered, requires action |
+| `ACKNOWLEDGED` | Seen but not resolved |
+| `RESOLVED` | Fixed and closed |
+| `CLOSED` | Archived |
+
+## Severity Levels
+
+| Severity | SLA |
+|---------|-----|
+| `P0_CRITICAL` | 4 hours |
+| `P1_HIGH` | 24 hours |
+| `P2_MEDIUM` | 72 hours |
+| `P3_LOW` | 168 hours (1 week) |
