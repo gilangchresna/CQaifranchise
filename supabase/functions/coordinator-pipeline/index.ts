@@ -99,7 +99,6 @@ serve(async (req) => {
         recorded_at: now.toISOString(),
       };
       sb.from("ml_anomaly_scores").upsert(record).catch(() => {});
-      sb.from("ml_anomaly_scores").upsert(record).catch(() => {});
     }
     out.anomaly = { critical: crit, warning: warn, ok: okCnt };
   } catch (e) {
