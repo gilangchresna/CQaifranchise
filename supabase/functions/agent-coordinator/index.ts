@@ -17,7 +17,7 @@ const AGENT_ENDPOINTS: Record<string, string> = {
   monitor: `${SUPABASE_URL}/functions/v1/ml-anomaly-v2`,
   analyst: `${SUPABASE_URL}/functions/v1/ml-stockout-v2`,
   triage: `${SUPABASE_URL}/functions/v1/athena-case-triage`,
-  athena: `${SUPABASE_URL}/functions/v1/athena-agent`,
+  athena: `${SUPABASE_URL}/functions/v1/athena-chat`,
   executor: `${SUPABASE_URL}/functions/v1/notification-send`
 }
 
