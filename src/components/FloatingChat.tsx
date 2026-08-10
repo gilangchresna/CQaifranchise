@@ -123,7 +123,10 @@ export function FloatingChat() {
         )}
       >
         {/* Header */}
-        <div className="h-14 bg-blue-600 px-4 flex items-center justify-between">
+        <div
+          className="bg-blue-600 px-4 flex items-center justify-between"
+          style={{ height: '100px', paddingTop: '40px' }}
+        >
           <div className="flex items-center gap-2 text-white">
             <Bot className="h-5 w-5" />
             <span className="font-semibold">{t.chat.title}</span>
