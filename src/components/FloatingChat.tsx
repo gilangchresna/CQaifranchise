@@ -119,13 +119,13 @@ export function FloatingChat() {
         className={cn(
           "fixed bottom-6 right-6 z-50 w-96 bg-white rounded-xl shadow-2xl border border-slate-200 overflow-hidden transition-all duration-300",
           isOpen ? "scale-100 opacity-100" : "scale-95 opacity-0 pointer-events-none",
-          isMinimized ? "h-14" : "h-[500px]"
+          isMinimized ? "h-16" : "h-[500px]"
         )}
       >
         {/* Header */}
         <div
           className="bg-blue-600 px-4 flex items-center justify-between"
-          style={{ height: '100px', paddingTop: '40px' }}
+          style={{ height: '140px', paddingTop: '90px' }}
         >
           <div className="flex items-center gap-2 text-white">
             <Bot className="h-5 w-5" />
@@ -152,7 +152,9 @@ export function FloatingChat() {
         {/* Messages */}
         {!isMinimized && (
           <>
-            <div className="flex-1 h-[calc(500px-14px-60px)] overflow-y-auto p-4 space-y-4 bg-slate-50">
+            <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50"
+              style={{ height: 'calc(500px - 140px - 60px)' }}
+            >
               {messages.map((message) => (
                 <div
                   key={message.id}
