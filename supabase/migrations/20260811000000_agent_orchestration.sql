@@ -1,14 +1,28 @@
 -- AI Agent Orchestration Tables
--- Run: paste into Supabase Dashboard → SQL Editor
+-- Run this SQL in Supabase Dashboard → SQL Editor
+-- Handles both new tables AND patching existing agent_metrics
 
 -- =============================================================================
--- AGENT TASKS TABLE
+-- PATCH EXISTING: agent_metrics (has different schema: period_start/period_end instead of period)
+-- =============================================================================
+
+-- Add missing columns to existing agent_metrics
+ALTER TABLE public.agent_metrics ADD COLUMN IF NOT EXISTS agent_name VARCHAR(100);
+ALTER TABLE public.agent_metrics ADD COLUMN IF NOT EXISTS period VARCHAR(20) DEFAULT 'daily';
+ALTER TABLE public.agent_metrics ADD COLUMN IF NOT EXISTS metadata JSONB;
+
+-- Drop bad index on period, recreate
+DROP INDEX IF EXISTS idx_agent_metrics_type;
+CREATE INDEX IF NOT EXISTS idx_agent_metrics_type
+  ON public.agent_metrics(metric_type, period);
+
+-- =============================================================================
+-- NEW: AGENT TASKS TABLE
 -- =============================================================================
 CREATE TABLE IF NOT EXISTS public.agent_tasks (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     task_id VARCHAR(100) UNIQUE NOT NULL,
     agent_id VARCHAR(50) NOT NULL,
-    agent_name VARCHAR(100),
     task_type VARCHAR(50) NOT NULL,
     description TEXT,
     status VARCHAR(20) NOT NULL DEFAULT 'pending'
@@ -32,29 +46,10 @@ CREATE INDEX IF NOT EXISTS idx_agent_tasks_created_at ON public.agent_tasks(crea
 CREATE INDEX IF NOT EXISTS idx_agent_tasks_task_type ON public.agent_tasks(task_type);
 
 -- =============================================================================
--- AGENT METRICS TABLE
--- =============================================================================
-CREATE TABLE IF NOT EXISTS public.agent_metrics (
-    id SERIAL PRIMARY KEY,
-    agent_id VARCHAR(50) NOT NULL,
-    agent_name VARCHAR(100),
-    metric_type VARCHAR(50) NOT NULL,
-    metric_value FLOAT NOT NULL,
-    metric_unit VARCHAR(20) DEFAULT 'count',
-    period VARCHAR(20) DEFAULT 'daily',  -- hourly, daily, weekly, monthly
-    recorded_at TIMESTAMPTZ DEFAULT NOW(),
-    metadata JSONB
-);
-
-CREATE INDEX IF NOT EXISTS idx_agent_metrics_agent_id ON public.agent_metrics(agent_id);
-CREATE INDEX IF NOT EXISTS idx_agent_metrics_recorded_at ON public.agent_metrics(recorded_at DESC);
-CREATE INDEX IF NOT EXISTS idx_agent_metrics_type ON public.agent_metrics(metric_type, period);
-
--- =============================================================================
--- AGENT REGISTRATION TABLE
+-- NEW: AGENT REGISTRATION TABLE
 -- =============================================================================
 CREATE TABLE IF NOT EXISTS public.agents (
-    id VARCHAR(50) PRIMARY KEY,  -- 'athena', 'monitor', 'analyst', etc.
+    id VARCHAR(50) PRIMARY KEY,
     name VARCHAR(100) NOT NULL,
     role VARCHAR(100) NOT NULL,
     description TEXT,
@@ -77,7 +72,7 @@ CREATE TABLE IF NOT EXISTS public.agents (
 CREATE INDEX IF NOT EXISTS idx_agents_status ON public.agents(status);
 
 -- =============================================================================
--- AGENT LOGS TABLE
+-- NEW: AGENT LOGS TABLE
 -- =============================================================================
 CREATE TABLE IF NOT EXISTS public.agent_logs (
     id SERIAL PRIMARY KEY,
@@ -125,6 +120,47 @@ END;
 $$;
 
 -- =============================================================================
+-- RECORD AGENT METRIC RPC
+-- =============================================================================
+CREATE OR REPLACE FUNCTION public.record_agent_metric(
+    p_agent_id VARCHAR,
+    p_metric_type VARCHAR,
+    p_value FLOAT,
+    p_unit VARCHAR DEFAULT 'count',
+    p_period VARCHAR DEFAULT 'daily',
+    p_metadata JSONB DEFAULT NULL
+)
+RETURNS VOID
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+    INSERT INTO public.agent_metrics (agent_id, metric_type, metric_value, metric_unit, period, period_start, period_end, recorded_at, metadata)
+    VALUES (
+        p_agent_id, p_metric_type, p_value, p_unit, p_period,
+        CASE p_period
+            WHEN 'hourly' THEN date_trunc('hour', NOW())
+            WHEN 'daily' THEN date_trunc('day', NOW())
+            WHEN 'weekly' THEN date_trunc('week', NOW())
+            WHEN 'monthly' THEN date_trunc('month', NOW())
+            ELSE date_trunc('day', NOW())
+        END,
+        CASE p_period
+            WHEN 'hourly' THEN date_trunc('hour', NOW()) + INTERVAL '1 hour'
+            WHEN 'daily' THEN date_trunc('day', NOW()) + INTERVAL '1 day'
+            WHEN 'weekly' THEN date_trunc('week', NOW()) + INTERVAL '1 week'
+            WHEN 'monthly' THEN date_trunc('month', NOW()) + INTERVAL '1 month'
+            ELSE date_trunc('day', NOW()) + INTERVAL '1 day'
+        END,
+        NOW(), p_metadata
+    );
+
+    -- Update agent heartbeat
+    UPDATE public.agents SET last_heartbeat = NOW(), last_active = NOW() WHERE id = p_agent_id;
+END;
+$$;
+
+-- =============================================================================
 -- SEED DEFAULT AGENTS
 -- =============================================================================
 INSERT INTO public.agents (id, name, role, description, capabilities, status) VALUES
@@ -156,30 +192,6 @@ ON CONFLICT (id) DO UPDATE SET
     updated_at = NOW();
 
 -- =============================================================================
--- RECORD METRIC RPC
--- =============================================================================
-CREATE OR REPLACE FUNCTION public.record_agent_metric(
-    p_agent_id VARCHAR,
-    p_metric_type VARCHAR,
-    p_value FLOAT,
-    p_unit VARCHAR DEFAULT 'count',
-    p_period VARCHAR DEFAULT 'daily',
-    p_metadata JSONB DEFAULT NULL
-)
-RETURNS VOID
-LANGUAGE plpgsql
-SECURITY DEFINER
-AS $$
-BEGIN
-    INSERT INTO public.agent_metrics (agent_id, metric_type, metric_value, metric_unit, period, metadata)
-    VALUES (p_agent_id, p_metric_type, p_value, p_unit, p_period, p_metadata);
-
-    -- Update agent heartbeat
-    UPDATE public.agents SET last_heartbeat = NOW(), last_active = NOW() WHERE id = p_agent_id;
-END;
-$$;
-
--- =============================================================================
 -- RLS
 -- =============================================================================
 ALTER TABLE public.agent_tasks ENABLE ROW LEVEL SECURITY;
@@ -187,7 +199,7 @@ ALTER TABLE public.agent_metrics ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.agents ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.agent_logs ENABLE ROW LEVEL SECURITY;
 
--- Service role can do everything
+-- Service role full access
 DROP POLICY IF EXISTS "Service role full access agent_tasks" ON public.agent_tasks;
 CREATE POLICY "Service role full access agent_tasks" ON public.agent_tasks
     FOR ALL USING (auth.role() = 'service_role');

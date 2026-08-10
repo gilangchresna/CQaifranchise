@@ -115,7 +115,7 @@ serve(async (req: Request) => {
         .select("agent_id, status, duration_ms")
         .gte("created_at", today);
 
-      // Get avg response time from agent_metrics (last 7 days)
+      // Get avg duration from agent_metrics (daily period, last 7 days) — uses period column
       const sevenDaysAgo = new Date(Date.now() - 7 * 86400000).toISOString();
       const { data: avgDurations } = await supabase
         .from("agent_metrics")
@@ -144,13 +144,6 @@ serve(async (req: Request) => {
         acc[a.status] = (acc[a.status] || 0) + 1;
         return acc;
       }, {});
-
-      // Compute per-agent avg response time from metrics
-      const agentAvgDurations: Record<string, number> = {};
-      (avgDurations || []).forEach((m: any) => {
-        if (!agentAvgDurations[m.agent_id]) agentAvgDurations[m.agent_id] = 0;
-        agentAvgDurations[m.agent_id] = m.metric_value;
-      });
 
       const { data: allAgents } = await supabase.from("agents").select("id, tasks_completed_today, avg_response_time_ms, queue_size");
 
