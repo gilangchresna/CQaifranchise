@@ -1,12 +1,11 @@
 /// <reference lib="deno.ns" />
-// AI Pipeline Coordinator
-// Full ML: anomaly + stockout + alerts
-// No auth (service role)
+// AI Pipeline Coordinator — anomaly + stockout + alerts
+// No auth needed (internal service)
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const HEADERS = {
-  "Access-control-Allow-Origin": "*",
+  "Access-Control-Allow-Origin": "https://cqaifranchise.vercel.app",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
@@ -14,8 +13,7 @@ const SB_URL = Deno.env.get("SUPABASE_URL") || "";
 const SB_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 const sb = createClient(SB_URL, SB_KEY);
 
-// FX rate to SGD (per 1 unit of local currency → SGD)
-function toSGD(currency: string): number {
+function toSGD(currency) {
   if (currency === "SGD") return 1;
   if (currency === "IDR") return 1 / 12500;
   if (currency === "THB") return 1 / 27.5;
@@ -27,34 +25,33 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: HEADERS });
 
   const now = new Date();
-  const out: Record<string, any> = {};
-  const t0 = now.toISOString().slice(0, 10);        // today date string "YYYY-MM-DD"
+  const t0 = now.toISOString().slice(0, 10);
   const t7 = new Date(now.getTime() - 7 * 86400000).toISOString().slice(0, 10);
   const t30 = new Date(now.getTime() - 30 * 86400000).toISOString().slice(0, 10);
   const t1h = new Date(now.getTime() - 3600000).toISOString();
+  const out = {};
 
-  // ── STEP 1: Anomaly ──────────────────────────────────────
+  // STEP 1: Anomaly
   try {
     const { data: regions } = await sb.from("regions").select("id, currency_code");
-    const rmap: Record<number, string> = {};
-    (regions || []).forEach((r: any) => { rmap[r.id] = r.currency_code || "SGD"; });
+    const rmap = {};
+    (regions || []).forEach(r => { rmap[r.id] = r.currency_code || "SGD"; });
 
     const { data: outlets } = await sb.from("outlets").select("id, name, code, region_id");
-    const omap: Record<number, any> = {};
-    const cmap: Record<number, string> = {};
-    (outlets || []).forEach((o: any) => {
+    const omap = {};
+    const cmap = {};
+    (outlets || []).forEach(o => {
       omap[o.id] = o;
       cmap[o.id] = rmap[o.region_id] || "SGD";
     });
 
-    // 30-day daily totals per outlet (aggregated in memory from aggregated query)
     const { data: sales30 } = await sb
       .from("sales_transactions")
       .select("outlet_id, date, amount")
       .gte("date", t30);
 
-    const dailyTotals: Record<number, Record<string, number>> = {};
-    (sales30 || []).forEach((s: any) => {
+    const dailyTotals = {};
+    (sales30 || []).forEach(s => {
       const fx = toSGD(cmap[s.outlet_id] || "SGD");
       const day = String(s.date).slice(0, 10);
       const amt = Number(s.amount || 0) * fx;
@@ -62,21 +59,21 @@ serve(async (req) => {
       dailyTotals[s.outlet_id][day] = (dailyTotals[s.outlet_id][day] || 0) + amt;
     });
 
-    // Today's transactions — FIX C1: date filter (was full table scan)
     const { data: todayRows } = await sb
       .from("sales_transactions")
       .select("outlet_id, amount")
       .eq("date", t0);
 
-    const todayMap: Record<number, number> = {};
-    (todayRows || []).forEach((t: any) => {
+    const todayMap = {};
+    (todayRows || []).forEach(t => {
       const fx = toSGD(cmap[t.outlet_id] || "SGD");
       todayMap[t.outlet_id] = (todayMap[t.outlet_id] || 0) + Number(t.amount || 0) * fx;
     });
 
     let crit = 0, warn = 0, okCnt = 0;
-    for (const [oid, daily] of Object.entries(dailyTotals)) {
-      const vals = Object.values(daily as Record<string, number>);
+    const oidEntries = Object.entries(dailyTotals);
+    for (const [oid, daily] of oidEntries) {
+      const vals = Object.values(daily);
       if (vals.length < 5) { okCnt++; continue; }
       const mean = vals.reduce((a, b) => a + b, 0) / vals.length;
       const variance = vals.reduce((s, v) => s + Math.pow(v - mean, 2), 0) / vals.length;
@@ -89,7 +86,6 @@ serve(async (req) => {
       else if (st === "WARNING") warn++;
       else okCnt++;
       const pct = st === "CRITICAL" ? 97 : st === "WARNING" ? 75 : 25;
-      const outlet = omap[Number(oid)];
       const record = {
         outlet_id: Number(oid),
         anomaly_score: z,
@@ -105,7 +101,7 @@ serve(async (req) => {
     out.anomaly = { error: String(e) };
   }
 
-  // ── STEP 2: Stockout ─────────────────────────────────
+  // STEP 2: Stockout
   try {
     const { data: inventory } = await sb
       .from("inventory")
@@ -117,19 +113,19 @@ serve(async (req) => {
       .select("outlet_id, transaction_count")
       .gte("date", t7);
 
-    const tmap: Record<number, number> = {};
-    (recent7 || []).forEach((t: any) => {
+    const tmap = {};
+    (recent7 || []).forEach(t => {
       tmap[t.outlet_id] = (tmap[t.outlet_id] || 0) + Number(t.transaction_count || 1);
     });
 
     let hi = 0, med = 0;
-    (inventory || []).forEach((inv: any) => {
+    (inventory || []).forEach(inv => {
       const avg7 = (tmap[inv.outlet_id] || 0) / 7;
       const days = avg7 > 0 ? Number(inv.current_stock) / avg7 : 999;
       const risk = days < 7 ? "HIGH" : days < 14 ? "MEDIUM" : "LOW";
       if (risk === "HIGH") hi++;
       else if (risk === "MEDIUM") med++;
-      sb.from("ml_stockout_risks").upsert({
+      sb.from("ml_stockout_risk").upsert({
         outlet_id: inv.outlet_id,
         risk_level: risk,
         days_remaining: Math.round(days),
@@ -141,7 +137,7 @@ serve(async (req) => {
     out.stockout = { error: String(e) };
   }
 
-  // ── STEP 3: Alert creation ───────────────────────────────
+  // STEP 3: Alert creation
   try {
     const { data: crits } = await sb
       .from("ml_anomaly_scores")
@@ -150,31 +146,28 @@ serve(async (req) => {
       .gte("recorded_at", t1h);
 
     let created = 0;
-    for (const c of (crits || [])) {
-      const dup = await sb
-        .from("alerts").select("id")
+    (crits || []).forEach(c => {
+      const dup = sb.from("alerts").select("id")
         .eq("outlet_id", c.outlet_id)
         .eq("status", "NEW")
         .eq("type", "SALES_ANOMALY");
-      if ((dup.data || []).length > 0) continue;
-      const outlet = omap[c.outlet_id];
-      await sb.from("alerts").insert({
+      sb.from("alerts").insert({
         outlet_id: c.outlet_id,
         type: "SALES_ANOMALY",
         severity: "P0_CRITICAL",
         status: "NEW",
-        title: `${outlet?.code || c.outlet_id} anomaly detected`,
-        description: `z=${c.anomaly_score?.toFixed(2)}. Review immediately.`,
+        title: `Anomaly detected @ outlet ${c.outlet_id}`,
+        description: `z=${Number(c.anomaly_score || 0).toFixed(2)}`,
       }).catch(() => {});
       created++;
-    }
+    });
     out.alerts = { created };
   } catch (e) {
     out.alerts = { error: String(e) };
   }
 
-  // ── STEP 4: Agent log ─────────────────────────────────
-  await sb.from("agent_tasks").insert({
+  // STEP 4: Agent task log
+  sb.from("agent_tasks").insert({
     agent_id: "coordinator",
     task_type: "pipeline",
     description: "ML pipeline: anomaly + stockout + alerts",

@@ -81,19 +81,34 @@ export function Workflows({ activeRole }: { activeRole: Role }) {
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token || '';
 
-      // Fetch alerts
-      const alertsRes = await fetch(`${EDGE_FUNCTIONS_URL}/alerts-list`, {
-        headers: { Authorization: `Bearer ${token}` },
+      // Fetch alerts via edge function (includes auth headers)
+      const alertsRes = await fetch(`${EDGE_FUNCTIONS_URL}/alerts-list?limit=100`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          apikey: token ? token : '',
+        },
       });
-      const alertsData = await alertsRes.json();
-      setAlerts(alertsData.data || []);
+      if (!alertsRes.ok) {
+        console.warn('alerts-list returned', alertsRes.status, await alertsRes.text());
+      } else {
+        const alertsData = await alertsRes.json();
+        setAlerts(alertsData.data || []);
+      }
 
-      // Fetch cases via Edge Function (bypasses RLS issues)
-      const casesRes = await fetch(`${EDGE_FUNCTIONS_URL}/cases-list`, {
-        headers: { Authorization: `Bearer ${token}` },
+      // Fetch cases via edge function
+      const casesRes = await fetch(`${EDGE_FUNCTIONS_URL}/cases-list?limit=100`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          apikey: token ? token : '',
+        },
       });
-      const casesDataRaw = await casesRes.json();
-      setCases(casesDataRaw.cases || []);
+      if (!casesRes.ok) {
+        console.warn('cases-list returned', casesRes.status, await casesRes.text());
+        setCases([]);
+      } else {
+        const casesData = await casesRes.json();
+        setCases(casesData.data || []);
+      }
 
     } catch (err) {
       console.error('Error fetching workflows:', err);
