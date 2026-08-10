@@ -8,9 +8,9 @@
 import { createClient } from "jsr:@supabase/supabase-js@2"
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
-const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
 // Agent endpoints (Edge Functions)
 const AGENT_ENDPOINTS: Record<string, string> = {
@@ -145,7 +145,7 @@ Deno.serve(async (req: Request) => {
 
   // CORS headers
   const corsHeaders = {
-    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Origin': 'https://cqaifranchise.vercel.app',
     'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type'
   }
 

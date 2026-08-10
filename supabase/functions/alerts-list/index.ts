@@ -29,32 +29,38 @@ serve(async (req) => {
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
   );
 
-  // Get alerts with outlet info, filtered by user scope
-  const { data, error } = await supabase
+  // C9: Filter alerts by user scope — show non-RESOLVED only
+  let query = supabase
     .from('alerts')
-    .select('*, outlet(name, code, region:regions(name, code)')
+    .select('*, outlet(name, code, region:regions(name, code))')
+    .neq('status', 'RESOLVED') // C9: exclude resolved
     .order('created_at', { ascending: false })
     .limit(100);
+
+  if (auth.role === 'FRANCHISEE_OWNER' || auth.role === 'FRANCHISEE_STAFF') {
+    const { data: userOutlets } = await supabase
+      .from("user_outlets").select("outlet_id")
+      .eq("user_id", auth.user?.id);
+    const userOutletIds = (userOutlets || []).map((r: any) => r.outlet_id);
+    if (userOutletIds.length > 0) {
+      query = query.in('outlet_id', userOutletIds);
+    }
+  } else if (auth.role === 'REGIONAL_MANAGER') {
+    const userRegion = auth.user?.user_metadata?.region_id;
+    if (userRegion) {
+      query = query.eq('outlets.region_id', userRegion);
+    }
+  }
+  // HQ_ADMIN: no filter — sees all
+
+  const { data, error } = await query;
 
   if (error) {
     return Response.json({ error: error.message }, { status: 500, headers: corsHeaders });
   }
 
-  // Filter alerts based on user role
-  let filteredAlerts = data;
-  if (auth.role === 'FRANCHISEE_OWNER' || auth.role === 'FRANCHISEE_STAFF') {
-    // Franchisees only see their own outlet alerts
-    // Note: In production, filter by franchisee_id
-    filteredAlerts = data;
-  } else if (auth.role === 'REGIONAL_MANAGER') {
-    // Regional managers see alerts from their region
-    // Note: In production, filter by region_id from user metadata
-    filteredAlerts = data;
-  }
-  // HQ_ADMIN sees all alerts
-
-  return Response.json({ 
-    data: filteredAlerts,
-    total: filteredAlerts.length
+  return Response.json({
+    data: data || [],
+    total: (data || []).length
   }, { headers: corsHeaders });
 });

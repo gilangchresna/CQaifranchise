@@ -11,7 +11,7 @@ const POS_WEBHOOK_SECRET = Deno.env.get('POS_WEBHOOK_SECRET');
 
 // CORS headers
 const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Origin": "https://cqaifranchise.vercel.app",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-pos-signature",
 };
 

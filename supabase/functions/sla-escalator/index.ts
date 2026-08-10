@@ -30,7 +30,7 @@ import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0";
 
 const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Origin": "https://cqaifranchise.vercel.app",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
@@ -107,6 +107,7 @@ interface CaseInfo {
   priority: string;
   sla_deadline: string | null;
   assigned_to_id: string | null;
+  outlet_id: number | null;
   created_at: string;
   alert: {
     id: number;
@@ -116,6 +117,9 @@ interface CaseInfo {
     id: string;
     full_name: string;
     role: string;
+  } | null;
+  outlet: {
+    region_id: number;
   } | null;
 }
 
@@ -318,6 +322,9 @@ serve(async (req: Request) => {
           id,
           full_name,
           role
+        ),
+        outlet:outlets (
+          region_id
         )
       `)
       .not("sla_deadline", "is", null)
@@ -383,7 +390,7 @@ serve(async (req: Request) => {
           supabase,
           caseInfo.assignee,
           caseInfo.alert?.severity as Severity,
-          null // TODO: Get region_id from outlet
+          caseInfo.outlet?.region_id ?? null
         );
 
         if (escalationTarget && caseInfo.assignee && escalationTarget.id !== caseInfo.assignee.id) {

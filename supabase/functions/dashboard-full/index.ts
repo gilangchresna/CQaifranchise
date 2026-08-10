@@ -277,9 +277,11 @@ serve(async (req: Request) => {
       alertsQuery.in("outlet_id", allowedOutletIds);
       lowStockQuery.in("outlet_id", allowedOutletIds);
     }
-    // Only count OPEN/NEW alerts for "Actionable" metric
-    alertsQuery.eq("status", "NEW");
-    const { count: alertsCount } = await alertsQuery;
+    // C9: Count non-RESOLVED alerts (NEW + ACKNOWLEDGED) for "Open" metric
+    const { count: alertsCount } = await supabase
+      .from("alerts")
+      .select("*", { count: "exact", head: true })
+      .neq("status", "RESOLVED");
     const { data: lowStock } = await lowStockQuery.lt("current_stock", 25);
     
     // Comparison period (previous period)
