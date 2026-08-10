@@ -131,14 +131,14 @@ export function FloatingChat() {
           <div className="flex items-center gap-1">
             <button
               onClick={() => setIsMinimized(!isMinimized)}
-              className="p-1.5 rounded-md hover:bg-blue-700 text-white/80 hover:text-white transition-colors"
+              className="p-1.5 rounded-md hover:bg-blue-700 text-white/80 hover:text-white transition-colors cursor-pointer relative z-10"
               title={isMinimized ? "Maximize" : "Minimize"}
             >
               {isMinimized ? <Maximize2 className="h-4 w-4" /> : <Minimize2 className="h-4 w-4" />}
             </button>
             <button
               onClick={() => setIsOpen(false)}
-              className="p-1.5 rounded-md hover:bg-blue-700 text-white/80 hover:text-white transition-colors"
+              className="p-1.5 rounded-md hover:bg-blue-700 text-white/80 hover:text-white transition-colors cursor-pointer relative z-10"
               title={t.common.close}
             >
               <X className="h-4 w-4" />
