@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { StatCard } from "./StatCard";
 import { AlertsList } from "./AlertsList";
 import { AICopilot } from "./AICopilot";
-import { Store, TrendingDown, PackageX, Activity, Bot } from "lucide-react";
+import { DollarSign, TrendingUp, TrendingDown, Percent, AlertTriangle, Activity, Bot, Store } from "lucide-react";
 import {
   LineChart,
   Line,
@@ -307,7 +307,7 @@ export function Dashboard({ activeRole }: { activeRole: Role }) {
           value={`S$ ${(stats.todayRevenue || 0).toLocaleString('en-SG', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`}
           trend={stats.avgSalesVariance}
           description={`vs previous period`}
-          icon={Store}
+          icon={DollarSign}
         />
         <StatCard
           title="Active Outlets"
@@ -318,9 +318,9 @@ export function Dashboard({ activeRole }: { activeRole: Role }) {
         <StatCard
           title="Low Stock Items"
           value={stats.lowStockItems.toString()}
-          trend={0}
-          description="Below minimum"
-          icon={PackageX}
+          trend={stats.lowStockItems > 10 ? -1 : 0}
+          description={stats.lowStockItems === 0 ? "All items stocked" : "Items below reorder point"}
+          icon={AlertTriangle}
         />
         <StatCard
           title="System Health"
@@ -464,43 +464,64 @@ export function Dashboard({ activeRole }: { activeRole: Role }) {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {outlets.slice(0, 5).map((outlet) => {
-                    const anomaly = anomalyData[outlet.id];
-                    const hasAnomaly = anomaly?.is_anomaly || false;
-                    const scorePercent = anomaly ? Math.round(anomaly.anomaly_score * 10) : 0;
-                    const hasNegative = scorePercent < 0;
-                    const status = anomaly?.status || 'OK';
-                    
-                    return (
-                      <tr key={outlet.id} className="hover:bg-slate-50 transition-colors">
-                        <td className="px-6 py-3 font-medium text-slate-900">{outlet.name} ({outlet.code})</td>
-                        <td className="px-6 py-3">{outlet.region?.name || 'Unknown'}</td>
-                        <td className="px-6 py-3">
-                          <span className={`inline-flex items-center gap-1 font-medium ${hasNegative ? 'text-red-600' : 'text-slate-600'}`}>
-                            {hasNegative && <TrendingDown className="w-3 h-3" />}
-                            {anomaly ? `${hasNegative ? '' : '+'}${scorePercent}%` : 'Normal'}
-                          </span>
-                        </td>
-                        <td className="px-6 py-3">
-                          <span className={`inline-flex items-center gap-1 font-medium ${
-                            status === 'CRITICAL' ? 'text-red-600' : 
-                            status === 'WARNING' ? 'text-orange-600' : 'text-slate-600'
-                          }`}>
-                            {status === 'CRITICAL' ? 'HIGH' : status === 'WARNING' ? 'MEDIUM' : 'LOW'}
-                          </span>
-                        </td>
-                        <td className="px-6 py-3">
-                          <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
-                            status === 'CRITICAL' ? 'bg-red-100 text-red-700' : 
-                            status === 'WARNING' ? 'bg-orange-100 text-orange-700' : 
-                            'border border-slate-200 text-slate-600'
-                          }`}>
-                            {status === 'CRITICAL' ? 'Critical' : status === 'WARNING' ? 'Watch' : 'OK'}
-                          </span>
-                        </td>
-                      </tr>
-                    );
-                  })}
+                  {(() => {
+                    // Only show outlets with actual risk (anomaly or non-OK status)
+                    const riskyOutlets = outlets.filter(o => {
+                      const anomaly = anomalyData[o.id];
+                      return anomaly?.is_anomaly || anomaly?.status === 'CRITICAL' || anomaly?.status === 'WARNING';
+                    }).slice(0, 5);
+                    if (riskyOutlets.length === 0) {
+                      return (
+                        <tr>
+                          <td colSpan={5} className="px-6 py-12 text-center">
+                            <div className="flex flex-col items-center gap-2">
+                              <div className="w-10 h-10 rounded-full bg-green-100 text-green-600 flex items-center justify-center">
+                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                              </div>
+                              <p className="text-sm font-medium text-slate-700">All outlets healthy</p>
+                              <p className="text-xs text-slate-400">No risk detected in your network</p>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    }
+                    return riskyOutlets.map(outlet => {
+                      const anomaly = anomalyData[outlet.id];
+                      const hasAnomaly = anomaly?.is_anomaly || false;
+                      const scorePercent = anomaly ? Math.round(anomaly.anomaly_score * 10) : 0;
+                      const hasNegative = scorePercent < 0;
+                      const status = anomaly?.status || 'OK';
+                      return (
+                        <tr key={outlet.id} className="hover:bg-slate-50 transition-colors">
+                          <td className="px-6 py-3 font-medium text-slate-900">{outlet.name} ({outlet.code})</td>
+                          <td className="px-6 py-3">{outlet.region?.name || 'Unknown'}</td>
+                          <td className="px-6 py-3">
+                            <span className={`inline-flex items-center gap-1 font-medium ${hasNegative ? 'text-red-600' : 'text-green-600'}`}>
+                              {hasNegative && <TrendingDown className="w-3 h-3" />}
+                              {anomaly ? `${hasNegative ? '' : '+'}${scorePercent}%` : 'Normal'}
+                            </span>
+                          </td>
+                          <td className="px-6 py-3">
+                            <span className={`inline-flex items-center gap-1 font-medium ${
+                              status === 'CRITICAL' ? 'text-red-600' :
+                              status === 'WARNING' ? 'text-orange-600' : 'text-green-600'
+                            }`}>
+                              {status === 'CRITICAL' ? 'HIGH' : status === 'WARNING' ? 'MEDIUM' : 'LOW'}
+                            </span>
+                          </td>
+                          <td className="px-6 py-3">
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
+                              status === 'CRITICAL' ? 'bg-red-100 text-red-700' :
+                              status === 'WARNING' ? 'bg-orange-100 text-orange-700' :
+                              'bg-green-100 text-green-700'
+                            }`}>
+                              {status === 'CRITICAL' ? 'Critical' : status === 'WARNING' ? 'Watch' : 'OK'}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    });
+                  })()}
                 </tbody>
               </table>
             </div>
