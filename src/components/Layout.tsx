@@ -22,6 +22,7 @@ import {
   Landmark,
   PanelLeftClose,
   PanelLeft,
+  FileText,
 } from "lucide-react";
 import { cn } from "@/src/lib/utils";
 
@@ -93,6 +94,7 @@ export function Layout({ children, activeRole, onRoleChange, activeTab, onTabCha
           { icon: Store, label: t.nav.networkDirectory, id: "Outlets" },
           { icon: Users, label: t.nav.globalWorkforce, id: "Workforce" },
           { icon: ActivitySquare, label: t.nav.enterpriseWorkflows, id: "Workflows" },
+          { icon: FileText, label: t.nav.caseManagement, id: "Cases" },
           { icon: Bot, label: t.nav.agentOrchestration, id: "Agents" },
           { icon: AlertTriangle, label: t.nav.stockoutRisk, id: "Risk" },
           { icon: BookOpen, label: t.nav.knowledgeBase, id: "Knowledge" },
@@ -108,6 +110,7 @@ export function Layout({ children, activeRole, onRoleChange, activeTab, onTabCha
           { icon: Store, label: t.nav.areaOutlets, id: "Outlets" },
           { icon: Users, label: t.nav.areaStaff, id: "Workforce" },
           { icon: ActivitySquare, label: t.nav.activeEscalations, id: "Workflows" },
+          { icon: FileText, label: t.nav.caseManagement, id: "Cases" },
           { icon: Bot, label: t.nav.agentOrchestration, id: "Agents" },
           { icon: AlertTriangle, label: t.nav.stockoutRisk, id: "Risk" },
           { icon: BookOpen, label: t.nav.knowledgeBase, id: "Knowledge" },

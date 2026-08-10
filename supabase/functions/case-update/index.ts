@@ -1,127 +1,90 @@
 /// <reference lib="deno.ns" />
-
 /**
  * Case Update Edge Function
- * Updates case status: RESOLVED, REJECTED, ESCALATED
- * 
- * POST /functions/v1/case-update
+ * Updates a case: status, assignee, priority
+ * SECURITY: Requires authentication
  */
-
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0";
-
-const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { verifyAuth, unauthorizedResponse } from "../_shared/auth-helper.ts";
 
 const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Origin": "https://cqaifranchise.vercel.app",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-interface CaseUpdateRequest {
-  case_id: number;
-  status: "RESOLVED" | "REJECTED" | "ESCALATED" | "CLOSED";
-  notes?: string;
-  resolved_by?: string;
-}
+const VALID_STATUSES = ["NEW", "ACKNOWLEDGED", "IN_PROGRESS", "RESOLVED", "CLOSED"];
+const VALID_PRIORITIES = ["URGENT", "HIGH", "MEDIUM", "LOW"];
 
-serve(async (req: Request) => {
+serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
 
+  const auth = await verifyAuth(req);
+  if (!auth.authorized) {
+    return unauthorizedResponse(auth.error);
+  }
+
   if (req.method !== "POST") {
-    return new Response(
-      JSON.stringify({ error: "Method not allowed. Use POST." }),
-      { status: 405, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    return Response.json({ error: "Method not allowed" }, { status: 405, headers: corsHeaders });
   }
 
-  try {
-    const body: CaseUpdateRequest = await req.json();
+  const supabase = createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+  );
 
-    if (!body.case_id || !body.status) {
-      return new Response(
-        JSON.stringify({ error: "case_id and status are required" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
+  const body = await req.json();
+  const { case_id, status, priority, assigned_to_id, notes } = body;
 
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
-
-    // Get current case
-    const { data: currentCase, error: fetchError } = await supabase
-      .from("cases")
-      .select("*")
-      .eq("id", body.case_id)
-      .single();
-
-    if (fetchError || !currentCase) {
-      return new Response(
-        JSON.stringify({ error: "Case not found" }),
-        { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    // Build update payload
-    const updateData: any = {
-      status: body.status,
-      updated_at: new Date().toISOString(),
-    };
-
-    // Add resolved_at if resolving/closing
-    if (body.status === "RESOLVED" || body.status === "CLOSED") {
-      updateData.resolved_at = new Date().toISOString();
-      if (body.resolved_by) {
-        updateData.resolved_by = body.resolved_by;
-      }
-    }
-
-    // Add notes if provided
-    if (body.notes) {
-      updateData.notes = body.notes;
-    }
-
-    // Update case
-    const { data: updatedCase, error: updateError } = await supabase
-      .from("cases")
-      .update(updateData)
-      .eq("id", body.case_id)
-      .select()
-      .single();
-
-    if (updateError) {
-      console.error("Error updating case:", updateError);
-      return new Response(
-        JSON.stringify({ error: "Failed to update case" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    // If closing/resolved, also update linked alert
-    if (body.status === "RESOLVED" || body.status === "CLOSED") {
-      await supabase
-        .from("alerts")
-        .update({ status: "RESOLVED", resolved_at: new Date().toISOString() })
-        .eq("id", currentCase.alert_id);
-    }
-
-    return new Response(
-      JSON.stringify({
-        success: true,
-        case_id: body.case_id,
-        status: body.status,
-        updated_case: updatedCase,
-        message: `Case ${body.case_id} updated to ${body.status}`
-      }),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-
-  } catch (error) {
-    console.error("Error:", error);
-    return new Response(
-      JSON.stringify({ error: "Internal server error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+  if (!case_id) {
+    return Response.json({ error: "case_id required" }, { status: 400, headers: corsHeaders });
   }
+
+  // Build update payload
+  const updates: Record<string, any> = {
+    updated_at: new Date().toISOString(),
+  };
+
+  if (status && VALID_STATUSES.includes(status)) {
+    updates.status = status;
+    if (status === "RESOLVED" || status === "CLOSED") {
+      updates.resolved_at = new Date().toISOString();
+    }
+  }
+
+  if (priority && VALID_PRIORITIES.includes(priority)) {
+    updates.priority = priority;
+  }
+
+  if (assigned_to_id !== undefined) {
+    updates.assigned_to_id = assigned_to_id || null;
+  }
+
+  // Perform update
+  const { data, error } = await supabase
+    .from("cases")
+    .update(updates)
+    .eq("id", case_id)
+    .select()
+    .single();
+
+  if (error) {
+    return Response.json({ error: error.message }, { status: 500, headers: corsHeaders });
+  }
+
+  // Add notes if provided
+  if (notes) {
+    await supabase.from("case_notes").insert({
+      case_id,
+      content: notes,
+      created_by: auth.user?.id,
+    }).catch(() => {}); // non-critical
+  }
+
+  return Response.json({
+    success: true,
+    case: data,
+  }, { headers: { ...corsHeaders, "Content-Type": "application/json" } });
 });

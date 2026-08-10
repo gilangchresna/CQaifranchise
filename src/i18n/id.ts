@@ -34,6 +34,7 @@ export const id = {
     globalWorkforce: "Tenaga Kerja Global",
     areaStaff: "Staf Area",
     enterpriseWorkflows: "Alur Kerja Enterprise",
+    caseManagement: "Manajemen Kasus",
     activeEscalations: "Eskalasi Aktif",
     agentOrchestration: "Orkestrasi Agen",
     stockoutRisk: "Risiko Stok Habis",

@@ -16,13 +16,14 @@ import { PeerBenchmark } from "@/src/components/PeerBenchmark";
 import { ApprovalWorkflows } from "@/src/components/ApprovalWorkflows";
 import KnowledgeBaseAdmin from "@/src/components/KnowledgeBaseAdmin";
 import { Financing } from "@/src/components/Financing";
+import { CasesList } from "@/src/components/CasesList";
 import { LiveTransactionFeed } from "@/src/components/LiveTransactionFeed";
 import { FloatingChat } from "@/src/components/FloatingChat";
 import Login from "@/src/components/Login";
 import { Role } from "@/src/types";
 
 export type Tab =
-  | "Dashboard" | "Outlets" | "Workforce" | "Workflows" | "Agents" | "Risk" | "Knowledge" | "Peer" | "Approval" | "Integrations" | "Models" | "Settings" | "Access" | "Financing";
+  | "Dashboard" | "Outlets" | "Workforce" | "Workflows" | "Agents" | "Risk" | "Knowledge" | "Peer" | "Approval" | "Integrations" | "Models" | "Settings" | "Access" | "Financing" | "Cases";
 
 export default function App() {
   const [activeRole, setActiveRole] = useState<Role>("Regional");
@@ -90,6 +91,8 @@ export default function App() {
         return <Settings />;
       case "financing":
         return <Financing activeRole={activeRole} />;
+      case "cases":
+        return <CasesList activeRole={activeRole} />;
       default:
         return <Dashboard activeRole={activeRole} />;
     }

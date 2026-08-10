@@ -15,6 +15,21 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-pos-signature",
 };
 
+// ── L1 Replay Protection ─────────────────────────────────────────────────────
+// Reject transactions with timestamps older than 5 minutes
+// This prevents replay attacks where an attacker re-sends captured transactions
+const REPLAY_WINDOW_MS = 5 * 60 * 1000; // 5 minutes
+
+function isTimestampValid(timestamp: string | undefined): boolean {
+  if (!timestamp) return false;
+  const txTime = new Date(timestamp).getTime();
+  if (isNaN(txTime)) return false;
+  const now = Date.now();
+  const age = now - txTime;
+  // Reject if too old (replay) or in the future (bad clock)
+  return age >= 0 && age <= REPLAY_WINDOW_MS;
+}
+
 /**
  * Verify HMAC-SHA256 signature for POS webhook
  * Returns true if signature is valid, false otherwise
@@ -108,6 +123,18 @@ if (req.method === "POST") {
     if (!body.outlet_id) errors.push("outlet_id is required");
     if (!body.date) errors.push("date is required");
     if (body.amount === undefined || body.amount === null) errors.push("amount is required");
+
+    // L1: Replay protection — reject stale transactions
+    if (body.date && !isTimestampValid(body.date)) {
+      return new Response(JSON.stringify({
+        success: false,
+        error: "Replay detected: transaction timestamp is too old or missing",
+        code: "REPLAY_DETECTED"
+      }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" }
+      });
+    }
 
     // Type validation
     if (body.outlet_id && (typeof body.outlet_id !== 'number' || body.outlet_id <= 0)) {

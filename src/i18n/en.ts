@@ -34,6 +34,7 @@ export const en = {
     globalWorkforce: "Global Workforce",
     areaStaff: "Area Staff",
     enterpriseWorkflows: "Enterprise Workflows",
+    caseManagement: "Case Management",
     activeEscalations: "Active Escalations",
     agentOrchestration: "Agent Orchestration",
     stockoutRisk: "Stockout Risk",
