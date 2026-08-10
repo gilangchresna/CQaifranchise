@@ -94,8 +94,13 @@ export function Agents({ activeRole }: { activeRole: Role }) {
 
   async function fetchAgentData() {
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token || '';
+
       // Fetch agent statuses
-      const response = await fetch(`${EDGE_URL}/agent-status`);
+      const response = await fetch(`${EDGE_URL}/agent-status`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
       const data = await response.json();
 
       if (data.success) {
