@@ -2,194 +2,25 @@
 
 /**
  * Agent Orchestration Edge Function
- * Serves agent status, task pipeline, and logs
- *
  * GET /functions/v1/agent-orchestration
+ * Returns real agent status, tasks, logs, and metrics from DB
  */
 
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
+const SUPABASE_SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-interface Agent {
-  id: string;
-  name: string;
-  role: string;
-  status: "online" | "busy" | "offline" | "error";
-  last_active: string;
-  tasks_completed_today: number;
-  avg_response_time_ms: number;
-  queue_size: number;
-  description: string;
-  capabilities: string[];
-}
-
-interface AgentTask {
-  id: string;
-  agent_id: string;
-  agent_name: string;
-  task_type: string;
-  description: string;
-  status: "queued" | "running" | "completed" | "failed";
-  started_at?: string;
-  completed_at?: string;
-  duration_ms?: number;
-  result?: string;
-}
-
-interface AgentLog {
-  id: string;
-  agent_id: string;
-  agent_name: string;
-  level: "info" | "warn" | "error" | "debug";
-  message: string;
-  timestamp: string;
-  metadata?: Record<string, any>;
-}
-
-// Mock agent data
-const agents: Agent[] = [
-  {
-    id: "athena",
-    name: "Athena",
-    role: "Main AI Assistant",
-    status: "online",
-    last_active: new Date().toISOString(),
-    tasks_completed_today: 1247,
-    avg_response_time_ms: 245,
-    queue_size: 0,
-    description: "Primary AI assistant for natural language queries and summaries",
-    capabilities: ["Chat", "Summarize", "Explain", "Recommend"],
-  },
-  {
-    id: "monitor",
-    name: "Monitor",
-    role: "Alert & Monitoring Agent",
-    status: "online",
-    last_active: new Date().toISOString(),
-    tasks_completed_today: 8923,
-    avg_response_time_ms: 12,
-    queue_size: 0,
-    description: "24/7 monitoring of outlet metrics, anomaly detection, alert triggers",
-    capabilities: ["Z-score", "Stockout Detection", "Alert Triggers", "Real-time Watch"],
-  },
-  {
-    id: "analyst",
-    name: "Analyst",
-    role: "Data Analysis Agent",
-    status: "busy",
-    last_active: new Date().toISOString(),
-    tasks_completed_today: 234,
-    avg_response_time_ms: 1847,
-    queue_size: 3,
-    description: "Analyzes trends, generates insights, produces reports",
-    capabilities: ["Trend Analysis", "Forecasting", "Report Generation", "Benchmarking"],
-  },
-  {
-    id: "coordinator",
-    name: "Coordinator",
-    role: "Task Routing Agent",
-    status: "online",
-    last_active: new Date().toISOString(),
-    tasks_completed_today: 456,
-    avg_response_time_ms: 89,
-    queue_size: 1,
-    description: "Routes requests to appropriate agents, assigns cases, handles escalation",
-    capabilities: ["Task Routing", "Case Assignment", "Escalation", "Priority Queue"],
-  },
-  {
-    id: "triage",
-    name: "Triage",
-    role: "Case Triage Agent",
-    status: "online",
-    last_active: new Date().toISOString(),
-    tasks_completed_today: 189,
-    avg_response_time_ms: 423,
-    queue_size: 2,
-    description: "Categorizes incoming issues, suggests resolution paths",
-    capabilities: ["Categorization", "Priority Scoring", "SLA Calculation", "Similar Case Lookup"],
-  },
-  {
-    id: "executor",
-    name: "Executor",
-    role: "Action Execution Agent",
-    status: "online",
-    last_active: new Date().toISOString(),
-    tasks_completed_today: 67,
-    avg_response_time_ms: 156,
-    queue_size: 0,
-    description: "Executes automated actions: create case, send notification, update CRM",
-    capabilities: ["Create Case", "Send Alert", "Notify", "CRM Update", "Webhook Trigger"],
-  },
-];
-
-// Generate recent tasks
-function generateRecentTasks(): AgentTask[] {
-  const taskTypes = [
-    { type: "chat", desc: "User query about outlet performance", agent: "athena" },
-    { type: "alert", desc: "Z-score anomaly detected for MYB-002", agent: "monitor" },
-    { type: "analysis", desc: "Revenue trend analysis for July", agent: "analyst" },
-    { type: "triage", desc: "Stock alert categorization for WKN-001", agent: "triage" },
-    { type: "route", desc: "Route case to Regional Manager", agent: "coordinator" },
-    { type: "execute", desc: "Create case from alert #4521", agent: "executor" },
-    { type: "summarize", desc: "Daily outlet summary generation", agent: "athena" },
-    { type: "forecast", desc: "Tomorrow's sales forecast", agent: "analyst" },
-  ];
-
-  const now = new Date();
-  return taskTypes.map((t, idx) => {
-    const agent = agents.find(a => a.id === t.agent)!;
-    const startTime = new Date(now.getTime() - (idx + 1) * 60000);
-    const isComplete = idx > 1;
-    return {
-      id: `task-${Date.now() - idx}`,
-      agent_id: t.agent,
-      agent_name: agent.name,
-      task_type: t.type,
-      description: t.desc,
-      status: isComplete ? "completed" : (idx === 2 ? "running" : "queued"),
-      started_at: startTime.toISOString(),
-      completed_at: isComplete ? new Date(startTime.getTime() + Math.random() * 5000).toISOString() : undefined,
-      duration_ms: isComplete ? Math.floor(Math.random() * 5000) + 100 : undefined,
-    };
-  });
-}
-
-// Generate logs
-function generateLogs(): AgentLog[] {
-  const logMessages = [
-    { agent: "monitor", level: "info", msg: "Z-score calculation completed for all 24 outlets" },
-    { agent: "monitor", level: "debug", msg: "Baseline refreshed: 30-day rolling average updated" },
-    { agent: "athena", level: "info", msg: "User query processed: outlet performance summary" },
-    { agent: "coordinator", level: "info", msg: "Task routed to Analyst agent" },
-    { agent: "analyst", level: "info", msg: "Trend analysis started for region JKT" },
-    { agent: "triage", level: "info", msg: "Case categorized as INVENTORY with HIGH priority" },
-    { agent: "executor", level: "info", msg: "Case #4521 created successfully" },
-    { agent: "monitor", level: "warn", msg: "Stock risk threshold exceeded at WKN-001" },
-    { agent: "coordinator", level: "info", msg: "Escalation triggered: P0 case requires attention" },
-    { agent: "athena", level: "debug", msg: "Context window: 3421 tokens / 8192 max" },
-  ];
-
-  const now = new Date();
-  return logMessages.map((l, idx) => {
-    const agent = agents.find(a => a.id === l.agent)!;
-    return {
-      id: `log-${Date.now() - idx}`,
-      agent_id: l.agent,
-      agent_name: agent.name,
-      level: l.level as any,
-      message: l.msg,
-      timestamp: new Date(now.getTime() - idx * 30000).toISOString(),
-      metadata: { request_id: `req-${1000 + idx}` },
-    };
-  });
+function verifyAuth(token: string): Promise<{ ok: boolean; user?: any }> {
+  return fetch(`${SUPABASE_URL}/auth/v1/user`, {
+    headers: { "Authorization": `Bearer ${token}`, "apikey": SUPABASE_SERVICE_KEY },
+  }).then(r => r.json().then(data => ({ ok: r.ok, user: data })));
 }
 
 serve(async (req: Request) => {
@@ -197,108 +28,284 @@ serve(async (req: Request) => {
     return new Response("ok", { headers: corsHeaders });
   }
 
-  // Verify JWT authentication for all requests
   const authHeader = req.headers.get("Authorization");
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    return new Response(
-      JSON.stringify({ error: "Unauthorized: Missing Authorization header" }),
-      { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+  if (!authHeader?.startsWith("Bearer ")) {
+    return new Response(JSON.stringify({ error: "Unauthorized" }), {
+      status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" }
+    });
   }
 
   const token = authHeader.substring(7);
-
-  try {
-    const verifyRes = await fetch(`${supabaseUrl}/auth/v1/user`, {
-      headers: { "Authorization": `Bearer ${token}`, "apikey": supabaseServiceKey },
+  const auth = await verifyAuth(token);
+  if (!auth.ok) {
+    return new Response(JSON.stringify({ error: "Unauthorized" }), {
+      status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" }
     });
-
-    if (!verifyRes.ok) {
-      return new Response(
-        JSON.stringify({ error: "Unauthorized: Invalid token" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-  } catch (err) {
-    return new Response(
-      JSON.stringify({ error: "Authentication failed" }),
-      { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
   }
 
+  const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
   const url = new URL(req.url);
   const endpoint = url.searchParams.get("endpoint") || "status";
+  const limit = Math.min(parseInt(url.searchParams.get("limit") || "20"), 100);
 
   try {
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
-
+    // ── AGENTS ──────────────────────────────────────────────────────────────
     if (endpoint === "agents") {
-      return new Response(
-        JSON.stringify({ success: true, agents }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      const { data: agents } = await supabase
+        .from("agents")
+        .select("*")
+        .order("name");
+
+      return new Response(JSON.stringify({ success: true, agents: agents || [] }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" }
+      });
     }
 
+    // ── TASKS ────────────────────────────────────────────────────────────────
     if (endpoint === "tasks") {
-      const tasks = generateRecentTasks();
-      return new Response(
-        JSON.stringify({ success: true, tasks }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      const { data: tasks, error } = await supabase
+        .from("agent_tasks")
+        .select("*, agents(name, role)")
+        .order("created_at", { ascending: false })
+        .limit(limit);
+
+      if (error) throw error;
+
+      // Compute duration_ms for completed tasks
+      const enriched = (tasks || []).map(t => ({
+        ...t,
+        duration_ms: t.started_at && t.completed_at
+          ? new Date(t.completed_at).getTime() - new Date(t.started_at).getTime()
+          : undefined,
+      }));
+
+      return new Response(JSON.stringify({ success: true, tasks: enriched }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" }
+      });
     }
 
+    // ── LOGS ────────────────────────────────────────────────────────────────
     if (endpoint === "logs") {
-      const logs = generateLogs();
-      return new Response(
-        JSON.stringify({ success: true, logs }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      const { data: logs, error } = await supabase
+        .from("agent_logs")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .limit(limit);
+
+      if (error) throw error;
+
+      return new Response(JSON.stringify({ success: true, logs: logs || [] }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" }
+      });
     }
 
+    // ── METRICS ─────────────────────────────────────────────────────────────
     if (endpoint === "metrics") {
+      const today = new Date().toISOString().slice(0, 10);
+
+      // Get tasks today by status
+      const { data: tasksToday } = await supabase
+        .from("agent_tasks")
+        .select("status")
+        .gte("created_at", today);
+
+      // Get tasks today by agent
+      const { data: tasksByAgent } = await supabase
+        .from("agent_tasks")
+        .select("agent_id, status, duration_ms")
+        .gte("created_at", today);
+
+      // Get avg response time from agent_metrics (last 7 days)
+      const sevenDaysAgo = new Date(Date.now() - 7 * 86400000).toISOString();
+      const { data: avgDurations } = await supabase
+        .from("agent_metrics")
+        .select("agent_id, metric_value")
+        .eq("metric_type", "avg_duration")
+        .eq("period", "daily")
+        .gte("recorded_at", sevenDaysAgo);
+
+      // Get recent errors
+      const { data: recentErrors } = await supabase
+        .from("agent_tasks")
+        .select("id")
+        .eq("status", "failed")
+        .gte("created_at", today);
+
+      // Get agent status counts
+      const { data: agentStatuses } = await supabase
+        .from("agents")
+        .select("status");
+
+      const totalTasks = tasksToday?.length || 0;
+      const failedTasks = recentErrors?.length || 0;
+      const errorRate = totalTasks > 0 ? Math.round((failedTasks / totalTasks) * 1000) / 10 : 0;
+
+      const statusCounts = (agentStatuses || []).reduce((acc: Record<string, number>, a: any) => {
+        acc[a.status] = (acc[a.status] || 0) + 1;
+        return acc;
+      }, {});
+
+      // Compute per-agent avg response time from metrics
+      const agentAvgDurations: Record<string, number> = {};
+      (avgDurations || []).forEach((m: any) => {
+        if (!agentAvgDurations[m.agent_id]) agentAvgDurations[m.agent_id] = 0;
+        agentAvgDurations[m.agent_id] = m.metric_value;
+      });
+
+      const { data: allAgents } = await supabase.from("agents").select("id, tasks_completed_today, avg_response_time_ms, queue_size");
+
+      const totalCompleted = (allAgents || []).reduce((s: number, a: any) => s + (a.tasks_completed_today || 0), 0);
+      const totalQueue = (allAgents || []).reduce((s: number, a: any) => s + (a.queue_size || 0), 0);
+      const avgResponseTime = allAgents && allAgents.length > 0
+        ? Math.round((allAgents || []).reduce((s: number, a: any) => s + (a.avg_response_time_ms || 0), 0) / (allAgents || []).length)
+        : 0;
+
       const metrics = {
-        total_tasks_today: agents.reduce((sum, a) => sum + a.tasks_completed_today, 0),
-        avg_response_time: Math.round(
-          agents.reduce((sum, a) => sum + a.avg_response_time_ms, 0) / agents.length
-        ),
-        total_queue: agents.reduce((sum, a) => sum + a.queue_size, 0),
-        online_agents: agents.filter(a => a.status === "online" || a.status === "busy").length,
-        total_agents: agents.length,
-        uptime_percentage: 99.7,
-        error_rate: 0.3,
+        total_tasks_today: totalTasks,
+        tasks_completed_today: (tasksToday || []).filter((t: any) => t.status === "completed").length,
+        tasks_failed_today: failedTasks,
+        tasks_running: (tasksToday || []).filter((t: any) => t.status === "running").length,
+        tasks_pending: (tasksToday || []).filter((t: any) => t.status === "pending" || t.status === "queued").length,
+        avg_response_time_ms: avgResponseTime,
+        total_queue: totalQueue,
+        online_agents: (statusCounts["online"] || 0) + (statusCounts["busy"] || 0),
+        busy_agents: statusCounts["busy"] || 0,
+        offline_agents: statusCounts["offline"] || 0,
+        error_agents: statusCounts["error"] || 0,
+        total_agents: allAgents?.length || 0,
+        error_rate: errorRate,
+        uptime_percentage: allAgents && allAgents.length > 0
+          ? Math.round(((allAgents.length - (statusCounts["offline"] || 0) - (statusCounts["error"] || 0)) / allAgents.length) * 1000) / 10
+          : 100,
+        agent_breakdown: (allAgents || []).map((a: any) => ({
+          id: a.id,
+          tasks_completed_today: a.tasks_completed_today || 0,
+          avg_response_time_ms: a.avg_response_time_ms || 0,
+          queue_size: a.queue_size || 0,
+        })),
       };
-      return new Response(
-        JSON.stringify({ success: true, metrics }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+
+      return new Response(JSON.stringify({ success: true, metrics }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" }
+      });
     }
 
-    // Default: return full status
-    return new Response(
-      JSON.stringify({
-        success: true,
-        agents,
-        tasks: generateRecentTasks(),
-        logs: generateLogs(),
-        metrics: {
-          total_tasks_today: agents.reduce((sum, a) => sum + a.tasks_completed_today, 0),
-          avg_response_time: Math.round(
-            agents.reduce((sum, a) => sum + a.avg_response_time_ms, 0) / agents.length
-          ),
-          total_queue: agents.reduce((sum, a) => sum + a.queue_size, 0),
-          online_agents: agents.filter(a => a.status === "online" || a.status === "busy").length,
-          total_agents: agents.length,
-          uptime_percentage: 99.7,
-          error_rate: 0.3,
-        },
-      }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  } catch (error) {
+    // ── DISPATCH: Create a new task ─────────────────────────────────────────
+    if (endpoint === "dispatch") {
+      const body = await req.json().catch(() => ({}));
+      const { task_type, agent_id, priority = 5, input_data = {}, description } = body;
+
+      if (!task_type) {
+        return new Response(JSON.stringify({ error: "task_type required" }), {
+          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" }
+        });
+      }
+
+      const taskId = `task_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      const targetAgent = agent_id || {
+        anomaly_check: "monitor",
+        stockout_predict: "analyst",
+        alert_triage: "triage",
+        case_triage: "triage",
+        user_query: "athena",
+        notification_send: "executor",
+        benchmark: "analyst",
+        task_dispatch: "coordinator",
+      }[task_type] || "coordinator";
+
+      const { data: task, error } = await supabase
+        .from("agent_tasks")
+        .insert({
+          task_id: taskId,
+          agent_id: targetAgent,
+          task_type,
+          description: description || `Task: ${task_type}`,
+          status: "pending",
+          priority,
+          input_data,
+          user_id: auth.user?.id,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      // Log event
+      await supabase.rpc("log_agent_event", {
+        p_agent_id: "coordinator",
+        p_level: "info",
+        p_message: `Task dispatched: ${task_type} → ${targetAgent}`,
+        p_metadata: { task_id: taskId, priority },
+        p_source: "orchestration",
+      });
+
+      return new Response(JSON.stringify({ success: true, task }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" }
+      });
+    }
+
+    // ── DEFAULT: Full status ─────────────────────────────────────────────────
+    const [{ data: agents }, { data: tasks }, { data: logs }, { data: agentStatuses }] = await Promise.all([
+      supabase.from("agents").select("*").order("name"),
+      supabase.from("agent_tasks").select("*, agents(name, role)").order("created_at", { ascending: false }).limit(20),
+      supabase.from("agent_logs").select("*").order("created_at", { ascending: false }).limit(20),
+      supabase.from("agents").select("status"),
+    ]);
+
+    const today = new Date().toISOString().slice(0, 10);
+    const { data: tasksToday } = await supabase
+      .from("agent_tasks").select("status").gte("created_at", today);
+
+    const statusCounts = (agentStatuses || []).reduce((acc: Record<string, number>, a: any) => {
+      acc[a.status] = (acc[a.status] || 0) + 1;
+      return acc;
+    }, {});
+
+    const totalTasks = tasksToday?.length || 0;
+    const completedTasks = (tasksToday || []).filter((t: any) => t.status === "completed").length;
+    const { data: failedToday } = await supabase
+      .from("agent_tasks").select("id", { count: "exact" }).eq("status", "failed").gte("created_at", today);
+
+    const { data: allAgents } = await supabase.from("agents").select("tasks_completed_today, avg_response_time_ms, queue_size");
+
+    const metrics = {
+      total_tasks_today: totalTasks,
+      tasks_completed_today: completedTasks,
+      tasks_failed_today: failedToday?.length || 0,
+      avg_response_time_ms: allAgents && allAgents.length > 0
+        ? Math.round((allAgents || []).reduce((s: number, a: any) => s + (a.avg_response_time_ms || 0), 0) / (allAgents || []).length)
+        : 0,
+      total_queue: (allAgents || []).reduce((s: number, a: any) => s + (a.queue_size || 0), 0),
+      online_agents: (statusCounts["online"] || 0) + (statusCounts["busy"] || 0),
+      busy_agents: statusCounts["busy"] || 0,
+      offline_agents: statusCounts["offline"] || 0,
+      error_agents: statusCounts["error"] || 0,
+      total_agents: agents?.length || 0,
+      error_rate: totalTasks > 0 ? Math.round(((failedToday?.length || 0) / totalTasks) * 1000) / 10 : 0,
+      uptime_percentage: agents && agents.length > 0
+        ? Math.round(((agents.length - (statusCounts["offline"] || 0) - (statusCounts["error"] || 0)) / agents.length) * 1000) / 10
+        : 100,
+    };
+
+    return new Response(JSON.stringify({
+      success: true,
+      agents: agents || [],
+      tasks: (tasks || []).map((t: any) => ({
+        ...t,
+        duration_ms: t.started_at && t.completed_at
+          ? new Date(t.completed_at).getTime() - new Date(t.started_at).getTime()
+          : undefined,
+      })),
+      logs: logs || [],
+      metrics,
+    }), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" }
+    });
+
+  } catch (error: any) {
     console.error("Agent orchestration error:", error);
-    return new Response(
-      JSON.stringify({ error: error.message || "Internal server error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    return new Response(JSON.stringify({ error: error.message || "Internal server error" }), {
+      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" }
+    });
   }
 });
