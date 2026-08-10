@@ -69,13 +69,18 @@ export async function verifyAuth(req: Request): Promise<AuthResult> {
   }
 }
 
+const CORS_HEADERS = {
+  "Content-Type": "application/json",
+  "Access-Control-Allow-Origin": "https://cqaifranchise.vercel.app",
+};
+
 /**
  * Create standardized unauthorized response
  */
 export function unauthorizedResponse(error: string = "Unauthorized") {
   return new Response(JSON.stringify({ error }), {
     status: 401,
-    headers: { "Content-Type": "application/json" },
+    headers: CORS_HEADERS,
   });
 }
 
@@ -85,6 +90,6 @@ export function unauthorizedResponse(error: string = "Unauthorized") {
 export function forbiddenResponse(error: string = "Forbidden") {
   return new Response(JSON.stringify({ error }), {
     status: 403,
-    headers: { "Content-Type": "application/json" },
+    headers: CORS_HEADERS,
   });
 }
