@@ -20,6 +20,8 @@ import {
   ShieldCheck,
   Search,
   Landmark,
+  PanelLeftClose,
+  PanelLeft,
 } from "lucide-react";
 import { cn } from "@/src/lib/utils";
 
@@ -33,6 +35,7 @@ interface LayoutProps {
 
 export function Layout({ children, activeRole, onRoleChange, activeTab, onTabChange }: LayoutProps) {
   const { t } = useI18n();
+  const [collapsed, setCollapsed] = useState(false);
   const [posLiveStatus, setPosLiveStatus] = useState<'live' | 'stale' | 'offline'>('offline');
   const [lastTxnAt, setLastTxnAt] = useState<string | null>(null);
 
@@ -132,30 +135,39 @@ export function Layout({ children, activeRole, onRoleChange, activeTab, onTabCha
   return (
     <div className="flex h-screen w-full bg-slate-50 text-slate-900 font-sans">
       {/* Sidebar */}
-      <aside className="w-64 flex flex-col border-r border-slate-200 bg-white z-10">
-        {/* Logo */}
-        <div className="h-16 flex items-center gap-3 px-6 border-b border-slate-200">
-          <div className="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center">
+      <aside className={cn("flex flex-col border-r border-slate-200 bg-white z-10 transition-all duration-200", collapsed ? "w-16" : "w-64")}>
+        {/* Logo + Collapse Toggle */}
+        <div className={cn("h-16 flex items-center gap-3 border-b border-slate-200", collapsed ? "justify-center px-2" : "px-6")}>
+          <div className="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center shrink-0">
             <ActivitySquare className="w-4 h-4" />
           </div>
-          <span className="text-sm font-semibold">CyberQuote</span>
+          {!collapsed && <span className="text-sm font-semibold">CyberQuote</span>}
+          <button
+            onClick={() => setCollapsed(c => !c)}
+            className={cn("ml-auto p-1.5 rounded-md hover:bg-slate-100 text-slate-400 shrink-0", collapsed && "mx-auto")}
+            title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          >
+            {collapsed ? <PanelLeft className="w-4 h-4" /> : <PanelLeftClose className="w-4 h-4" />}
+          </button>
         </div>
 
         {/* Nav */}
-        <nav className="flex-1 px-4 py-6 overflow-y-auto">
-          <p className="px-2 pb-2 text-xs font-semibold text-slate-400 uppercase tracking-wider">{t.nav.menu}</p>
+        <nav className="flex-1 py-4 overflow-y-auto">
+          <p className={cn("px-2 pb-2 text-xs font-semibold text-slate-400 uppercase tracking-wider", collapsed && "sr-only")}>{t.nav.menu}</p>
           <div className="space-y-1">
             {navItems.map(item => (
               <button
                 key={item.id}
                 onClick={() => onTabChange(item.id)}
                 className={cn(
-                  "w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors",
-                  activeTab === item.id ? "bg-blue-50 text-blue-700" : "text-slate-600 hover:bg-slate-50"
+                  "flex items-center gap-3 py-2 rounded-md text-sm font-medium transition-colors w-full",
+                  activeTab === item.id ? "bg-blue-50 text-blue-700" : "text-slate-600 hover:bg-slate-50",
+                  collapsed ? "justify-center px-2" : "px-3"
                 )}
+                title={collapsed ? item.label : undefined}
               >
                 <item.icon className="h-4 w-4 flex-shrink-0" />
-                <span className="truncate">{item.label}</span>
+                {!collapsed && <span className="truncate">{item.label}</span>}
               </button>
             ))}
           </div>
@@ -163,16 +175,18 @@ export function Layout({ children, activeRole, onRoleChange, activeTab, onTabCha
 
         {/* Role Switcher */}
         <div className="border-t border-slate-200 p-4">
-          <p className="px-2 pb-2 text-xs text-slate-400 font-semibold mb-2">{t.nav.activeRole}</p>
-          <div className="flex gap-1">
+          {!collapsed && <p className="px-2 pb-2 text-xs text-slate-400 font-semibold mb-2">{t.nav.activeRole}</p>}
+          <div className={cn("flex gap-1", collapsed ? "flex-col" : "")}>
             {(["HQ", "Regional", "Franchisee"] as Role[]).map(role => (
               <button
                 key={role}
                 onClick={() => onRoleChange(role)}
                 className={cn(
-                  "flex-1 px-2 py-1 rounded-md text-xs font-medium transition-colors",
-                  activeRole === role ? "bg-slate-100 text-slate-900" : "text-slate-500 hover:bg-slate-50"
+                  "px-2 py-1 rounded-md text-xs font-medium transition-colors",
+                  activeRole === role ? "bg-slate-100 text-slate-900" : "text-slate-500 hover:bg-slate-50",
+                  collapsed ? "text-center" : ""
                 )}
+                title={collapsed ? role : undefined}
               >
                 {role}
               </button>
