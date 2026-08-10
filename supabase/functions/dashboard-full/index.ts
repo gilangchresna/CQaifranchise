@@ -277,6 +277,8 @@ serve(async (req: Request) => {
       alertsQuery.in("outlet_id", allowedOutletIds);
       lowStockQuery.in("outlet_id", allowedOutletIds);
     }
+    // Only count OPEN/NEW alerts for "Actionable" metric
+    alertsQuery.eq("status", "NEW");
     const { count: alertsCount } = await alertsQuery;
     const { data: lowStock } = await lowStockQuery.lt("current_stock", 25);
     

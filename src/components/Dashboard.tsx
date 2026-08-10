@@ -220,6 +220,28 @@ export function Dashboard({ activeRole }: { activeRole: Role }) {
         setSalesData([]);
       }
 
+      // Fetch anomaly scores for all outlets
+      try {
+        const anomalyRes = await fetch(`${EDGE_FUNCTIONS_URL}/ml-anomaly-batch`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (anomalyRes.ok) {
+          const anomalyJson = await anomalyRes.json();
+          const ad: Record<number, { score: number; percentile: number; is_anomaly: boolean; status: string }> = {};
+          (anomalyJson.outlets || []).forEach((o: any) => {
+            ad[o.outlet_id] = {
+              score: o.anomaly_score || 0,
+              percentile: o.percentile || 0,
+              is_anomaly: o.is_anomaly || false,
+              status: o.status || 'OK',
+            };
+          });
+          setAnomalyData(ad);
+        }
+      } catch (e) {
+        console.error('Anomaly fetch error:', e);
+      }
+
       // Fetch alerts for alerts list
       const alertsRes = await fetch(`${EDGE_FUNCTIONS_URL}/alerts-list`, {
         headers: { Authorization: `Bearer ${token}` },
