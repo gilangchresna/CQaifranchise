@@ -498,16 +498,9 @@ export function Dashboard({ activeRole }: { activeRole: Role }) {
                 </tbody>
               </table>
             </div>
-          </div>
-        </div>
+            </div>
 
-        {/* Right Column: AI Copilot */}
-        <div className="h-[748px] lg:col-span-1 flex flex-col gap-6">
-          <div className="flex-1">
-            <AICopilot activeRole={activeRole} />
-          </div>
-          
-          {/* Intelligence Platform Status */}
+            {/* Intelligence Platform Status */}
           <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm relative overflow-hidden shrink-0">
             <h3 className="text-xs font-semibold text-slate-500 mb-4 relative z-10 flex items-center gap-2 uppercase tracking-wider">
               <Activity className="w-4 h-4 text-blue-600" /> Platform Status
