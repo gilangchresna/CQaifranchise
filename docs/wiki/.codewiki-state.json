@@ -1,0 +1,17 @@
+{
+  "repo_name": "CQaifranchise",
+  "source_path": "/Users/weskonek/WeskonekWeb/CQaiFrh/CQaifranchise",
+  "source_sha": "c661018",
+  "generated_at": "2026-08-10T14:30:00Z",
+  "generator": "hermes-agent code-wiki skill",
+  "modules_documented": [
+    "dashboard",
+    "pos-webhook",
+    "coordinator-pipeline",
+    "athena-chat",
+    "floating-chat",
+    "agent-coordinator",
+    "alerts-list",
+    "pos-simulator"
+  ]
+}
