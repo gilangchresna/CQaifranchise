@@ -10,7 +10,6 @@ import { Integrations } from "@/src/components/Integrations";
 import { Models } from "@/src/components/Models";
 import { Agents } from "@/src/components/Agents";
 import { Settings } from "@/src/components/Settings";
-import { ChatPanel } from "@/src/components/ChatPanel";
 import { RiskDashboard } from "@/src/components/RiskDashboard";
 import { AccessManagement } from "@/src/components/AccessManagement";
 import { PeerBenchmark } from "@/src/components/PeerBenchmark";
@@ -110,7 +109,6 @@ export default function App() {
         onTabChange={setActiveTab}
       >
         {renderContent()}
-        <ChatPanel />
         <FloatingChat />
       </Layout>
     </I18nProvider>
