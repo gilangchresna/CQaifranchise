@@ -109,7 +109,7 @@ export function FloatingChat() {
       >
         <MessageCircle className="h-6 w-6" />
         {/* Notification dot */}
-        <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full flex items-center justify-center">
+        <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full flex items-center justify-center pointer-events-none">
           <span className="w-2 h-2 bg-white rounded-full animate-pulse" />
         </span>
       </button>
