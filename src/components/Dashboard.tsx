@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { StatCard } from "./StatCard";
 import { AlertsList } from "./AlertsList";
 import { AICopilot } from "./AICopilot";
-import { Store, TrendingDown, PackageX, Activity, Bot } from "lucide-react";
+import { Store, TrendingDown, TrendingUp, PackageX, Activity, Bot, Percent } from "lucide-react";
 import {
   LineChart,
   Line,
@@ -26,6 +26,8 @@ interface DashboardStats {
   avgDaily: number;
   lowStockItems: number;
   openAlerts: number;
+  grossProfit: number;
+  marginPercent: number;
 }
 
 interface Alert {
@@ -69,6 +71,8 @@ export function Dashboard({ activeRole }: { activeRole: Role }) {
     avgDaily: 0,
     lowStockItems: 0,
     openAlerts: 0,
+    grossProfit: 0,
+    marginPercent: 0,
   });
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [outlets, setOutlets] = useState<Outlet[]>([]);
@@ -196,6 +200,8 @@ export function Dashboard({ activeRole }: { activeRole: Role }) {
         avgDaily: statsData.totals?.avg_daily || 0,
         lowStockItems: statsData.metrics?.low_stock || 0,
         openAlerts: statsData.metrics?.active_alerts || 0,
+        grossProfit: statsData.totals?.gross_profit || 0,
+        marginPercent: statsData.totals?.margin_percent || 0,
       });
       
       // Set real chart data
@@ -295,13 +301,25 @@ export function Dashboard({ activeRole }: { activeRole: Role }) {
       </div>
 
       {/* Top Stats */}
-      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
         <StatCard
           title={`${selectedPeriod === 'today' ? 'Today' : selectedPeriod === '7d' ? '7-Day' : selectedPeriod === '30d' ? '30-Day' : selectedPeriod === 'month' ? 'Monthly' : 'YTD'} Revenue`}
           value={`S$ ${(stats.todayRevenue || 0).toLocaleString('en-SG', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`}
           trend={stats.avgSalesVariance}
           description={`vs previous period`}
           icon={Store}
+        />
+        <StatCard
+          title="Gross Profit"
+          value={`S$ ${(stats.grossProfit || 0).toLocaleString('en-SG', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`}
+          description="Revenue - Cost"
+          icon={TrendingUp}
+        />
+        <StatCard
+          title="Net Margin"
+          value={`${stats.marginPercent.toFixed(1)}%`}
+          description="Gross Profit / Revenue"
+          icon={Percent}
         />
         <StatCard
           title="Active Outlets"

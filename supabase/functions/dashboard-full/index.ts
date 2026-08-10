@@ -201,7 +201,7 @@ serve(async (req: Request) => {
     while (true) {
       let q = supabase
         .from("sales_transactions")
-        .select("date, amount, settlement_amount, transaction_count, payment_method, platform, outlet_id")
+        .select("date, amount, settlement_amount, transaction_count, payment_method, platform, outlet_id, cost")
         .gte("date", startDate)
         .lte("date", todayStr)
         .range(offset, offset + limit - 1);
@@ -220,26 +220,41 @@ serve(async (req: Request) => {
     // Calculate totals (all amounts converted to SGD)
     let totalRevenueSGD = 0;
     let totalSettlementSGD = 0;
+    let totalCostSGD = 0;
     let transactionCount = 0;
     const dailySales: Record<string, number> = {};
     const paymentBreakdown: Record<string, number> = {};
     const platformBreakdown: Record<string, number> = {};
+    const currencyBreakdown: Record<string, { revenue: number; cost: number; transactions: number }> = {};
     const outletsSet = new Set<number>();
+
+    // Init currency breakdown
+    ["SGD", "IDR", "THB", "MYR"].forEach(c => {
+      currencyBreakdown[c] = { revenue: 0, cost: 0, transactions: 0 };
+    });
 
     allSales.forEach(t => {
       const rawAmount = Number(t.amount);
       const rawSettlement = Number(t.settlement_amount) || rawAmount;
+      const rawCost = Number(t.cost) || 0;
       const currency = outletCurrency[t.outlet_id] || "SGD";
       const rate = toSGD[currency] || 1.0;
 
       // Convert to SGD for totals
       totalRevenueSGD += rawAmount * rate;
       totalSettlementSGD += rawSettlement * rate;
+      totalCostSGD += rawCost * rate;
       transactionCount++;
       outletsSet.add(t.outlet_id);
 
+      // Currency breakdown (in original currency, not converted)
+      if (currencyBreakdown[currency]) {
+        currencyBreakdown[currency].revenue += rawAmount;
+        currencyBreakdown[currency].cost += rawCost;
+        currencyBreakdown[currency].transactions += 1;
+      }
+
       const date = t.date?.split('T')[0];
-      // Daily/breakdown in original currency (no conversion — for display only)
       dailySales[date] = (dailySales[date] || 0) + rawAmount;
       paymentBreakdown[t.payment_method] = (paymentBreakdown[t.payment_method] || 0) + rawAmount;
       platformBreakdown[t.platform || 'dine_in'] = (platformBreakdown[t.platform || 'dine_in'] || 0) + rawAmount;
@@ -300,6 +315,9 @@ serve(async (req: Request) => {
       totals: {
         revenue: Math.round(totalRevenueSGD * 100) / 100,
         settlement: Math.round(totalSettlementSGD * 100) / 100,
+        cost: Math.round(totalCostSGD * 100) / 100,
+        gross_profit: Math.round((totalRevenueSGD - totalCostSGD) * 100) / 100,
+        margin_percent: totalRevenueSGD > 0 ? Math.round(((totalRevenueSGD - totalCostSGD) / totalRevenueSGD) * 10000) / 100 : 0,
         transactions: transactionCount,
         avg_transaction: transactionCount > 0 ? Math.round((totalSettlementSGD / transactionCount) * 100) / 100 : 0,
         avg_daily: Math.round(avgDaily * 100) / 100,
@@ -318,6 +336,14 @@ serve(async (req: Request) => {
       daily_breakdown: Object.entries(dailySales).sort().map(([d, a]) => ({ date: d, amount: Math.round(a * 100) / 100 })),
       payment_breakdown: Object.entries(paymentBreakdown).map(([m, a]) => ({ method: m, amount: Math.round(a * 100) / 100 })),
       platform_breakdown: Object.entries(platformBreakdown).map(([p, a]) => ({ platform: p, amount: Math.round(a * 100) / 100 })),
+      currency_breakdown: Object.entries(currencyBreakdown)
+        .filter(([, v]) => v.transactions > 0)
+        .map(([code, v]) => ({
+          currency: code,
+          revenue: Math.round(v.revenue * 100) / 100,
+          cost: Math.round(v.cost * 100) / 100,
+          transactions: v.transactions,
+        })),
     }, { headers: corsHeaders });
 
   } catch (error: any) {
