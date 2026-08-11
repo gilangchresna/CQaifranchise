@@ -1,7 +1,8 @@
 # POS Simulator — Cara Pakai
 
-Simulator mengirim fake POS transaction ke `pos-webhook` edge function (L1 ingestion).
-Mendukung **dev bypass** (tanpa HMAC) dan **production mode** (HMAC real).
+Simulator mengirim fake POS transaction ke `pos-webhook` edge function (L1
+ingestion). Mendukung **dev bypass** (tanpa HMAC) dan **production mode** (HMAC
+real).
 
 ---
 
@@ -10,7 +11,7 @@ Mendukung **dev bypass** (tanpa HMAC) dan **production mode** (HMAC real).
 ### Normal simulation (happy path)
 
 ```bash
-cd ~/WeskonekWeb/CQaiFrh/CQaifranchise
+cd ~/ Web/CQaiFrh/CQaifranchise
 
 # One-shot test
 python3 scripts/pos-simulator.py --dev --count 1 --outlet 1
@@ -50,18 +51,18 @@ python3 scripts/pos-simulator.py --secret "$POS_WEBHOOK_SECRET" --test-errors
 
 ## Available Options
 
-| Flag              | Default        | Description                                      |
-|------------------|----------------|------------------------------------------------|
-| `--dev`          | OFF            | Pakai dev bypass (tanpa HMAC)                   |
-| `--secret`       | env var        | HMAC secret untuk production mode               |
-| `--outlet`       | `1`            | Outlet ID                                       |
-| `--platform`     | `dine_in`      | dine_in, gofood, grabfood, shopeefood, pos     |
-| `--interval`     | `5`            | Detik antar transaksi (continuous mode)          |
-| `--count`        | `0` (loop)     | Jumlah transaksi, 0 = loop forever              |
-| `--dry-run`      | OFF            | Print payload tanpa kirim                       |
-| `--test-errors`  | OFF            | Run all 17 error test cases                     |
-| `--test-error`   | —              | Run one specific error test                     |
-| `--test-list`    | OFF            | List all available error test names             |
+| Flag            | Default    | Description                                |
+| --------------- | ---------- | ------------------------------------------ |
+| `--dev`         | OFF        | Pakai dev bypass (tanpa HMAC)              |
+| `--secret`      | env var    | HMAC secret untuk production mode          |
+| `--outlet`      | `1`        | Outlet ID                                  |
+| `--platform`    | `dine_in`  | dine_in, gofood, grabfood, shopeefood, pos |
+| `--interval`    | `5`        | Detik antar transaksi (continuous mode)    |
+| `--count`       | `0` (loop) | Jumlah transaksi, 0 = loop forever         |
+| `--dry-run`     | OFF        | Print payload tanpa kirim                  |
+| `--test-errors` | OFF        | Run all 17 error test cases                |
+| `--test-error`  | —          | Run one specific error test                |
+| `--test-list`   | OFF        | List all available error test names        |
 
 ---
 
@@ -92,12 +93,14 @@ cost_negative          400  cost=-5000 (negative)
 ## Expected Results
 
 ### Happy path
+
 ```
 [10:00:13] #0001 ✅ 200  txn=TXN-BE87C62C  OK=1  FAIL=0
 [10:00:19] #0002 ✅ 200  txn=TXN-994F5641  OK=2  FAIL=0
 ```
 
 ### Error test
+
 ```
 duplicate_txn: expected=409, got=409 ✅
 invalid_outlet: expected=400, got=400 ✅
@@ -118,6 +121,7 @@ Failed: 0 ❌
 4. Network Directory → outlet details
 
 Atau check langsung di database:
+
 ```bash
 # via browser — Supabase Table Editor → sales_transactions
 ```
@@ -127,22 +131,27 @@ Atau check langsung di database:
 ## Troubleshooting
 
 ### `❌ 401: UNAUTHORIZED_LEGACY_JWT`
-Anon key expired. Script auto-read dari `.env.local` — pastikan `VITE_SUPABASE_ANON_KEY` masih valid.
+
+Anon key expired. Script auto-read dari `.env.local` — pastikan
+`VITE_SUPABASE_ANON_KEY` masih valid.
 
 ### `❌ 401: Unauthorized: Invalid or missing signature`
+
 Production mode — HMAC mismatch. Pakai `--dev` untuk bypass.
 
 ### `❌ 400: Invalid outlet_id`
+
 Outlet ID tidak ada di tabel `outlets`. Gunakan ID yang valid.
 
 ### `❌ 500: Internal server error`
+
 Cek Supabase dashboard → Functions → pos-webhook → Logs.
 
 ---
 
 ## Files
 
-| File | Description |
-|------|-------------|
-| `scripts/pos-simulator.py` | Main simulator + error test suite |
-| `docs/pos-simulator-usage.md` | Dokumentasi ini |
+| File                          | Description                       |
+| ----------------------------- | --------------------------------- |
+| `scripts/pos-simulator.py`    | Main simulator + error test suite |
+| `docs/pos-simulator-usage.md` | Dokumentasi ini                   |

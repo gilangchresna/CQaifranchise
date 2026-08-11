@@ -2,7 +2,7 @@
 import urllib.request, json
 
 env = {}
-for line in open("/Users/weskonek/WeskonekWeb/CQaiFrh/CQaifranchise/.env.local"):
+for line in open("/Users/ / Web/CQaiFrh/CQaifranchise/.env.local"):
     line = line.strip()
     if "=" in line:
         parts = line.split("=", 1)

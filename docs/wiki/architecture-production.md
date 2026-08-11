@@ -1,13 +1,14 @@
 # Architecture — Production Target
-**Project:** CQaiFranchise
-**Target:** Multi-franchise, multi-tenant, production scale
-**Horizon:** 12-16 weeks after MVP
+
+**Project:** CQaiFranchise **Target:** Multi-franchise, multi-tenant, production
+scale **Horizon:** 12-16 weeks after MVP
 
 ---
 
 ## Production Vision
 
 Full 7-layer blueprint realized:
+
 - Multi-tenant: 10+ franchise groups, 100+ outlets
 - Real POS integrations: Moka, GoFood, GrabFood, Square
 - Full AI orchestration: Hermes Agent as independent brain
@@ -33,7 +34,7 @@ Full 7-layer blueprint realized:
 ║                              │                                       ║
 ║  ┌──────────────────────────┴────────────────────────────────┐     ║
 ║  │  ERP Systems (future)                                      │     ║
-║  │  Weskonek ERP ────► HR System ────► Banking API          │     ║
+║  │    ERP ────► HR System ────► Banking API          │     ║
 ║  └────────────────────────────────────────────────────────────┘     ║
 ║                                                                    ║
 ╚════════════════════════════════╬═══════════════════════════════════╝
@@ -203,19 +204,19 @@ Full 7-layer blueprint realized:
 
 ## Production Tech Stack
 
-| Layer | Technology | Notes |
-|-------|-----------|-------|
-| **Frontend** | React 19 + Vite + Tailwind | Current stack |
-| **Backend** | Supabase Edge Functions (Deno) | Current stack |
-| **Database** | Supabase PostgreSQL | Current stack |
-| **Feature Store** | pg_vector + outlet_features | Add semantic search |
-| **Object Storage** | Supabase Storage | Invoices, exports |
-| **AI** | Claude via Bluepack | Current stack |
-| **Workflow Engine** | Supabase + Edge Functions | State machine, cron |
-| **Notifications** | WhatsApp (vonage), Email (SMTP/SendGrid) | Add WhatsApp API |
-| **ML Pipeline** | Supabase Edge + Python (Modal/Vertex AI) | Model training |
-| **Monitoring** | Vercel Analytics + Sentry | Errors + performance |
-| **CDN** | Vercel Edge | Static + API caching |
+| Layer               | Technology                               | Notes                |
+| ------------------- | ---------------------------------------- | -------------------- |
+| **Frontend**        | React 19 + Vite + Tailwind               | Current stack        |
+| **Backend**         | Supabase Edge Functions (Deno)           | Current stack        |
+| **Database**        | Supabase PostgreSQL                      | Current stack        |
+| **Feature Store**   | pg_vector + outlet_features              | Add semantic search  |
+| **Object Storage**  | Supabase Storage                         | Invoices, exports    |
+| **AI**              | Claude via Bluepack                      | Current stack        |
+| **Workflow Engine** | Supabase + Edge Functions                | State machine, cron  |
+| **Notifications**   | WhatsApp (vonage), Email (SMTP/SendGrid) | Add WhatsApp API     |
+| **ML Pipeline**     | Supabase Edge + Python (Modal/Vertex AI) | Model training       |
+| **Monitoring**      | Vercel Analytics + Sentry                | Errors + performance |
+| **CDN**             | Vercel Edge                              | Static + API caching |
 
 ---
 
@@ -293,6 +294,7 @@ CREATE POLICY user_outlets ON sales_transactions
 ## Production Checklist
 
 ### L1: Source Systems
+
 - [ ] Moka POS webhook integration
 - [ ] GoFood webhook integration
 - [ ] POS connector config UI
@@ -300,24 +302,28 @@ CREATE POLICY user_outlets ON sales_transactions
 - [ ] HR integration (future)
 
 ### L2: Ingestion
+
 - [ ] CDC setup (Supabase Replicate)
 - [ ] API polling fallback
 - [ ] Batch CSV import UI
 - [ ] Data quality monitoring
 
 ### L3: Data Platform
+
 - [ ] Feature store (pg_vector)
 - [ ] Supabase Storage for exports
 - [ ] Full RLS audit
 - [ ] Data retention policies
 
 ### L4: AI/ML
+
 - [ ] Demand forecasting model
 - [ ] Model retraining pipeline
 - [ ] Model drift detection
 - [ ] A/B testing framework
 
 ### L5: Hermes Agent
+
 - [ ] Independent Hermes Agent service
 - [ ] Alert triage (NLP classification)
 - [ ] Case routing (rule + ML hybrid)
@@ -325,12 +331,14 @@ CREATE POLICY user_outlets ON sales_transactions
 - [ ] SLA monitoring + escalation
 
 ### L6: Workflow
+
 - [ ] State machine (Alert→Case→Approval→Resolution)
 - [ ] SLA enforcement + auto-escalation
 - [ ] Multi-level approval UI
 - [ ] Audit log + compliance export
 
 ### L7: Presentation
+
 - [ ] PDF report export
 - [ ] Scheduled report emails
 - [ ] Mobile app (PWA)
@@ -364,10 +372,10 @@ Monitoring
 
 ## Open Decisions (Production)
 
-| # | Decision | Options | Recommendation |
-|---|----------|---------|----------------|
-| 1 | Hermes Agent build | Separate service vs Athena Chat | Separate if complexity grows |
-| 2 | ML training infra | Modal vs Vertex AI vs self-hosted | Modal for cost-effective GPU |
-| 3 | Notification platform | Vonage vs Twilio vs MessageBird | Vonage (WhatsApp official) |
-| 4 | Feature store | pg_vector vs Pinecone vs Weaviate | pg_vector first (cheap) |
-| 5 | Workflow engine | Build vs Temporal vs Convey | Build (MVP) → Temporal (scale) |
+| # | Decision              | Options                           | Recommendation                 |
+| - | --------------------- | --------------------------------- | ------------------------------ |
+| 1 | Hermes Agent build    | Separate service vs Athena Chat   | Separate if complexity grows   |
+| 2 | ML training infra     | Modal vs Vertex AI vs self-hosted | Modal for cost-effective GPU   |
+| 3 | Notification platform | Vonage vs Twilio vs MessageBird   | Vonage (WhatsApp official)     |
+| 4 | Feature store         | pg_vector vs Pinecone vs Weaviate | pg_vector first (cheap)        |
+| 5 | Workflow engine       | Build vs Temporal vs Convey       | Build (MVP) → Temporal (scale) |
