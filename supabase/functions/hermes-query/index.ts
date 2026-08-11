@@ -41,11 +41,11 @@ serve(async (req: Request) => {
       const totalRev = allSales.reduce((sum: number, s: any) => sum + Number(s.settlement_amount), 0);
       response = `CyberQuote Dashboard (Last 7 Days)\nRevenue: S$ ${totalRev.toFixed(2)}\nTransactions: ${allSales.length}`;
     } else if (action === "outlets") {
-      const { data: outlets } = await supabase.from("outlets").select("*, region:regions(name)").order("code");
+      const { data: outlets } = await supabase.from("outlets").select("id, name, code, region_id").order("code");
       response = `CyberQuote Outlets (${(outlets || []).length})\n` + 
         (outlets || []).map((o: any) => `- ${o.code}: ${o.region?.name || "N/A"}`).join("\n");
     } else if (action === "alerts") {
-      const { data: alerts } = await supabase.from("alerts").select("*, outlet(name)").eq("status", "NEW").limit(5);
+      const { data: alerts } = await supabase.from("alerts").select("id, title, severity, status, outlet_id").eq("status", "NEW").limit(5);
       response = `Active Alerts: ${(alerts || []).length}\n` +
         (alerts || []).map((a: any) => `[${a.severity}] ${a.title}\n  Outlet: ${a.outlet?.name || "N/A"}`).join("\n");
     } else {

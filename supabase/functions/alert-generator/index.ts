@@ -304,7 +304,7 @@ serve(async (req: Request) => {
     // Validate required fields
     const { data: outlet, error: outletError } = await supabase
       .from("outlets")
-      .select("id, name, code, status, regions(name, code)")
+      .select("id, name, code, status, region_id")
       .eq("id", body.outlet_id)
       .single();
 

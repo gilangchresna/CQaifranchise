@@ -118,7 +118,7 @@ serve(async (req) => {
     // - REGIONAL: outlets in user's region via user_profiles.region_id
     // - HQ_ADMIN: all outlets
     // =====================================================
-    let outletsQuery = supabase.from('outlets').select('*, region:regions(*)').order('id');
+    let outletsQuery = supabase.from('outlets').select('id, name, code, region_id, status, city, daily_target').order('id');
     if (user.role === 'FRANCHISEE_OWNER' || user.role === 'FRANCHISEE_STAFF') {
       const { data: userOutlets } = await supabase.from('user_outlets').select('outlet_id').eq('user_id', user.id);
       if (userOutlets && userOutlets.length > 0) {

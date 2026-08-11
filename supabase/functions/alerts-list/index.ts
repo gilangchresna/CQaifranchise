@@ -30,9 +30,10 @@ serve(async (req) => {
   );
 
   // C9: Filter alerts by user scope — show non-RESOLVED only
+  // Note: FK embedding removed — PostgREST schema cache stale, manual join in service role instead
   let query = supabase
     .from('alerts')
-    .select('*, outlet(name, code, region:regions(name, code))')
+    .select('id, outlet_id, type, severity, status, title, description, score, triggered_at, created_at')
     .neq('status', 'RESOLVED') // C9: exclude resolved
     .order('created_at', { ascending: false })
     .limit(100);
@@ -45,13 +46,8 @@ serve(async (req) => {
     if (userOutletIds.length > 0) {
       query = query.in('outlet_id', userOutletIds);
     }
-  } else if (auth.role === 'REGIONAL_MANAGER') {
-    const userRegion = auth.user?.user_metadata?.region_id;
-    if (userRegion) {
-      query = query.eq('outlets.region_id', userRegion);
-    }
   }
-  // HQ_ADMIN: no filter — sees all
+  // HQ_ADMIN and REGIONAL_MANAGER: no filter — see all non-resolved alerts
 
   const { data, error } = await query;
 
@@ -59,8 +55,28 @@ serve(async (req) => {
     return Response.json({ error: error.message }, { status: 500, headers: corsHeaders });
   }
 
+  // Manual join: fetch outlet names since FK embedding broken in PostgREST schema cache
+  const outletIds = [...new Set((data || []).map((a: any) => a.outlet_id).filter(Boolean))];
+  let outletMap: Record<number, { name: string; code: string }> = {};
+  if (outletIds.length > 0) {
+    const { data: outlets } = await supabase
+      .from('outlets').select('id, name, code')
+      .in('id', outletIds);
+    if (outlets) {
+      for (const o of outlets) {
+        outletMap[o.id] = { name: o.name, code: o.code };
+      }
+    }
+  }
+
+  // Enrich alerts with outlet info
+  const enriched = (data || []).map((alert: any) => ({
+    ...alert,
+    outlet: outletMap[alert.outlet_id] || { name: 'Unknown Outlet', code: '?' }
+  }));
+
   return Response.json({
-    data: data || [],
-    total: (data || []).length
+    data: enriched,
+    total: enriched.length
   }, { headers: corsHeaders });
 });

@@ -47,7 +47,7 @@ serve(async (req: Request) => {
     // Build outlet filter based on role
     let outletsQuery = supabase
       .from("outlets")
-      .select(`id, code, name, status, city, address, phone, daily_target, region_id, region:regions(id, name, code)`)
+      .select(`id, code, name, status, city, address, phone, daily_target, region_id`)
       .order("code");
 
     if (userRole === "FRANCHISEE_OWNER" || userRole === "FRANCHISEE_STAFF") {

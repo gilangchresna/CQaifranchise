@@ -754,15 +754,10 @@ serve(async (req: Request) => {
         .select(`
           *,
           alerts (
-            *,
-            outlets (
-              id, name, code,
-              regions (id, name)
-            )
+            id,
+            outlet_id
           ),
-          assigned_user:user_profiles!assigned_to_id (
-            id, full_name, email, phone
-          )
+          assigned_to_id
         `)
         .eq("id", body.entity_id)
         .single();

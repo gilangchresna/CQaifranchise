@@ -201,7 +201,7 @@ serve(async (req) => {
     // Get alert
     const { data: alert, error: alertError } = await supabase
       .from("alerts")
-      .select(`*, outlets(id, name, code, region:regions(id, name))`)
+      .select(`id, title, severity, status, outlet_id, type`)
       .eq("id", alert_id)
       .single();
 

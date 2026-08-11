@@ -28,7 +28,7 @@ async function getOutletStatus(params: {
   // Fetch outlet info
   const { data: outlet, error: outletError } = await supabase
     .from("outlets")
-    .select("*, regions(name)")
+    .select("id, name, code, region_id, status, city, daily_target")
     .eq("id", outlet_id)
     .single();
 

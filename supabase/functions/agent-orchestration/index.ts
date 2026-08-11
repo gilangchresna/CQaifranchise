@@ -240,7 +240,7 @@ serve(async (req: Request) => {
     // ── DEFAULT: Full status ─────────────────────────────────────────────────
     const [{ data: agents }, { data: tasks }, { data: logs }, { data: agentStatuses }] = await Promise.all([
       supabase.from("agents").select("*").order("name"),
-      supabase.from("agent_tasks").select("*, agents(name, role)").order("created_at", { ascending: false }).limit(20),
+      supabase.from("agent_tasks").select("id, agent_id, task_type, status, result, created_at, updated_at, started_at, completed_at").order("created_at", { ascending: false }).limit(20),
       supabase.from("agent_logs").select("*").order("created_at", { ascending: false }).limit(20),
       supabase.from("agents").select("status"),
     ]);
@@ -260,6 +260,10 @@ serve(async (req: Request) => {
       .from("agent_tasks").select("id", { count: "exact" }).eq("status", "failed").gte("created_at", today);
 
     const { data: allAgents } = await supabase.from("agents").select("tasks_completed_today, avg_response_time_ms, queue_size");
+
+    // Build agent_id → agent map for task enrichment
+    const agentMap: Record<string, any> = {};
+    (agents || []).forEach((a: any) => { agentMap[a.id] = a; });
 
     const metrics = {
       total_tasks_today: totalTasks,
@@ -285,6 +289,7 @@ serve(async (req: Request) => {
       agents: agents || [],
       tasks: (tasks || []).map((t: any) => ({
         ...t,
+        agent: agentMap[t.agent_id] || null,
         duration_ms: t.started_at && t.completed_at
           ? new Date(t.completed_at).getTime() - new Date(t.started_at).getTime()
           : undefined,

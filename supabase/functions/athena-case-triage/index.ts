@@ -100,7 +100,7 @@ serve(async (req: Request) => {
     if (outlet_id) {
       const { data: outlet } = await supabase
         .from("outlets")
-        .select("id, name, code, region:regions(name)")
+        .select("id, name, code, region_id")
         .eq("id", outlet_id)
         .single();
       outletInfo = outlet;

@@ -313,19 +313,16 @@ serve(async (req: Request) => {
     let casesQuery = supabase
       .from("cases")
       .select(`
-        *,
-        alerts (
-          id,
-          severity
-        ),
-        assigned_user:user_profiles!assigned_to_id (
-          id,
-          full_name,
-          role
-        ),
-        outlet:outlets (
-          region_id
-        )
+        id,
+        title,
+        description,
+        status,
+        priority,
+        sla_deadline,
+        assigned_to_id,
+        outlet_id,
+        source_alert_id,
+        created_at
       `)
       .not("sla_deadline", "is", null)
       .not("status", "eq", "RESOLVED")

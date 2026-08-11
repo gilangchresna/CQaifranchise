@@ -125,7 +125,7 @@ serve(async (req: Request) => {
     const { startDate, endDate, periodLabel } = getDateRange(period);
 
     // ---- Scope: outlets this caller/report may cover ----
-    let outletsQuery = supabase.from("outlets").select("id, code, name, city, status, daily_target, region_id, regions(name, code)");
+    let outletsQuery = supabase.from("outlets").select("id, code, name, city, status, daily_target, region_id");
     if (auth.role === "FRANCHISEE_OWNER" || auth.role === "FRANCHISEE_STAFF") {
       outletsQuery = outletsQuery.eq("franchisee_id", auth.userId);
     } else if (regionId) {

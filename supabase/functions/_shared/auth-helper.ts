@@ -71,7 +71,8 @@ export async function verifyAuth(req: Request): Promise<AuthResult> {
 
 const CORS_HEADERS = {
   "Content-Type": "application/json",
-  "Access-Control-Allow-Origin": "https://cqaifranchise.vercel.app",
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
 /**
