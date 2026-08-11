@@ -138,9 +138,12 @@ serve(async (req) => {
       });
     }
 
-    // ── Verify Outlet Exists ───────────────────────────────────────────────
+    // ── Verify Outlet + Get Currency ───────────────────────────────────────
     const { data: outlet, error: outletError } = await supabase
-      .from("outlets").select("id").eq("id", body.outlet_id).single();
+      .from("outlets")
+      .select("id, region_id")
+      .eq("id", body.outlet_id)
+      .single();
 
     if (outletError || !outlet) {
       return new Response(JSON.stringify({
@@ -148,6 +151,17 @@ serve(async (req) => {
         error: "Invalid outlet_id",
         message: `Outlet ${body.outlet_id} does not exist`
       }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    // Get region currency as fallback
+    let currency_code = body.currency_code ?? "IDR";
+    if (!body.currency_code && outlet.region_id) {
+      const { data: region } = await supabase
+        .from("regions")
+        .select("currency_code")
+        .eq("id", outlet.region_id)
+        .single();
+      if (region?.currency_code) currency_code = region.currency_code;
     }
 
     // ── Data Transformation ───────────────────────────────────────────────────
@@ -170,6 +184,7 @@ serve(async (req) => {
         outlet_id: body.outlet_id,
         date: body.date,
         amount: body.amount,
+        currency_code,
         transaction_count: body.transaction_count ?? 1,
         hour,
         day_of_week,

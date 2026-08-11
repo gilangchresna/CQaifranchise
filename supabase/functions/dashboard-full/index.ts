@@ -201,7 +201,7 @@ serve(async (req: Request) => {
     while (true) {
       let q = supabase
         .from("sales_transactions")
-        .select("date, amount, settlement_amount, transaction_count, payment_method, platform, outlet_id, cost")
+        .select("date, amount, settlement_amount, transaction_count, payment_method, platform, outlet_id, cost, currency_code")
         .gte("date", startDate)
         .lte("date", todayStr)
         .range(offset, offset + limit - 1);
@@ -237,8 +237,9 @@ serve(async (req: Request) => {
       const rawAmount = Number(t.amount);
       const rawSettlement = Number(t.settlement_amount) || rawAmount;
       const rawCost = Number(t.cost) || 0;
-      const currency = outletCurrency[t.outlet_id] || "SGD";
-      const rate = toSGD[currency] || 1.0;
+      // Hybrid currency resolution: transaction.currency_code → outlet.currency → region.currency → default SGD
+      const txnCurrency = t.currency_code || outletCurrency[t.outlet_id] || "SGD";
+      const rate = toSGD[txnCurrency] || 1.0;
 
       // Convert to SGD for totals
       totalRevenueSGD += rawAmount * rate;
@@ -248,10 +249,10 @@ serve(async (req: Request) => {
       outletsSet.add(t.outlet_id);
 
       // Currency breakdown (in original currency, not converted)
-      if (currencyBreakdown[currency]) {
-        currencyBreakdown[currency].revenue += rawAmount;
-        currencyBreakdown[currency].cost += rawCost;
-        currencyBreakdown[currency].transactions += 1;
+      if (currencyBreakdown[txnCurrency]) {
+        currencyBreakdown[txnCurrency].revenue += rawAmount;
+        currencyBreakdown[txnCurrency].cost += rawCost;
+        currencyBreakdown[txnCurrency].transactions += 1;
       }
 
       const date = t.date?.split('T')[0];
@@ -293,7 +294,7 @@ serve(async (req: Request) => {
     while (true) {
       const { data: batch } = await supabase
         .from("sales_transactions")
-        .select("settlement_amount, amount, outlet_id")
+        .select("settlement_amount, amount, outlet_id, currency_code")
         .gte("date", compareStartDate)
         .lte("date", compareEndDate)
         .range(compareOffset, compareOffset + limit - 1);
@@ -306,8 +307,8 @@ serve(async (req: Request) => {
 
     const compareTotal = compareSales.reduce((sum, t) => {
       const raw = Number(t.settlement_amount) || Number(t.amount) || 0;
-      const currency = outletCurrency[t.outlet_id] || "SGD";
-      return sum + raw * (toSGD[currency] || 1.0);
+      const ccy = t.currency_code || outletCurrency[t.outlet_id] || "SGD";
+      return sum + raw * (toSGD[ccy] || 1.0);
     }, 0);
     const variance = compareTotal > 0 ? ((totalSettlementSGD - compareTotal) / compareTotal) * 100 : 0;
     
