@@ -90,15 +90,15 @@ serve(async (req: Request) => {
         periodLabel = 'Last 30 Days'; 
         daysInPeriod = 30;
         break;
-      case 'month': 
-        startDate = '2026-07-01'; 
-        periodLabel = 'July 2026'; 
-        daysInPeriod = 25;
+      case 'month':
+        startDate = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-01`;
+        periodLabel = `${today.toLocaleString('default', { month: 'long' })} ${today.getFullYear()}`;
+        daysInPeriod = today.getDate();
         break;
-      case 'ytd': 
-        startDate = '2026-01-01'; 
-        periodLabel = 'Year to Date'; 
-        daysInPeriod = 206;
+      case 'ytd':
+        startDate = `${today.getFullYear()}-01-01`;
+        periodLabel = `Year ${today.getFullYear()}`;
+        daysInPeriod = Math.floor((today.getTime() - new Date(today.getFullYear(), 0, 0).getTime()) / 86400000);
         break;
       default: 
         startDate = new Date(today.getTime() - 6 * 86400000).toISOString().split('T')[0]; 

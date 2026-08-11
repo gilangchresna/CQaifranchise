@@ -8,7 +8,7 @@ serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", {
       headers: {
-        "Access-Control-Allow-Origin": "https://cqaifranchise.vercel.app",
+        "Access-Control-Allow-Origin": "*",
         "Access-Control-Allow-Headers": "authorization, apikey, content-type",
       },
     });
@@ -24,7 +24,7 @@ serve(async (req: Request) => {
   if (outletsErr || !outlets) {
     return new Response(JSON.stringify({ success: false, step: "outlets", error: outletsErr?.message }), {
       status: 500,
-      headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "https://cqaifranchise.vercel.app" },
+      headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
     });
   }
 
@@ -219,6 +219,6 @@ serve(async (req: Request) => {
       sample: verify,
     },
   }), {
-    headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "https://cqaifranchise.vercel.app" },
+    headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
   });
 });
