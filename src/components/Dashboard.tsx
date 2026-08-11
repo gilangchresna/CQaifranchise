@@ -223,7 +223,8 @@ export function Dashboard({ activeRole }: { activeRole: Role }) {
       // Fetch anomaly scores for all outlets
       try {
         const anomalyRes = await fetch(`${EDGE_FUNCTIONS_URL}/ml-anomaly-batch`, {
-          headers: { Authorization: `Bearer ${token}` },
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
         });
         if (anomalyRes.ok) {
           const anomalyJson = await anomalyRes.json();
