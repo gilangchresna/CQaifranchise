@@ -11,7 +11,7 @@ URL = "https://ploqeifazcgzwjzmukgp.supabase.co"
 
 # Source SERVICE_ROLE_KEY from .env.local
 KEY = None
-with open("/Users/weskonek/WeskonekWeb/CQaiFrh/CQaifranchise/.env.local") as f:
+with open("/Users/ / Web/CQaiFrh/CQaifranchise/.env.local") as f:
     for line in f:
         line = line.strip()
         if "SUPABASE_SERVICE_ROLE_KEY" in line and "=" in line:

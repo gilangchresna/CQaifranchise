@@ -2,10 +2,13 @@
 
 ## Vision
 
-> Sistem monitoring franchise berbasis AI untuk Franchisor yang beroperasi di **multi-country** (Indonesia, Singapore, Malaysia, Thailand, Vietnam). Memberikan real-time visibility ke seluruh jaringan outlets, anomaly detection otomatis, dan case management untuk franchisee management.
+> Sistem monitoring franchise berbasis AI untuk Franchisor yang beroperasi di
+> **multi-country** (Indonesia, Singapore, Malaysia, Thailand, Vietnam).
+> Memberikan real-time visibility ke seluruh jaringan outlets, anomaly detection
+> otomatis, dan case management untuk franchisee management.
 
-**Target:** SaaS subscription untuk Franchisor (bukan franchisee).
-**Model:** HQ → Countries → Regions → Regional Managers → Franchisees → Outlets → Staff
+**Target:** SaaS subscription untuk Franchisor (bukan franchisee). **Model:** HQ
+→ Countries → Regions → Regional Managers → Franchisees → Outlets → Staff
 
 ---
 
@@ -406,13 +409,13 @@ graph TB
 
 ## Country Configuration
 
-| Country | Code | Currency | Symbol | Timezone | Payment Methods |
-|---------|------|----------|--------|----------|----------------|
-| Indonesia | ID | IDR | Rp | Asia/Jakarta (WIB) | QRIS, Cash, GoPay, OVO, Dana |
-| Singapore | SG | SGD | S$ | Asia/Singapore (SGT) | PayNow, Cash, GrabPay |
-| Malaysia | MY | MYR | RM | Asia/Kuala_Lumpur (MYT) | DuitNow, Cash, Touch'n Go |
-| Thailand | TH | THB | ฿ | Asia/Bangkok (ICT) | PromptPay, Cash |
-| Vietnam | VN | VND | ₫ | Asia/Ho_Chi_Minh (ICT) | MoMo, VNPay, Cash |
+| Country   | Code | Currency | Symbol | Timezone                | Payment Methods              |
+| --------- | ---- | -------- | ------ | ----------------------- | ---------------------------- |
+| Indonesia | ID   | IDR      | Rp     | Asia/Jakarta (WIB)      | QRIS, Cash, GoPay, OVO, Dana |
+| Singapore | SG   | SGD      | S$     | Asia/Singapore (SGT)    | PayNow, Cash, GrabPay        |
+| Malaysia  | MY   | MYR      | RM     | Asia/Kuala_Lumpur (MYT) | DuitNow, Cash, Touch'n Go    |
+| Thailand  | TH   | THB      | ฿      | Asia/Bangkok (ICT)      | PromptPay, Cash              |
+| Vietnam   | VN   | VND      | ₫      | Asia/Ho_Chi_Minh (ICT)  | MoMo, VNPay, Cash            |
 
 ---
 
@@ -420,23 +423,28 @@ graph TB
 
 ### 1. Currency Strategy
 
-**Decision:** Store all amounts in local currency. Convert to base currency (SGD) only for HQ reporting.
+**Decision:** Store all amounts in local currency. Convert to base currency
+(SGD) only for HQ reporting.
 
 **Rationale:**
+
 - Franchisees operate in local currency → simplicity
 - Avoid rounding errors in transaction data
 - Exchange rates change daily → store in `exchange_rates` table
 - HQ dashboard converts on-the-fly for comparison
 
 **Trade-offs:**
+
 - Real-time conversion needs FX API or daily rate updates
 - Historical reports need point-in-time exchange rates
 
 ### 2. User Authentication
 
-**Decision:** Use Supabase Auth for all users. HQ creates user → invite via email.
+**Decision:** Use Supabase Auth for all users. HQ creates user → invite via
+email.
 
 **User flow:**
+
 1. HQ Admin creates user via dashboard
 2. Email invite → user sets password
 3. `auth.users` created → `user_profiles` auto-created via trigger
@@ -444,17 +452,21 @@ graph TB
 
 ### 3. Staff Management
 
-**Decision:** Staff assigned to outlets via `staff_assignments` junction table (many-to-many via user_profiles).
+**Decision:** Staff assigned to outlets via `staff_assignments` junction table
+(many-to-many via user_profiles).
 
 **Rationale:**
+
 - Staff can work at multiple outlets (e.g., floating staff)
 - Role is per-outlet (cashier at Outlet A, cook at Outlet B)
 
 ### 4. Franchisee Multi-Region
 
-**Decision:** A franchisee can own outlets across multiple regions and countries.
+**Decision:** A franchisee can own outlets across multiple regions and
+countries.
 
 **Schema:**
+
 - `outlets.franchisee_id` → points to `user_profiles` (franchisee)
 - `outlets.region_id` → geographic region
 - No restriction on franchisee → region relationship
@@ -464,6 +476,7 @@ graph TB
 **Decision:** Train separate models per country (or per currency zone).
 
 **Rationale:**
+
 - Spending patterns differ by country/culture
 - Singapore outlets: higher average transaction, different peak hours
 - Indonesia: weekend vs weekday patterns differ by region
@@ -473,6 +486,7 @@ graph TB
 ## Implementation Phases
 
 ### Phase 1: Schema Migration (Week 1-2)
+
 - [ ] Add `countries` table
 - [ ] Add `staff_assignments` table
 - [ ] Add `exchange_rates` table
@@ -483,6 +497,7 @@ graph TB
 - [ ] Seed regions per country
 
 ### Phase 2: Auth & User Management (Week 2-3)
+
 - [ ] Configure Supabase Auth
 - [ ] Update `user_profiles` trigger (add country_id)
 - [ ] Update RLS policies for multi-country
@@ -490,6 +505,7 @@ graph TB
 - [ ] Create user invitation flow
 
 ### Phase 3: Seed Data (Week 3-4)
+
 - [ ] Seed regions (ID: 5, SG: 3, MY: 3)
 - [ ] Seed franchisees per region
 - [ ] Seed outlets per franchisee
@@ -497,12 +513,14 @@ graph TB
 - [ ] Seed realistic POS data per country (with correct currency)
 
 ### Phase 4: Dashboard & Reporting (Week 4-6)
+
 - [ ] Multi-country dashboard (country filter)
 - [ ] Currency conversion on dashboard
 - [ ] Region drill-down
 - [ ] HQ consolidated report (SGD base)
 
 ### Phase 5: ML Pipeline (Week 6-8)
+
 - [ ] Per-country anomaly detection
 - [ ] Retrain models with multi-country data
 - [ ] Accuracy tracking per country
@@ -511,16 +529,16 @@ graph TB
 
 ## Issues to Fix (Immediate)
 
-| Priority | Issue | Fix |
-|----------|-------|-----|
-| P0 | `regions` table empty | Seed Indonesia + Singapore first |
-| P0 | `outlets` table empty | Seed outlets linked to regions |
-| P0 | `sales_transactions` FK broken | Re-seed with real outlet_ids |
-| P0 | `SUPABASE_SERVICE_ROLE_KEY` = anon key | Replace with real service role key |
-| P1 | Amount mismatch (IDR vs USD) | Fix POS backfill amount formula |
-| P1 | `user_profiles` has fake UUIDs | Reset + use real auth.users |
-| P2 | No exchange_rates table | Add + seed daily rates |
-| P2 | Staff assignments missing | Add `staff_assignments` table |
+| Priority | Issue                                  | Fix                                |
+| -------- | -------------------------------------- | ---------------------------------- |
+| P0       | `regions` table empty                  | Seed Indonesia + Singapore first   |
+| P0       | `outlets` table empty                  | Seed outlets linked to regions     |
+| P0       | `sales_transactions` FK broken         | Re-seed with real outlet_ids       |
+| P0       | `SUPABASE_SERVICE_ROLE_KEY` = anon key | Replace with real service role key |
+| P1       | Amount mismatch (IDR vs USD)           | Fix POS backfill amount formula    |
+| P1       | `user_profiles` has fake UUIDs         | Reset + use real auth.users        |
+| P2       | No exchange_rates table                | Add + seed daily rates             |
+| P2       | Staff assignments missing              | Add `staff_assignments` table      |
 
 ---
 
@@ -530,9 +548,9 @@ graph TB
 2. **Base currency?** SGD or keep flexible?
 3. **HQ location?** Singapore or Indonesia?
 4. **Payment gateway per country?** Integrate local payment APIs?
-5. **Menu pricing?** Different price per country or same menu, different currency?
+5. **Menu pricing?** Different price per country or same menu, different
+   currency?
 
 ---
 
-*Last updated: August 11, 2026*
-*Author: Weskonek ERP Team*
+_Last updated: August 11, 2026_ _Author: ERP Team_

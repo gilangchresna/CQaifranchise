@@ -14,7 +14,7 @@ HDR = {
 
 # Read KEY from .env.local
 KEY = None
-for line in open("/Users/weskonek/WeskonekWeb/CQaiFrh/CQaifranchise/.env.local"):
+for line in open("/Users/ / Web/CQaiFrh/CQaifranchise/.env.local"):
     t = line.strip()
     if t.startswith("SUPABASE_SERVICE_ROLE_KEY"):
         KEY = t.split("=", 1)[1].strip()

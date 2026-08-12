@@ -6,7 +6,7 @@ from datetime import date, timedelta
 random.seed(42)
 
 SUPABASE = "https://ploqeifazcgzwjzmukgp.supabase.co"
-ENV_FILE = "/Users/weskonek/WeskonekWeb/CQaiFrh/CQaifranchise/.env.local"
+ENV_FILE = "/Users/ / Web/CQaiFrh/CQaifranchise/.env.local"
 KEY = None
 with open(ENV_FILE) as f:
     for line in f:
