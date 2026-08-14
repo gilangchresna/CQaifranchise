@@ -124,7 +124,7 @@ serve(async (req: Request) => {
     const { data: outlets, error: outletsError } = await supabase
       .from("outlets")
       .select("id, name, code, status")
-      .eq("status", "active");
+      .eq("status", "ACTIVE");
 
     if (outletsError) throw outletsError;
 
