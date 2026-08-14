@@ -30,15 +30,39 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<Tab>("Dashboard");
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
 
+  // Fetch user role from user_profiles on auth change
   useEffect(() => {
-    // Check auth on mount
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setIsAuthenticated(!!session);
-    });
+    async function fetchUserRole() {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user?.id) return;
+
+      // Map DB role to UI role
+      const { data: profile } = await supabase
+        .from('user_profiles')
+        .select('role')
+        .eq('id', session.user.id)
+        .single();
+
+      if (profile?.role) {
+        const roleMap: Record<string, Role> = {
+          'HQ_ADMIN': 'HQ',
+          'REGIONAL_MANAGER': 'Regional',
+          'FRANCHISEE_OWNER': 'Franchisee',
+          'FRANCHISEE_STAFF': 'Franchisee',
+        };
+        const uiRole = roleMap[profile.role] || 'Regional';
+        setActiveRole(uiRole);
+      }
+    }
+
+    fetchUserRole();
 
     // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       setIsAuthenticated(!!session);
+      if (session?.user?.id) {
+        fetchUserRole();
+      }
     });
 
     return () => subscription.unsubscribe();

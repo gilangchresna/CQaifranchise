@@ -176,24 +176,21 @@ export function Layout({ children, activeRole, onRoleChange, activeTab, onTabCha
           </div>
         </nav>
 
-        {/* Role Switcher */}
+        {/* Role Switcher - Only for HQ, others locked */}
         <div className="border-t border-slate-200 p-4">
           {!collapsed && <p className="px-2 pb-2 text-xs text-slate-400 font-semibold mb-2">{t.nav.activeRole}</p>}
           <div className={cn("flex gap-1", collapsed ? "flex-col" : "")}>
-            {(["HQ", "Regional", "Franchisee"] as Role[]).map(role => (
-              <button
-                key={role}
-                onClick={() => onRoleChange(role)}
-                className={cn(
-                  "px-2 py-1 rounded-md text-xs font-medium transition-colors",
-                  activeRole === role ? "bg-slate-100 text-slate-900" : "text-slate-500 hover:bg-slate-50",
-                  collapsed ? "text-center" : ""
-                )}
-                title={collapsed ? role : undefined}
-              >
-                {role}
-              </button>
-            ))}
+            {/* Show current role only, disable switching */}
+            <div
+              className={cn(
+                "px-2 py-1 rounded-md text-xs font-medium transition-colors",
+                "bg-blue-100 text-blue-700",
+                collapsed ? "text-center" : ""
+              )}
+              title={collapsed ? activeRole : undefined}
+            >
+              {activeRole}
+            </div>
           </div>
         </div>
       </aside>
