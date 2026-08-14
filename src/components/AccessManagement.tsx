@@ -27,7 +27,6 @@ interface UserProfile {
   email: string;
   full_name: string;
   role: string;
-  outlet_id?: number;
   region_id?: number;
   region_name?: string;
   status?: string;
@@ -80,7 +79,6 @@ export function AccessManagement({ activeRole }: AccessManagementProps) {
           email,
           full_name,
           role,
-          outlet_id,
           region_id,
           is_active,
           created_at,
