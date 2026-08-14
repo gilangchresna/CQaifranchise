@@ -61,7 +61,6 @@ interface Region {
 export function Dashboard({ activeRole }: { activeRole: Role }) {
   const [loading, setLoading] = useState(true);
   const [selectedPeriod, setSelectedPeriod] = useState('7d');
-  const [selectedCountry, setSelectedCountry] = useState<string>('all'); // 'all' or region_id string
   const [stats, setStats] = useState<DashboardStats>({
     totalOutlets: 0,
     avgSalesVariance: 0,
@@ -79,6 +78,7 @@ export function Dashboard({ activeRole }: { activeRole: Role }) {
   const [outlets, setOutlets] = useState<Outlet[]>([]);
   const [regions, setRegions] = useState<Region[]>([]);
   const [salesData, setSalesData] = useState<{ time: string; today: number; baseline: number }[]>([]);
+  const [selectedCountry, setSelectedCountry] = useState<string>('all'); // 'all' or region_id string
   const [anomalyData, setAnomalyData] = useState<Record<number, {
     score: number;
     percentile: number;
@@ -352,6 +352,7 @@ export function Dashboard({ activeRole }: { activeRole: Role }) {
               {p.label}
             </button>
           ))}
+        </div>
         </div>
       </div>
 
