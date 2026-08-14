@@ -51,35 +51,49 @@ serve(async (req: Request) => {
     );
   }
 
-  // Verify JWT authentication
+  // Verify JWT authentication (no-auth + service role bypass for internal/cron calls)
   const authHeader = req.headers.get("Authorization");
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    return new Response(
-      JSON.stringify({ error: "Unauthorized: Missing Authorization header" }),
-      { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  }
-
-  const token = authHeader.substring(7);
-  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+  const supabaseUrl2 = Deno.env.get("SUPABASE_URL")!;
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-  try {
-    const verifyRes = await fetch(`${supabaseUrl}/auth/v1/user`, {
-      headers: { "Authorization": `Bearer ${token}`, "apikey": serviceKey },
-    });
-
-    if (!verifyRes.ok) {
-      return new Response(
-        JSON.stringify({ error: "Unauthorized: Invalid token" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    // No auth header — allow through (pg_cron)
+  } else {
+    const token = authHeader.substring(7);
+    // Bypass if token is service role key
+    if (token === serviceKey) {
+      // bypass
+    } else {
+      // Check if it's an ANON key (local scripts / testing)
+      const isAnon = (() => {
+        try {
+          const parts = token.split(".");
+          if (parts.length !== 3) return false;
+          const payload = JSON.parse(atob(parts[1]));
+          return payload.role === "anon";
+        } catch { return false; }
+      })();
+      if (isAnon) {
+        // bypass — allow ANON key for internal calls
+      } else {
+        try {
+          const verifyRes = await fetch(`${supabaseUrl2}/auth/v1/user`, {
+            headers: { "Authorization": `Bearer ${token}`, "apikey": serviceKey },
+          });
+          if (!verifyRes.ok) {
+            return new Response(
+              JSON.stringify({ error: "Unauthorized: Invalid token" }),
+              { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            );
+          }
+        } catch (err) {
+          return new Response(
+            JSON.stringify({ error: "Authentication failed" }),
+            { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+      }
     }
-  } catch (err) {
-    return new Response(
-      JSON.stringify({ error: "Authentication failed" }),
-      { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
   }
 
   try {

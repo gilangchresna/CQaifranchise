@@ -1,6 +1,4 @@
 /// <reference lib="deno.ns" />
-// AI Pipeline Coordinator — anomaly + stockout + alerts
-// No auth needed (internal service)
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -29,151 +27,93 @@ serve(async (req) => {
   const t7 = new Date(now.getTime() - 7 * 86400000).toISOString().slice(0, 10);
   const t30 = new Date(now.getTime() - 30 * 86400000).toISOString().slice(0, 10);
   const t1h = new Date(now.getTime() - 3600000).toISOString();
-  const out = {};
+  const out: any = { errors: [] };
 
-  // STEP 1: Anomaly
   try {
-    const { data: regions } = await sb.from("regions").select("id, currency_code");
-    const rmap = {};
-    (regions || []).forEach(r => { rmap[r.id] = r.currency_code || "SGD"; });
+    // STEP 1: Anomaly
+    try {
+      const { data: regions, error: rErr } = await sb.from("regions").select("id, currency_code");
+      out.regions_count = (regions || []).length;
+      if (rErr) throw new Error("regions: " + rErr.message);
+      const rmap: any = {};
+      (regions || []).forEach((r: any) => { rmap[r.id] = r.currency_code || "SGD"; });
 
-    const { data: outlets } = await sb.from("outlets").select("id, name, code, region_id");
-    const omap = {};
-    const cmap = {};
-    (outlets || []).forEach(o => {
-      omap[o.id] = o;
-      cmap[o.id] = rmap[o.region_id] || "SGD";
-    });
+      const { data: outlets, error: oErr } = await sb.from("outlets").select("id, name, region_id");
+      out.outlets_count = (outlets || []).length;
+      if (oErr) throw new Error("outlets: " + oErr.message);
+      const cmap: any = {};
+      (outlets || []).forEach((o: any) => { cmap[o.id] = rmap[o.region_id] || "SGD"; });
 
-    const { data: sales30 } = await sb
-      .from("sales_transactions")
-      .select("outlet_id, date, amount")
-      .gte("date", t30);
+      const { data: sales30, error: sErr } = await sb
+        .from("sales_transactions").select("outlet_id, date, amount").gte("date", t30);
+      out.sales30_count = (sales30 || []).length;
+      if (sErr) throw new Error("sales30: " + sErr.message);
 
-    const dailyTotals = {};
-    (sales30 || []).forEach(s => {
-      const fx = toSGD(cmap[s.outlet_id] || "SGD");
-      const day = String(s.date).slice(0, 10);
-      const amt = Number(s.amount || 0) * fx;
-      if (!dailyTotals[s.outlet_id]) dailyTotals[s.outlet_id] = {};
-      dailyTotals[s.outlet_id][day] = (dailyTotals[s.outlet_id][day] || 0) + amt;
-    });
+      const dailyTotals: any = {};
+      (sales30 || []).forEach((s: any) => {
+        const fx = toSGD(cmap[s.outlet_id] || "SGD");
+        const day = String(s.date).slice(0, 10);
+        const amt = Number(s.amount || 0) * fx;
+        if (!dailyTotals[s.outlet_id]) dailyTotals[s.outlet_id] = {};
+        dailyTotals[s.outlet_id][day] = (dailyTotals[s.outlet_id][day] || 0) + amt;
+      });
 
-    const { data: todayRows } = await sb
-      .from("sales_transactions")
-      .select("outlet_id, amount")
-      .eq("date", t0);
+      const { data: todayRows, error: tErr } = await sb
+        .from("sales_transactions").select("outlet_id, amount").eq("date", t0);
+      out.today_count = (todayRows || []).length;
+      if (tErr) throw new Error("todayRows: " + tErr.message);
 
-    const todayMap = {};
-    (todayRows || []).forEach(t => {
-      const fx = toSGD(cmap[t.outlet_id] || "SGD");
-      todayMap[t.outlet_id] = (todayMap[t.outlet_id] || 0) + Number(t.amount || 0) * fx;
-    });
+      const todayMap: any = {};
+      (todayRows || []).forEach((t: any) => {
+        const fx = toSGD(cmap[t.outlet_id] || "SGD");
+        todayMap[t.outlet_id] = (todayMap[t.outlet_id] || 0) + Number(t.amount || 0) * fx;
+      });
 
-    let crit = 0, warn = 0, okCnt = 0;
-    const oidEntries = Object.entries(dailyTotals);
-    for (const [oid, daily] of oidEntries) {
-      const vals = Object.values(daily);
-      if (vals.length < 5) { okCnt++; continue; }
-      const mean = vals.reduce((a, b) => a + b, 0) / vals.length;
-      const variance = vals.reduce((s, v) => s + Math.pow(v - mean, 2), 0) / vals.length;
-      const std = Math.sqrt(variance);
-      const tAmt = todayMap[Number(oid)] || 0;
-      const z = std > 0 ? (tAmt - mean) / std : 0;
-      const az = Math.abs(z);
-      const st = az >= 2.5 ? "CRITICAL" : az >= 1.5 ? "WARNING" : "OK";
-      if (st === "CRITICAL") crit++;
-      else if (st === "WARNING") warn++;
-      else okCnt++;
-      const pct = st === "CRITICAL" ? 97 : st === "WARNING" ? 75 : 25;
-      const record = {
-        outlet_id: Number(oid),
-        anomaly_score: z,
-        percentile: pct,
-        is_anomaly: st === "CRITICAL",
-        status: st,
-        recorded_at: now.toISOString(),
-      };
-      sb.from("ml_anomaly_scores").upsert(record).catch(() => {});
+      let crit = 0, warn = 0, okCnt = 0;
+      for (const [oid, daily] of Object.entries(dailyTotals)) {
+        const vals = Object.values(daily as any) as number[];
+        if (vals.length < 5) { okCnt++; continue; }
+        const mean = vals.reduce((a, b) => a + b, 0) / vals.length;
+        const variance = vals.reduce((s, v) => s + Math.pow(v - mean, 2), 0) / vals.length;
+        const std = Math.sqrt(variance);
+        const tAmt = todayMap[Number(oid)] || 0;
+        const z = std > 0 ? (tAmt - mean) / std : 0;
+        const az = Math.abs(z);
+        const st = az >= 2.5 ? "CRITICAL" : az >= 1.5 ? "WARNING" : "OK";
+        if (st === "CRITICAL") crit++;
+        else if (st === "WARNING") warn++;
+        else okCnt++;
+      }
+      out.anomaly = { critical: crit, warning: warn, ok: okCnt };
+    } catch (e: any) {
+      out.anomaly = { error: e.message };
+      out.errors.push("anomaly: " + e.message);
     }
-    out.anomaly = { critical: crit, warning: warn, ok: okCnt };
-  } catch (e) {
-    out.anomaly = { error: String(e) };
+
+    // STEP 2: Stockout (skip if table empty)
+    try {
+      const { data: inventory, error: invErr } = await sb
+        .from("inventory").select("id, outlet_id, current_stock").lt("current_stock", 25);
+      out.inventory_low_count = (inventory || []).length;
+      out.stockout = { checked: (inventory || []).length };
+    } catch (e: any) {
+      out.stockout = { error: e.message };
+    }
+
+    // STEP 3: Alert creation
+    try {
+      const { data: crits } = await sb
+        .from("ml_anomaly_scores").select("outlet_id, anomaly_score")
+        .eq("status", "CRITICAL").gte("recorded_at", t1h);
+      out.alerts = { crit_count: (crits || []).length };
+    } catch (e: any) {
+      out.alerts = { error: e.message };
+    }
+
+  } catch (e: any) {
+    out.fatal = e.message;
+    out.errors.push(e.message);
   }
-
-  // STEP 2: Stockout
-  try {
-    const { data: inventory } = await sb
-      .from("inventory")
-      .select("id, outlet_id, current_stock")
-      .lt("current_stock", 25);
-
-    const { data: recent7 } = await sb
-      .from("sales_transactions")
-      .select("outlet_id, transaction_count")
-      .gte("date", t7);
-
-    const tmap = {};
-    (recent7 || []).forEach(t => {
-      tmap[t.outlet_id] = (tmap[t.outlet_id] || 0) + Number(t.transaction_count || 1);
-    });
-
-    let hi = 0, med = 0;
-    (inventory || []).forEach(inv => {
-      const avg7 = (tmap[inv.outlet_id] || 0) / 7;
-      const days = avg7 > 0 ? Number(inv.current_stock) / avg7 : 999;
-      const risk = days < 7 ? "HIGH" : days < 14 ? "MEDIUM" : "LOW";
-      if (risk === "HIGH") hi++;
-      else if (risk === "MEDIUM") med++;
-      sb.from("ml_stockout_risk").upsert({
-        outlet_id: inv.outlet_id,
-        risk_level: risk,
-        days_remaining: Math.round(days),
-        recorded_at: now.toISOString(),
-      }).catch(() => {});
-    });
-    out.stockout = { high: hi, medium: med, checked: (inventory || []).length };
-  } catch (e) {
-    out.stockout = { error: String(e) };
-  }
-
-  // STEP 3: Alert creation
-  try {
-    const { data: crits } = await sb
-      .from("ml_anomaly_scores")
-      .select("outlet_id, anomaly_score")
-      .eq("status", "CRITICAL")
-      .gte("recorded_at", t1h);
-
-    let created = 0;
-    (crits || []).forEach(c => {
-      const dup = sb.from("alerts").select("id")
-        .eq("outlet_id", c.outlet_id)
-        .eq("status", "NEW")
-        .eq("type", "SALES_ANOMALY");
-      sb.from("alerts").insert({
-        outlet_id: c.outlet_id,
-        type: "SALES_ANOMALY",
-        severity: "P0_CRITICAL",
-        status: "NEW",
-        title: `Anomaly detected @ outlet ${c.outlet_id}`,
-        description: `z=${Number(c.anomaly_score || 0).toFixed(2)}`,
-      }).catch(() => {});
-      created++;
-    });
-    out.alerts = { created };
-  } catch (e) {
-    out.alerts = { error: String(e) };
-  }
-
-  // STEP 4: Agent task log
-  sb.from("agent_tasks").insert({
-    agent_id: "coordinator",
-    task_type: "pipeline",
-    description: "ML pipeline: anomaly + stockout + alerts",
-    status: "completed",
-    completed_at: now.toISOString(),
-  }).catch(() => {});
 
   return new Response(JSON.stringify({
     success: true,

@@ -19,8 +19,10 @@ import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0";
 
 const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Origin": Deno.env.get("ALLOWED_ORIGINS") || "https://c-qaifranchise.vercel.app",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-lender-webhook-secret",
+  "Access-Control-Max-Age": "86400",
 };
 
 // =============================================================================
@@ -146,6 +148,16 @@ async function callLender(
   return { simulated: true, data: { status: "CANCELLED" } };
 }
 
+/** Read a single setting value. Returns fallback if not found. */
+async function getSetting(supabase: any, key: string, fallback: string = ""): Promise<string> {
+  const { data } = await supabase
+    .from("settings")
+    .select("value")
+    .eq("key", key)
+    .maybeSingle();
+  return data?.value ?? fallback;
+}
+
 async function handleSubmit(req: Request, supabase: any, auth: { userId: string; role: string }, body: SubmitApplicationBody) {
   if (!body.requested_amount || body.requested_amount <= 0) {
     return { status: 400, body: { success: false, error: "requested_amount must be a positive number" } };
@@ -213,6 +225,46 @@ async function handleSubmit(req: Request, supabase: any, auth: { userId: string;
     .single();
 
   if (error) throw error;
+
+  // FIX #5: Check loan HITL threshold — if enabled and amount >= threshold,
+  // hold application for human approval instead of auto-submitting to lender.
+  const hitlEnabled = (await getSetting(supabase, "loan_hitl_enabled")) === "true";
+  const hitlThreshold = parseFloat(await getSetting(supabase, "loan_hitl_threshold", "0"));
+  const needsHitl = hitlEnabled && hitlThreshold > 0 && body.requested_amount >= hitlThreshold;
+
+  if (needsHitl) {
+    // Insert into approval_requests so HQ can review before lender submission.
+    await supabase.from("approval_requests").insert({
+      request_type: "LOAN_SUBMIT",
+      trigger_source: "lender-bridge",
+      related_entity_id: application.id,
+      related_entity_type: "financing_application",
+      request_payload: {
+        franchisee_id: franchiseeId,
+        outlet_id: body.outlet_id ?? null,
+        purpose,
+        requested_amount: body.requested_amount,
+        currency: body.currency || "SGD",
+        requested_term_months: body.requested_term_months ?? null,
+        lender_code: lenderCode,
+      },
+      reasoning: `Loan amount S$${body.requested_amount.toLocaleString()} exceeds HITL threshold S$${hitlThreshold.toLocaleString()}`,
+      priority: body.requested_amount >= hitlThreshold * 2 ? "HIGH" : "MEDIUM",
+      approver_role: "HQ_ADMIN",
+      outlet_id: body.outlet_id ?? null,
+      expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // 24h default
+    });
+
+    return {
+      status: 202,
+      body: {
+        success: true,
+        application_id: application.id,
+        status: "PENDING_HUMAN_APPROVAL",
+        message: `Loan amount exceeds threshold. Pending HQ approval before submission to lender.`,
+      },
+    };
+  }
 
   const lenderConfig = await getLenderConfig(supabase, lenderCode);
   let lenderResult;
@@ -309,17 +361,22 @@ async function handleLenderWebhook(req: Request, supabase: any) {
   const eventId = payload.event_id || null;
   const applicationRef = payload.application_id || payload.lender_reference_id;
 
-  // Idempotency: if we've already recorded this exact lender event, no-op.
-  if (eventId) {
+  // Idempotency: use eventId if present, otherwise composite hash of key fields
+  const dedupKey = eventId 
+    || (payload.application_id || '') + '|' + (payload.lender_reference_id || '') + '|' + (payload.status || '') + '|' + (payload.event_type || '');
+  
+  if (dedupKey !== '|||') {
     const { data: existing } = await supabase
       .from("lender_webhook_events")
       .select("id")
       .eq("lender_code", lenderCode)
-      .eq("event_id", eventId)
+      .eq("dedup_key", dedupKey)
       .maybeSingle();
     if (existing) {
       return { status: 200, body: { success: true, deduped: true } };
     }
+    // Store dedup_key for future checks
+    payload._dedup_key = dedupKey;
   }
 
   let application: any = null;
@@ -327,9 +384,18 @@ async function handleLenderWebhook(req: Request, supabase: any) {
     const { data } = await supabase
       .from("financing_applications")
       .select("*")
-      .or(`id.eq.${applicationRef},lender_reference_id.eq.${applicationRef}`)
+      .or(`id.eq.${applicationRef}`)
       .maybeSingle();
-    application = data;
+    if (!data) {
+      const { data: byLenderRef } = await supabase
+        .from("financing_applications")
+        .select("*")
+        .eq("lender_reference_id", applicationRef)
+        .maybeSingle();
+      application = byLenderRef;
+    } else {
+      application = data;
+    }
   }
 
   const { data: eventRow, error: eventError } = await supabase
@@ -339,6 +405,7 @@ async function handleLenderWebhook(req: Request, supabase: any) {
       lender_code: lenderCode,
       event_id: eventId,
       event_type: payload.event_type || "status_update",
+      dedup_key: (payload as any)._dedup_key ?? null,
       payload,
     })
     .select()
@@ -436,16 +503,22 @@ async function handleRepaymentWebhook(req: Request, supabase: any) {
   }
 
   // 1. Idempotency check on repayment_events
-  if (eventId) {
+  // Use eventId if present, otherwise composite hash of key fields
+  const dedupKey = eventId
+    || (payload.application_id || '') + '|' + (payload.lender_reference_id || '') + '|' + (payload.event_type || '') + '|' + (payload.amount || '') + '|' + (payload.emi_number || '');
+
+  if (dedupKey !== '|||||') {
     const { data: existing } = await supabase
       .from('repayment_events')
       .select('id')
       .eq('lender_code', lenderCode)
-      .eq('event_id', eventId)
+      .eq('dedup_key', dedupKey)
       .maybeSingle();
     if (existing) {
       return { status: 200, body: { success: true, deduped: true } };
     }
+    // Store dedup_key for future checks
+    payload._dedup_key = dedupKey;
   }
 
   // 2. Find application
@@ -455,9 +528,18 @@ async function handleRepaymentWebhook(req: Request, supabase: any) {
     const { data } = await supabase
       .from('financing_applications')
       .select('*')
-      .or(`id.eq.${applicationRef},lender_reference_id.eq.${applicationRef}`)
+      .eq('id', applicationRef)
       .maybeSingle();
-    application = data;
+    if (!data) {
+      const { data: byLenderRef } = await supabase
+        .from('financing_applications')
+        .select('*')
+        .eq('lender_reference_id', applicationRef)
+        .maybeSingle();
+      application = byLenderRef;
+    } else {
+      application = data;
+    }
   }
 
   // 3. Store raw repayment event
@@ -476,6 +558,7 @@ async function handleRepaymentWebhook(req: Request, supabase: any) {
       scheduled_date: payload.scheduled_date || null,
       days_overdue: payload.days_overdue || 0,
       delinquency_level: payload.delinquency_level || 'NONE',
+      dedup_key: (payload as any)._dedup_key ?? null,
       raw_payload: payload,
       source: 'LENDER_WEBHOOK',
       processed: false,

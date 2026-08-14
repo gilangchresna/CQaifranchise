@@ -18,7 +18,7 @@ serve(async (req) => {
     return new Response("ok", { headers: corsHeaders });
   }
 
-  const auth = await verifyAuth(req);
+  const auth = await verifyAuth(req, true);
   if (!auth.authorized) {
     return unauthorizedResponse(auth.error);
   }

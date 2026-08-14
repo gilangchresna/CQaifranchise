@@ -64,12 +64,12 @@ WEBHOOK_URL = f"{SUPABASE_URL}/functions/v1/pos-webhook" if SUPABASE_URL else ""
 
 # ── Realistic Simulation Config ──────────────────────────────────
 # Outlet IDs per region (from seeded database)
-SG_OUTLETS  = list(range(156, 164)) + [1, 2, 3]  # Singapore: 156-163, WKW/MYB/SAP
-JKT_OUTLETS = [4] + list(range(1, 6))   # Jakarta: JKT-004 + JKT-001..005
-BDG_OUTLETS = [5]                           # Bandung
-SBY_OUTLETS = [6]                           # Surabaya
-BKK_OUTLETS = [7]                           # Bangkok
-KUL_OUTLETS = [8]                           # Kuala Lumpur
+SG_OUTLETS  = [1, 2, 3, 164, 165, 166, 167, 168, 169, 170, 171, 200, 201, 202]  # FIX Aug14: real DB IDs  # Singapore: 156-163, WKW/MYB/SAP
+JKT_OUTLETS = [4, 11, 12, 22, 24, 203, 204, 205]  # FIX Aug14: real DB IDs   # Jakarta: JKT-004 + JKT-001..005
+BDG_OUTLETS = [5, 206, 207]  # FIX Aug14: real DB IDs                           # Bandung
+SBY_OUTLETS = [6, 208, 209]  # FIX Aug14                           # Surabaya
+BKK_OUTLETS = [7, 212, 213]  # FIX Aug14                           # Bangkok
+KUL_OUTLETS = [8, 210, 211]  # FIX Aug14                           # Kuala Lumpur
 ALL_OUTLETS = SG_OUTLETS + JKT_OUTLETS + BDG_OUTLETS + SBY_OUTLETS + BKK_OUTLETS + KUL_OUTLETS
 PREMIUM_OUTLETS = SG_OUTLETS  # Singapore = premium pricing tier
 
@@ -106,13 +106,52 @@ MENU_PREMIUM = [
     {"name": "Es Campur SG style",   "price":  9000},
 ]
 # Weighted choice helper
+# Menu per currency (Aug 14, 2026)
+MENU_SGD = [
+    {"name": "Nasi Goreng", "price": 18}, {"name": "Ayam Geprek Matah", "price": 15},
+    {"name": "Mie Goreng Jawa", "price": 14}, {"name": "Kopi O / Teh O", "price": 5},
+    {"name": "Ayam Rice", "price": 22}, {"name": "Soto Ayam", "price": 16},
+    {"name": "Laksa", "price": 15}, {"name": "Roti Prata + Curry", "price": 12},
+    {"name": "Kopi C Siew Dai", "price": 6}, {"name": "Bakso", "price": 15},
+]
+MENU_IDR = [
+    {"name": "Nasi Goreng", "price": 25000}, {"name": "Ayam Geprek", "price": 22000},
+    {"name": "Mie Goreng", "price": 20000}, {"name": "Es Teh Manis", "price": 6000},
+    {"name": "Sate Ayam", "price": 28000}, {"name": "Soto Ayam", "price": 25000},
+    {"name": "Es Campur", "price": 12000}, {"name": "Bakso", "price": 22000},
+    {"name": "Rawon", "price": 28000}, {"name": "Es Jeruk", "price": 7000},
+]
+MENU_THB = [
+    {"name": "Pad Thai", "price": 120}, {"name": "Som Tam", "price": 80},
+    {"name": "Khao Man Gai", "price": 100}, {"name": "Mango Sticky Rice", "price": 90},
+    {"name": "Thai Iced Tea", "price": 50}, {"name": "Tom Yum Goong", "price": 180},
+    {"name": "Green Curry", "price": 150}, {"name": "Fried Rice", "price": 90},
+    {"name": "Spring Rolls", "price": 60}, {"name": "Coconut Ice Cream", "price": 45},
+]
+MENU_MYR = [
+    {"name": "Nasi Lemak", "price": 18}, {"name": "Mee Goreng Mamak", "price": 16},
+    {"name": "Roti Canai", "price": 8}, {"name": "Laksa Johor", "price": 20},
+    {"name": "Nasi Kandar", "price": 25}, {"name": "Rendang Tok", "price": 28},
+    {"name": "Teh Tarik", "price": 7}, {"name": "Cendol", "price": 10},
+    {"name": "Satay 10 pcs", "price": 22}, {"name": "Curry Mee", "price": 15},
+]
+
+def get_menu(outlet_id):
+    """FIX Aug14: Return (menu_list, currency_code) per outlet region."""
+    if outlet_id in SG_OUTLETS: return MENU_SGD, "SGD"
+    if outlet_id in BKK_OUTLETS: return MENU_THB, "THB"
+    if outlet_id in KUL_OUTLETS: return MENU_MYR, "MYR"
+    return MENU_IDR, "IDR"   # JKT / BDG / SBY
+
 def wchoice(opts, weights):
     return random.choices(opts, weights=weights, k=1)[0]
 
 # ── Realistic transaction builder ─────────────────────────────────
 def build_realistic_txn(outlet_id: int, ts: datetime) -> dict:
     """Build realistic txn: realistic menu items, PPN 11%, weighted payment/platform."""
-    menu = MENU_PREMIUM if outlet_id in PREMIUM_OUTLETS else MENU_STANDARD
+    menu, currency = get_menu(outlet_id)  # FIX Aug14: currency-aware menus
+    # OLD: MENU_PREMIUM/MENU_STANDARD menus removed
+    # OLD: PREMIUM_OUTLETS removed
     items    = random.sample(menu, k=random.randint(1, min(4, len(menu))))
     subtotal = sum(i["price"] for i in items)
     tax      = round(subtotal * 0.11)
@@ -142,6 +181,7 @@ def build_realistic_txn(outlet_id: int, ts: datetime) -> dict:
         "customer_id":      f"CUST-{random.randint(100, 9999)}",
         "staff_id":         None,
         "transaction_count": random.randint(1, 3),
+        "currency_code": currency,  # FIX Aug14: tag local currency
     }
 
 # ── Full day simulation ──────────────────────────────────────────

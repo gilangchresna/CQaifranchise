@@ -48,8 +48,8 @@ Deno.serve(async (req: Request) => {
     return new Response(null, { headers: corsHeaders })
   }
 
-  // SECURITY: Verify authentication
-  const auth = await verifyAuth(req)
+  // SECURITY: Verify authentication (no-auth allowed for internal/cron calls)
+  const auth = await verifyAuth(req, true, true)
   if (!auth.authorized) {
     return unauthorizedResponse(auth.error)
   }

@@ -246,11 +246,33 @@ serve(async (req: Request) => {
     // Combine scores (0.7 IF + 0.3 Z-score as per Fajar's spec)
     const finalScore = Math.min(1, 0.7 * anomalyScore + 0.3 * zScore * 0.1);
 
+    // FIX #6: Read risk level boundaries from settings table
+    // anomaly_threshold stored as "0.15" = 15% deviation → maps to HIGH boundary
+    const { data: thresholdRows } = await supabase
+      .from("settings")
+      .select("key, value")
+      .in("key", ["anomaly_threshold"]);
+
+    let anomalyThreshold = 0.15; // default: 15% deviation
+    for (const r of thresholdRows || []) {
+      if (r.key === "anomaly_threshold") {
+        anomalyThreshold = parseFloat(r.value) || 0.15;
+      }
+    }
+
+    // Risk level boundaries: derive from anomaly_threshold
+    // anomaly_threshold = % deviation that warrants attention → HIGH boundary
+    const BOUNDARY = {
+      CRITICAL: Math.min(1, anomalyThreshold * 5),  // 0.75 at default 0.15
+      HIGH: anomalyThreshold,                          // 0.15 at default
+      MEDIUM: anomalyThreshold * 0.6,                  // 0.09 at default
+    };
+
     // Determine risk level
     let riskLevel: string;
-    if (finalScore > 0.7) riskLevel = "CRITICAL";
-    else if (finalScore > 0.5) riskLevel = "HIGH";
-    else if (finalScore > 0.3) riskLevel = "MEDIUM";
+    if (finalScore > BOUNDARY.CRITICAL) riskLevel = "CRITICAL";
+    else if (finalScore > BOUNDARY.HIGH) riskLevel = "HIGH";
+    else if (finalScore > BOUNDARY.MEDIUM) riskLevel = "MEDIUM";
     else riskLevel = "LOW";
 
     // Store prediction
@@ -259,7 +281,7 @@ serve(async (req: Request) => {
         outlet_id,
         prediction_type: "ANOMALY",
         anomaly_score: finalScore,
-        anomaly_threshold: 0.5,
+        anomaly_threshold: anomalyThreshold,
         is_anomaly: isAnomaly || finalScore > 0.5,
         anomaly_features: explanations.slice(0, 3),
         model_version: "v2.0.0-isolation-forest",

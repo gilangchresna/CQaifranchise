@@ -107,19 +107,17 @@ interface CaseInfo {
   priority: string;
   sla_deadline: string | null;
   assigned_to_id: string | null;
-  outlet_id: number | null;
+  region_id: number | null;
   created_at: string;
   alert: {
     id: number;
+    outlet_id: number | null;
     severity: Severity;
   } | null;
   assignee: {
     id: string;
     full_name: string;
     role: string;
-  } | null;
-  outlet: {
-    region_id: number;
   } | null;
 }
 
@@ -320,9 +318,10 @@ serve(async (req: Request) => {
         priority,
         sla_deadline,
         assigned_to_id,
-        outlet_id,
-        source_alert_id,
-        created_at
+        region_id,
+        alert_id,
+        created_at,
+        alert:alerts(id, outlet_id, severity)
       `)
       .not("sla_deadline", "is", null)
       .not("status", "eq", "RESOLVED")
@@ -387,7 +386,7 @@ serve(async (req: Request) => {
           supabase,
           caseInfo.assignee,
           caseInfo.alert?.severity as Severity,
-          caseInfo.outlet?.region_id ?? null
+          caseInfo.region_id
         );
 
         if (escalationTarget && caseInfo.assignee && escalationTarget.id !== caseInfo.assignee.id) {

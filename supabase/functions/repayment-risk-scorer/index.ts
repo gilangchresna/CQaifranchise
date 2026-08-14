@@ -25,7 +25,7 @@ const RISK_THRESHOLDS = {
   LOW: 30,
   MEDIUM: 60,
   HIGH: 80,
-  CRITICAL: 70
+  CRITICAL: 100
 };
 
 // Weight factors for risk calculation

@@ -1,52 +1,25 @@
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { verifyAuth } from "../_shared/auth-helper.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-async function verifyAuth(req: Request) {
-  const authHeader = req.headers.get("Authorization");
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    return { authorized: false, error: "Unauthorized", status: 401 };
-  }
-  const token = authHeader.substring(7);
-  if (!token) return { authorized: false, error: "Missing token", status: 401 };
-  try {
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const response = await fetch(`${supabaseUrl}/auth/v1/user`, {
-      headers: { "Authorization": `Bearer ${token}`, "apikey": serviceKey },
-    });
-    if (!response.ok) return { authorized: false, error: "Invalid token", status: 401 };
-    const userData = await response.json();
-    return {
-      authorized: true,
-      user: {
-        id: userData.id,
-        email: userData.email,
-        role: userData.user_metadata?.role || "FRANCHISEE_OWNER",
-      },
-    };
-  } catch {
-    return { authorized: false, error: "Auth failed", status: 401 };
-  }
-}
-
 serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
 
-  const authResult = await verifyAuth(req);
+  const authResult = await verifyAuth(req, true);
   if (!authResult.authorized) {
     return new Response(JSON.stringify({ error: authResult.error }), {
       status: authResult.status,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
-  const user = authResult.user!;
+  const user = authResult.userId ? { id: authResult.userId, role: authResult.role } : { id: "internal", role: authResult.role };
   const url = new URL(req.url);
   // Demo override: allow ?role=Franchisee to simulate role in UI without re-login
   const roleOverride = url.searchParams.get("role");
@@ -75,34 +48,39 @@ serve(async (req: Request) => {
     let daysInPeriod: number;
     
     switch (period) {
-      case 'today': 
-        startDate = todayStr; 
-        periodLabel = 'Today'; 
+      case "today":
+      case "Today":
+        startDate = todayStr;
+        periodLabel = "Today";
         daysInPeriod = 1;
         break;
-      case '7d': 
-        startDate = new Date(today.getTime() - 6 * 86400000).toISOString().split('T')[0]; 
-        periodLabel = 'Last 7 Days'; 
+      case "7d":
+      case "7D":
+        startDate = new Date(today.getTime() - 6 * 86400000).toISOString().split("T")[0];
+        periodLabel = "Last 7 Days";
         daysInPeriod = 7;
         break;
-      case '30d': 
-        startDate = new Date(today.getTime() - 29 * 86400000).toISOString().split('T')[0]; 
-        periodLabel = 'Last 30 Days'; 
+      case "30d":
+      case "30D":
+        startDate = new Date(today.getTime() - 29 * 86400000).toISOString().split("T")[0];
+        periodLabel = "Last 30 Days";
         daysInPeriod = 30;
         break;
-      case 'month':
-        startDate = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-01`;
-        periodLabel = `${today.toLocaleString('default', { month: 'long' })} ${today.getFullYear()}`;
+      case "month":
+      case "Month":
+        startDate = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,"0")}-01`;
+        periodLabel = `${today.toLocaleString("default", { month: "long" })} ${today.getFullYear()}`;
         daysInPeriod = today.getDate();
         break;
-      case 'ytd':
+      case "ytd":
+      case "YTD":
         startDate = `${today.getFullYear()}-01-01`;
         periodLabel = `Year ${today.getFullYear()}`;
-        daysInPeriod = Math.floor((today.getTime() - new Date(today.getFullYear(), 0, 0).getTime()) / 86400000);
+        daysInPeriod = Math.floor((today.getTime() - new Date(today.getFullYear(), 0, 1).getTime()) / 86400000);
         break;
-      default: 
-        startDate = new Date(today.getTime() - 6 * 86400000).toISOString().split('T')[0]; 
-        periodLabel = 'Last 7 Days'; 
+      default:
+        startDate = new Date(today.getTime() - 6 * 86400000).toISOString().split("T")[0];
+        periodLabel = "Last 7 Days";
         daysInPeriod = 7;
     }
     
@@ -160,7 +138,18 @@ serve(async (req: Request) => {
     }
     // HQ_ADMIN: allowedOutletIds = null → all outlets
 
-    // =========================================
+    // P1-A: Country filter (HQ only) — country param = region_id
+    const countryFilter = url.searchParams.get("country");
+    if (countryFilter && effectiveRole === "HQ_ADMIN" && countryFilter !== "all") {
+      const countryId = parseInt(countryFilter, 10);
+      const { data: countryOutlets } = await supabase
+        .from("outlets")
+        .select("id")
+        .eq("region_id", countryId);
+      allowedOutletIds = (countryOutlets || []).map((o: any) => o.id);
+    }
+
+    // =====================================================
     // GET OUTLET → REGION → CURRENCY MAPPING
     // =========================================
     const { data: allOutlets } = await supabase

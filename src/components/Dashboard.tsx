@@ -61,6 +61,7 @@ interface Region {
 export function Dashboard({ activeRole }: { activeRole: Role }) {
   const [loading, setLoading] = useState(true);
   const [selectedPeriod, setSelectedPeriod] = useState('7d');
+  const [selectedCountry, setSelectedCountry] = useState<string>('all'); // 'all' or region_id string
   const [stats, setStats] = useState<DashboardStats>({
     totalOutlets: 0,
     avgSalesVariance: 0,
@@ -179,7 +180,7 @@ export function Dashboard({ activeRole }: { activeRole: Role }) {
 
       // Fetch dashboard stats with period parameter
       // Pass activeRole to allow edge function to scope data for demo role switching
-      const statsRes = await fetch(`${EDGE_FUNCTIONS_URL}/dashboard-full?period=${selectedPeriod}&role=${activeRole}`, {
+      const statsRes = await fetch(`${EDGE_FUNCTIONS_URL}/dashboard-full?period=${selectedPeriod}&role=${activeRole}${selectedCountry !== 'all' ? `&country=${selectedCountry}` : ''}`, {
         headers: { 
           'Authorization': `Bearer ${token}`  // FIX: Use session token, not anon key
         },
@@ -310,10 +311,28 @@ export function Dashboard({ activeRole }: { activeRole: Role }) {
 
   return (
     <div className="space-y-6">
-      {/* Period Filter */}
-      <div className="flex items-center justify-between">
+      {/* Period Filter + Country Filter */}
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <h1 className="text-2xl font-bold text-slate-900">{activeRole} Dashboard</h1>
-        <div className="flex gap-1 bg-slate-100 p-1 rounded-lg">
+        <div className="flex gap-3 flex-wrap">
+          {/* Country Filter */}
+          {activeRole === 'HQ' && (
+            <select
+              value={selectedCountry}
+              onChange={(e) => setSelectedCountry(e.target.value)}
+              className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="all">🌍 All Countries</option>
+              <option value="114">🇸🇬 Singapore</option>
+              <option value="115">🇮🇩 Indonesia</option>
+              <option value="116">🇮🇩 Bandung</option>
+              <option value="117">🇮🇩 Surabaya</option>
+              <option value="118">🇹🇭 Thailand</option>
+              <option value="119">🇲🇾 Malaysia</option>
+            </select>
+          )}
+          {/* Period Filter */}
+          <div className="flex gap-1 bg-slate-100 p-1 rounded-lg">
           {[
             { key: 'today', label: 'Today' },
             { key: '7d', label: '7 Days' },

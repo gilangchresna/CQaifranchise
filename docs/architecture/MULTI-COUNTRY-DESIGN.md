@@ -30,13 +30,20 @@ FRANCHISEE (Mitra)
 └── Bayar royalty ke Franchisor
 ```
 
-### Current State
+## Current State (Updated: Aug 14, 2026)
 
-- Single-country prototype (Indonesia only, IDR)
-- Schema lama: `regions` (Indonesia provinces) tanpa `countries` table
-- No real users (auth.users empty)
-- sales_transactions: 37K rows tapi FK ke outlets kosong
-- Multi-country redesign needed
+- ✅ `currency_code` column added to `sales_transactions`
+- ✅ All 74,498 rows tagged as `IDR`
+- ✅ `dashboard-full` updated with **hybrid currency resolution** (transaction.currency_code → outlet.region.currency → SGD default) — DEPLOYED
+- ✅ `pos-webhook` updated to auto-tag `currency_code` from outlet.region — DEPLOYED
+- ✅ `regions` table seeded (11 regions: SG-CENTRAL, SG-NORTH, SG-EAST, SG-WEST, SG-NE, SG, JKT, BDG, SBY, BKK, KUL)
+- ✅ `outlets` table seeded (34 outlets: IDs 1-12, 22, 24, 164-171, 200-213)
+- ⚠️ Outlets still pointing to SG regions → currency still wrong for some outlets
+- ⚠️ `SUPABASE_SERVICE_ROLE_KEY` in .env.local = ANON key (not service role)
+- ✅ `sales_transactions` now has correct FK to outlets (after seed-regions-outlets run)
+- ✅ ARCHITECTURE-v3.md created (latest full doc)
+- ✅ ML thresholds now settings-driven (anomaly_threshold + stockout_threshold)
+- ✅ Repayment risk CRITICAL/HIGH bug fixed (was 70/80, now 80/60)
 
 ---
 
@@ -485,42 +492,36 @@ countries.
 
 ## Implementation Phases
 
-### Phase 1: Schema Migration (Week 1-2)
+### Phase 1: Schema Migration ✅ DONE (Aug 11)
+- [x] Add `countries` table — use `regions` table for MVP (country_code in regions.currency_code)
+- [x] Add `exchange_rates` table — static rates in dashboard-full (future: live API)
+- [x] Add `staff_assignments` table — schema ready, needs seed
+- [x] Add `currency_code` to `sales_transactions` ✅ DEPLOYED
+- [x] Seed regions (ID, SG, MY, TH) ✅ DONE
+- [x] Seed outlets with region links ✅ DONE
 
-- [ ] Add `countries` table
-- [ ] Add `staff_assignments` table
-- [ ] Add `exchange_rates` table
-- [ ] Add `currency_code` to `outlets`
-- [ ] Add `amount_local` + `currency_code` to `sales_transactions`
-- [ ] Drop old `regions` seed data (Indonesia-only)
-- [ ] Seed countries: ID, SG, MY
-- [ ] Seed regions per country
-
-### Phase 2: Auth & User Management (Week 2-3)
-
-- [ ] Configure Supabase Auth
+### Phase 2: Auth & User Management ⏳ In Progress
+- [ ] Fix SUPABASE_SERVICE_ROLE_KEY (get real service role key from Supabase Dashboard)
+- [ ] Configure Supabase Auth (real auth.users with invitations)
 - [ ] Update `user_profiles` trigger (add country_id)
 - [ ] Update RLS policies for multi-country
-- [ ] Create HQ Admin dashboard
-- [ ] Create user invitation flow
+- [ ] Create HQ Admin dashboard user invitation UI
 
-### Phase 3: Seed Data (Week 3-4)
+### Phase 3: Seed Data ✅ DONE (Aug 11)
+- [x] Seed regions ✅
+- [x] Seed outlets linked to regions ✅
+- [x] Fix `sales_transactions` FK → real outlet_ids ✅
+- [ ] Fix POS simulator amounts (IDR formula — Rp 25K-35K per txn, not SGD)
+- [ ] Re-generate Jan-Aug 2026 data with correct IDR amounts
 
-- [ ] Seed regions (ID: 5, SG: 3, MY: 3)
-- [ ] Seed franchisees per region
-- [ ] Seed outlets per franchisee
-- [ ] Fix `sales_transactions` FK → real outlet_ids
-- [ ] Seed realistic POS data per country (with correct currency)
-
-### Phase 4: Dashboard & Reporting (Week 4-6)
-
-- [ ] Multi-country dashboard (country filter)
-- [ ] Currency conversion on dashboard
-- [ ] Region drill-down
+### Phase 4: Dashboard & Reporting ✅ PARTIAL (Aug 14, 2026)
+- [x] Currency conversion ✅ (hybrid resolution deployed)
+- [ ] Multi-country dashboard (country filter dropdown)
+- [ ] Region drill-down UI
 - [ ] HQ consolidated report (SGD base)
+- [x] ML thresholds settings-driven ✅ (Aug 14, 2026)
 
-### Phase 5: ML Pipeline (Week 6-8)
-
+### Phase 5: ML Pipeline ⏳ Future
 - [ ] Per-country anomaly detection
 - [ ] Retrain models with multi-country data
 - [ ] Accuracy tracking per country
@@ -529,16 +530,16 @@ countries.
 
 ## Issues to Fix (Immediate)
 
-| Priority | Issue                                  | Fix                                |
-| -------- | -------------------------------------- | ---------------------------------- |
-| P0       | `regions` table empty                  | Seed Indonesia + Singapore first   |
-| P0       | `outlets` table empty                  | Seed outlets linked to regions     |
-| P0       | `sales_transactions` FK broken         | Re-seed with real outlet_ids       |
-| P0       | `SUPABASE_SERVICE_ROLE_KEY` = anon key | Replace with real service role key |
-| P1       | Amount mismatch (IDR vs USD)           | Fix POS backfill amount formula    |
-| P1       | `user_profiles` has fake UUIDs         | Reset + use real auth.users        |
-| P2       | No exchange_rates table                | Add + seed daily rates             |
-| P2       | Staff assignments missing              | Add `staff_assignments` table      |
+| Priority | Issue | Status | Fix |
+|----------|--------|--------|-----|
+| P0 | Outlets pointing to SG regions (SGD) but data is IDR | ⚠️ PENDING | Reassign outlets to IDR regions via SQL |
+| P0 | `SUPABASE_SERVICE_ROLE_KEY` = anon key | ⚠️ PENDING | Get real SR key from Supabase Dashboard |
+| P0 | Dashboard shows S$590M instead of ~S$421K | 🔄 PARTIAL | Currency code tagged, awaiting outlet fix |
+| P1 | POS simulator amounts wrong (IDR formula broken) | ⚠️ PENDING | Fix pos-backfill.py amount formula |
+| P1 | `seed-regions-outlets` doesn't set currency_code | ⚠️ PENDING | Update seed function |
+| P1 | `dashboard-api` not currency-aware | ⚠️ PENDING | Update to hybrid currency logic |
+| P2 | User profiles have placeholder UUIDs | ⚠️ PENDING | Setup real Supabase Auth |
+| P2 | Staff assignments not seeded | ⚠️ PENDING | Seed staff_assignments table |
 
 ---
 
@@ -554,3 +555,16 @@ countries.
 ---
 
 _Last updated: August 11, 2026_ _Author: ERP Team_
+
+## Open Questions — Answered ✅
+
+| # | Question | Answer |
+|---|----------|--------|
+| 1 | Country first? | Indonesia MVP (IDR), Singapore SG next |
+| 2 | Base currency? | SGD (all converted to SGD for HQ) |
+| 3 | HQ location? | Indonesia (WITA timezone) |
+| 4 | Payment gateway? | QRIS (ID), PayNow (SG) — future |
+| 5 | Menu pricing? | Different prices per country (local market) |
+| 6 | Auth provider? | Supabase Auth ✅ |
+
+_Last updated: August 11, 2026_ _Author: Cyberquote Engineering Team_

@@ -18,8 +18,8 @@ serve(async (req) => {
     return new Response("ok", { headers: corsHeaders });
   }
 
-  // SECURITY: Verify authentication
-  const auth = await verifyAuth(req);
+  // SECURITY: Verify authentication (service role bypass allowed)
+  const auth = await verifyAuth(req, true);
   if (!auth.authorized) {
     return unauthorizedResponse(auth.error);
   }

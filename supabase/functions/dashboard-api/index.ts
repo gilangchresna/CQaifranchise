@@ -42,24 +42,29 @@ function getDateRange(period: string) {
   let startDate: string;
   let periodLabel: string;
 
-  switch (period) {
+  const periodLower = (period || '').toLowerCase();
+  switch (periodLower) {
     case 'today':
       startDate = todayStr;
       periodLabel = 'Today';
       break;
     case '7d':
+    case '7 D':
       startDate = new Date(today.getTime() - 6 * 86400000).toISOString().split('T')[0];
       periodLabel = 'Last 7 Days';
       break;
     case '30d':
+    case '30 D':
       startDate = new Date(today.getTime() - 29 * 86400000).toISOString().split('T')[0];
       periodLabel = 'Last 30 Days';
       break;
     case 'month':
+    case 'mth':
       startDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-01`;
       periodLabel = 'This Month';
       break;
     case 'ytd':
+    case 'year':
       startDate = `${today.getFullYear()}-01-01`;
       periodLabel = 'Year to Date';
       break;

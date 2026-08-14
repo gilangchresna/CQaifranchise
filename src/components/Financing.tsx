@@ -122,6 +122,11 @@ export function Financing({ activeRole }: { activeRole: Role }) {
         schema: 'public',
         table: 'application_risk_scores'
       }, () => fetchRiskScores())
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'financing_applications'
+      }, () => fetchApplications())
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, []);

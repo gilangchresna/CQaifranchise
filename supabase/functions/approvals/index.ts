@@ -114,6 +114,88 @@ async function listApprovals(req: Request, supabase: any, url: URL) {
   );
 }
 
+// Fallback defaults
+const DEFAULT_SLA_HOURS = { HIGH: 1, MEDIUM: 4, LOW: 24 };
+
+/** Read SLA hours from settings table. Falls back to defaults if not configured. */
+async function getSlaHours(supabase: any): Promise<Record<string, number>> {
+  const { data } = await supabase
+    .from("settings")
+    .select("key, value")
+    .in("key", ["sla_high", "sla_medium", "sla_low"]);
+
+  if (!data || data.length === 0) return DEFAULT_SLA_HOURS;
+
+  const row = (k: string) => data.find((s: any) => s.key === k)?.value;
+
+  return {
+    HIGH: parseInt(row("sla_high") || "1", 10),
+    MEDIUM: parseInt(row("sla_medium") || "4", 10),
+    LOW: parseInt(row("sla_low") || "24", 10),
+  };
+}
+
+/** Read a single setting value. Returns default if not found. */
+async function getSetting(supabase: any, key: string, fallback: string = ""): Promise<string> {
+  const { data } = await supabase
+    .from("settings")
+    .select("value")
+    .eq("key", key)
+    .maybeSingle();
+  return data?.value ?? fallback;
+}
+
+/** Look up lender adapter config from public.integrations (type='LENDER'). */
+async function getLenderConfig(supabase: any, lenderCode: string) {
+  const { data } = await supabase
+    .from("integrations")
+    .select("*")
+    .eq("type", "LENDER")
+    .eq("name", lenderCode)
+    .maybeSingle();
+  return data || null;
+}
+
+/**
+ * Call the lender API if configured, otherwise simulate a response.
+ */
+async function callLender(
+  action: "submit" | "status" | "cancel",
+  lenderConfig: any,
+  payload: Record<string, any>
+): Promise<{ simulated: boolean; data: any }> {
+  if (lenderConfig?.config?.base_url && lenderConfig?.config?.api_key) {
+    const resp = await fetch(`${lenderConfig.config.base_url}/${action}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${lenderConfig.config.api_key}`,
+      },
+      body: JSON.stringify(payload),
+    });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(`Lender API error (${resp.status}): ${JSON.stringify(data)}`);
+    return { simulated: false, data };
+  }
+
+  // Simulate mode
+  await new Promise((r) => setTimeout(r, 150));
+  if (action === "submit") {
+    return {
+      simulated: true,
+      data: {
+        lender_reference_id: `SIM-${Date.now()}`,
+        status: "UNDER_REVIEW",
+        message: "Simulate mode — no lender configured.",
+      },
+    };
+  }
+  if (action === "status") {
+    return { simulated: true, data: { status: payload.last_known_status || "UNDER_REVIEW" } };
+  }
+  return { simulated: true, data: { status: "CANCELLED" } };
+}
+
 /**
  * POST - Create new approval request
  */
@@ -128,15 +210,13 @@ async function createRequest(req: Request, supabase: any) {
     );
   }
 
-  // Calculate expiry based on priority
-  const slaHours = {
-    HIGH: 1,
-    MEDIUM: 4,
-    LOW: 24
-  };
+  // FIX: Read SLA hours from settings table (not hardcoded)
+  const slaHours = await getSlaHours(supabase);
+  const priority = body.priority || "MEDIUM";
+  const expiresHours = slaHours[priority] ?? 24;
 
   const expiresAt = new Date();
-  expiresAt.setHours(expiresAt.getHours() + (slaHours[body.priority as keyof typeof slaHours] || 24));
+  expiresAt.setHours(expiresAt.getHours() + expiresHours);
 
   const { data, error } = await supabase
     .from("approval_requests")
@@ -148,7 +228,7 @@ async function createRequest(req: Request, supabase: any) {
       related_entity_code: body.related_entity_code,
       request_payload: body.request_payload,
       reasoning: body.reasoning,
-      priority: body.priority || "MEDIUM",
+      priority: priority,
       approver_role: body.approver_role,
       outlet_id: body.outlet_id,
       region_id: body.region_id,
@@ -348,6 +428,54 @@ async function executeApprovedAction(supabase: any, request: any) {
 
     default:
       return { action: "NO_OP", message: "Unknown request type" };
+
+    case "LOAN_SUBMIT": {
+      // When HQ approves a loan HITL request, auto-submit to lender.
+      // The application was already created with SUBMITTED status.
+      // Only proceed if it's still PENDING_HUMAN_APPROVAL.
+      const appPayload = request.request_payload || {};
+      const appId = request.related_entity_id;
+
+      // Re-fetch application to confirm it's still pending
+      const { data: app } = await supabase
+        .from("financing_applications")
+        .select("id, status, requested_amount, currency")
+        .eq("id", appId)
+        .maybeSingle();
+
+      if (!app) return { action: "LOAN_SUBMIT", error: "Application not found" };
+      if (app.status !== "SUBMITTED") {
+        return { action: "LOAN_SUBMIT", error: `Application already ${app.status}`, skipped: true };
+      }
+
+      // Submit to lender
+      const lenderConfig = await getLenderConfig(supabase, appPayload.lender_code || "GENERIC");
+      const result = await callLender("submit", lenderConfig, {
+        franchisee_id: appPayload.franchisee_id,
+        outlet_id: appPayload.outlet_id,
+        purpose: appPayload.purpose,
+        requested_amount: appPayload.requested_amount,
+        currency: appPayload.currency || "SGD",
+        requested_term_months: appPayload.requested_term_months,
+      });
+
+      const newStatus = result.data.status || "UNDER_REVIEW";
+      await supabase
+        .from("financing_applications")
+        .update({
+          status: newStatus,
+          lender_reference_id: result.data.lender_reference_id ?? null,
+          last_lender_response: result.data,
+        })
+        .eq("id", appId);
+
+      return {
+        action: "LOAN_SUBMITTED",
+        application_id: appId,
+        status: newStatus,
+        simulated: result.simulated,
+      };
+    }
   }
 }
 

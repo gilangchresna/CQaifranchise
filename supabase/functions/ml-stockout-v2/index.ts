@@ -1,350 +1,164 @@
 /// <reference lib="deno.ns" />
-
 /**
- * ML Stockout Prediction v2
- * Velocity-based forecasting for inventory stockout prediction
- * 
- * Features:
- * - Sales velocity analysis
- * - Seasonal pattern detection
- * - Lead time consideration
- * - Order recommendation
+ * ML Stockout Risk v4
+ * Reads real inventory + sales_transactions — no mock data
  */
-
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { verifyAuth } from "../_shared/auth-helper.ts";
 
-const corsHeaders = {
+const HEADERS = {
+  "Content-Type": "application/json",
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
-
-// =====================================================
-// STOCKOUT PREDICTOR IMPLEMENTATION
-// =====================================================
-
-class StockoutPredictor {
-  private salesHistory: number[];
-  private stockHistory: number[];
-  
-  constructor() {
-    this.salesHistory = [];
-    this.stockHistory = [];
-  }
-
-  // Add historical data point
-  addDataPoint(sales: number, stock: number): void {
-    this.salesHistory.push(sales);
-    this.stockHistory.push(stock);
-    
-    // Keep last 30 days
-    if (this.salesHistory.length > 30) {
-      this.salesHistory.shift();
-      this.stockHistory.shift();
-    }
-  }
-
-  // Calculate sales velocity (units per day)
-  getSalesVelocity(): number {
-    if (this.salesHistory.length < 7) {
-      // Not enough data, use conservative estimate
-      return 5;
-    }
-    
-    const recent = this.salesHistory.slice(-7);
-    return recent.reduce((a, b) => a + b, 0) / 7;
-  }
-
-  // Detect trend (increasing, decreasing, stable)
-  getTrend(): string {
-    if (this.salesHistory.length < 14) return "STABLE";
-    
-    const recent = this.salesHistory.slice(-7);
-    const older = this.salesHistory.slice(-14, -7);
-    
-    const recentAvg = recent.reduce((a, b) => a + b, 0) / recent.length;
-    const olderAvg = older.reduce((a, b) => a + b, 0) / older.length;
-
-    if (olderAvg === 0) return "STABLE";
-    const change = (recentAvg - olderAvg) / olderAvg;
-    
-    if (change > 0.1) return "INCREASING";
-    if (change < -0.1) return "DECREASING";
-    return "STABLE";
-  }
-
-  // Calculate seasonality score (0-1)
-  getSeasonalityScore(): number {
-    if (this.salesHistory.length < 30) return 0.5;
-    
-    // Simple seasonality: compare this week to monthly average
-    const weekly = this.salesHistory.slice(-7);
-    const monthly = this.salesHistory;
-    
-    const weeklyAvg = weekly.reduce((a, b) => a + b, 0) / 7;
-    const monthlyAvg = monthly.reduce((a, b) => a + b, 0) / monthly.length;
-    
-    if (monthlyAvg === 0) return 0.5;
-    return Math.min(1, Math.max(0, weeklyAvg / monthlyAvg));
-  }
-
-  // Predict days until stockout
-  predict(currentStock: number, leadTimeDays: number = 3): {
-    daysUntilStockout: number;
-    riskLevel: string;
-    riskScore: number;
-    recommendedOrderQty: number;
-    confidence: number;
-  } {
-    const velocity = this.getSalesVelocity();
-    const trend = this.getTrend();
-    const seasonality = this.getSeasonalityScore();
-    
-    // Adjust velocity based on trend
-    let adjustedVelocity = velocity;
-    if (trend === "INCREASING") adjustedVelocity *= 1.2;
-    if (trend === "DECREASING") adjustedVelocity *= 0.8;
-    
-    // Apply seasonality (velocity-based pattern detection)
-    // Higher seasonality = higher demand = faster depletion
-    adjustedVelocity *= (0.8 + seasonality * 0.4);
-    
-    // Calculate days until stockout
-    let daysUntilStockout: number;
-    if (adjustedVelocity <= 0) {
-      daysUntilStockout = 999; // No sales, won't run out
-    } else {
-      daysUntilStockout = Math.floor(currentStock / adjustedVelocity);
-    }
-    
-    // Calculate risk score (0-1)
-    let riskScore: number;
-    if (daysUntilStockout <= 0) {
-      riskScore = 1.0;
-    } else if (daysUntilStockout <= leadTimeDays) {
-      riskScore = 1.0;
-    } else if (daysUntilStockout <= leadTimeDays * 1.5) {
-      riskScore = 0.7;
-    } else if (daysUntilStockout <= leadTimeDays * 2) {
-      riskScore = 0.4;
-    } else if (daysUntilStockout <= leadTimeDays * 3) {
-      riskScore = 0.2;
-    } else {
-      riskScore = 0.0;
-    }
-    
-    // Determine risk level
-    let riskLevel: string;
-    if (daysUntilStockout <= 2) riskLevel = "CRITICAL";
-    else if (daysUntilStockout <= 5) riskLevel = "HIGH";
-    else if (daysUntilStockout <= 10) riskLevel = "MEDIUM";
-    else riskLevel = "LOW";
-    
-    // Recommended order quantity
-    // Cover: safety stock (3 days) + lead time + buffer
-    const safetyDays = 3;
-    const recommendedOrderQty = Math.ceil(
-      (leadTimeDays + safetyDays) * adjustedVelocity * 1.2 // 20% buffer
-    );
-    
-    // Confidence based on data availability
-    const confidence = Math.min(0.95, 0.5 + this.salesHistory.length * 0.015);
-    
-    return {
-      daysUntilStockout: Math.min(daysUntilStockout, 999),
-      riskLevel,
-      riskScore: Math.round(riskScore * 100) / 100,
-      recommendedOrderQty,
-      confidence: Math.round(confidence * 100) / 100,
-    };
-  }
-
-  // Get feature importance (simulated)
-  getFeatureImportance(): { feature: string; importance: number }[] {
-    return [
-      { feature: "sales_velocity_7d", importance: 0.50 },
-      { feature: "trend", importance: 0.25 },
-      { feature: "seasonality", importance: 0.15 },
-      { feature: "current_stock", importance: 0.10 },
-    ];
-  }
-}
-
-// =====================================================
-// SERVE HTTP
-// =====================================================
 
 serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
+    return new Response("ok", { headers: HEADERS });
+  }
+
+  // Allow internal calls (cron, scripts)
+  const auth = await verifyAuth(req, true, true);
+  if (!auth.authorized) {
+    return new Response(JSON.stringify({ error: auth.error }), {
+      status: 401, headers: HEADERS,
+    });
   }
 
   try {
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabase = createClient(supabaseUrl, serviceKey);
+    const sb = createClient(
+      Deno.env.get("SUPABASE_URL") || "",
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "",
+    );
 
-    const url = new URL(req.url);
-    
-    // Support both POST (body) and GET (query params)
-    let outlet_id: number | null = null;
-    let sku_id: string | null = null;
-    let current_stock: number | null = null;
-    let lead_time_days: number = 3;
+    // 1. Fetch all inventory items
+    const { data: inventory } = await sb
+      .from("inventory")
+      .select("*")
+      .order("current_stock", { ascending: true })
+      .limit(50);
 
-    if (req.method === "POST") {
-      const body = await req.json();
-      outlet_id = body.outlet_id;
-      sku_id = body.sku_id;
-      current_stock = body.current_stock;
-      lead_time_days = body.lead_time_days || 3;
-    } else {
-      outlet_id = url.searchParams.get("outlet_id") ? parseInt(url.searchParams.get("outlet_id")!) : null;
-      sku_id = url.searchParams.get("sku_id");
-      current_stock = url.searchParams.get("current_stock") ? parseFloat(url.searchParams.get("current_stock")!) : null;
-      lead_time_days = url.searchParams.get("lead_time_days") ? parseInt(url.searchParams.get("lead_time_days")!) : 3;
+    if (!inventory || inventory.length === 0) {
+      return new Response(JSON.stringify({ predictions: [], summary: { total: 0, critical: 0, avg_risk: 0 } }), { headers: HEADERS });
     }
 
-    // Fetch inventory data from DB
-    let inventoryData: any[] = [];
-    if (outlet_id) {
-      const { data } = await supabase
-        .from("inventory")
-        .select("*")
-        .eq("outlet_id", outlet_id)
-        .limit(5);
-      inventoryData = data || [];
+    // 2. Get unique outlet IDs
+    const outletIds: number[] = [];
+    const seen = new Set<string>();
+    for (const inv of inventory) {
+      const oid = String(inv.outlet_id);
+      if (!seen.has(oid)) {
+        seen.add(oid);
+        outletIds.push(Number(inv.outlet_id) || 0);
+      }
+    }
+    if (outletIds.length === 0) outletIds.push(-1);
+
+    // 3. Fetch 30 days sales for those outlets
+    const since = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
+    const { data: sales } = await sb
+      .from("sales_transactions")
+      .select("outlet_id, transaction_count")
+      .in("outlet_id", outletIds)
+      .gte("date", since);
+
+    // 4. Aggregate daily avg per outlet
+    const totalByOutlet: Record<string, number> = {};
+    const countByOutlet: Record<string, number> = {};
+    for (const tx of (sales || [])) {
+      const oid = String(tx.outlet_id);
+      const amt = Number(tx.transaction_count || 0);
+      totalByOutlet[oid] = (totalByOutlet[oid] || 0) + amt;
+      countByOutlet[oid] = (countByOutlet[oid] || 0) + 1;
     }
 
-    // If no inventory data, use mock data
-    if (inventoryData.length === 0) {
-      inventoryData = [
-        { id: 1, sku: "Kopi Gayo 250g", current_stock: 45, min_stock: 20, max_stock: 100 },
-        { id: 2, sku: "Teh Sosro 500ml", current_stock: 12, min_stock: 30, max_stock: 80 },
-        { id: 3, sku: "Nasi Goreng Mix", current_stock: 8, min_stock: 15, max_stock: 50 },
-        { id: 4, sku: "Kopi Toraja 100g", current_stock: 65, min_stock: 25, max_stock: 120 },
-        { id: 5, sku: "Roti Bakar Coklat", current_stock: 20, min_stock: 10, max_stock: 40 },
-      ];
+    const velocity: Record<string, number> = {};
+    for (const oid of Object.keys(totalByOutlet)) {
+      const cnt = countByOutlet[oid] || 1;
+      velocity[oid] = Math.round((totalByOutlet[oid] / cnt) * 10) / 10;
     }
 
-    // Load REAL historical sales data from sales_transactions
-    let realSalesData: number[] = [];
-    if (outlet_id) {
-      const { data: salesData } = await supabase
-        .from("sales_transactions")
-        .select("transaction_count, created_at")
-        .eq("outlet_id", outlet_id)
-        .order("created_at", { ascending: false })
-        .limit(30);
-      if (salesData && salesData.length > 0) {
-        // Aggregate daily totals
-        const dailyMap = new Map<string, number>();
-        for (const tx of salesData) {
-          const day = String(tx.created_at).substring(0, 10);
-          dailyMap.set(day, (dailyMap.get(day) || 0) + (Number(tx.transaction_count) || 0));
-        }
-        realSalesData = Array.from(dailyMap.values()).reverse().slice(-21);
+    // FIX #6: Read stockout_threshold from settings table
+    // stockout_threshold stored as "0.7" = 70% probability → risk >= 0.7 triggers HIGH/CRITICAL alert
+    const { data: thresholdRows } = await sb
+      .from("settings")
+      .select("key, value")
+      .in("key", ["stockout_threshold"]);
+
+    let stockoutThreshold = 0.7; // default: 70%
+    for (const r of thresholdRows || []) {
+      if (r.key === "stockout_threshold") {
+        stockoutThreshold = parseFloat(r.value) || 0.7;
       }
     }
 
-    const predictor = new StockoutPredictor();
-    if (realSalesData.length >= 7) {
-      // Use real sales data
-      for (let i = 0; i < realSalesData.length; i++) {
-        predictor.addDataPoint(realSalesData[i], 50 - i * 2);
-      }
-    } else {
-      // Fallback: seed with velocity estimate then add real if available
-      for (let i = 0; i < 21; i++) {
-        const dailySales = 5 + Math.random() * 10;
-        predictor.addDataPoint(dailySales, 50 - i * 2);
-      }
-    }
+    // Days → risk score: tunable boundaries based on stockout_threshold
+    // stockout_threshold = alert cutoff probability → maps to HIGH boundary
+    const RISK_HIGH = stockoutThreshold;         // e.g. 0.7 → HIGH if days <= 5 (risk=0.8)
+    const RISK_CRITICAL = Math.min(1, stockoutThreshold * 1.2); // e.g. 0.84
 
-    // Build predictions for all inventory items
-    const predictions = inventoryData.map(item => {
-      const stock = current_stock ?? item.current_stock;
-      const prediction = predictor.predict(stock, lead_time_days);
-      
-      // Adjust based on item-specific min/max
-      const utilizationRate = stock / item.max_stock;
-      let itemRisk = prediction.riskScore;
-      
-      if (utilizationRate < 0.3) itemRisk = Math.max(itemRisk, 0.6);
-      if (stock < item.min_stock) itemRisk = 1.0;
-      
+    // 5. Predict risk per item
+    const predictions = inventory.map((inv: any) => {
+      const oid = String(inv.outlet_id);
+      const vel = velocity[oid] || 0;
+      const stock = Number(inv.current_stock) || 0;
+      const min = Number(inv.min_stock) || 0;
+      const max = Number(inv.max_stock) || 1;
+
+      const days = vel > 0 ? Math.round(stock / vel) : 999;
+
+      let risk = days <= 2 ? 1.0
+        : days <= 5 ? 0.8
+        : days <= 10 ? 0.5
+        : days <= 20 ? 0.25
+        : 0.05;
+      if (stock < min) risk = 1.0;
+
+      const level = risk >= RISK_CRITICAL ? "CRITICAL"
+        : risk >= RISK_HIGH ? "HIGH"
+        : risk >= 0.25 ? "MEDIUM"
+        : "LOW";
+
+      const reorder = Math.max(0, Math.round(min * 2 - stock));
+
       return {
-        sku: item.sku || item.product_name,
-        sku_id: item.sku_id || item.id,
+        outlet_id: Number(inv.outlet_id),
+        product_name: inv.product_name || inv.sku || "Unknown",
+        sku: inv.sku || inv.id,
         current_stock: stock,
-        min_stock: item.min_stock,
-        max_stock: item.max_stock,
-        utilization_rate: Math.round(utilizationRate * 100),
-        days_until_stockout: prediction.daysUntilStockout === 999 ? null : prediction.daysUntilStockout,
-        risk_level: stock < item.min_stock ? "CRITICAL" : prediction.riskLevel,
-        risk_score: stock < item.min_stock ? 1.0 : itemRisk,
-        recommended_order_qty: prediction.recommendedOrderQty,
-        confidence: prediction.confidence,
-        sales_velocity: Math.round(predictor.getSalesVelocity() * 10) / 10,
-        trend: predictor.getTrend(),
-        lead_time_days,
+        min_stock: min,
+        max_stock: max,
+        velocity: vel,
+        days_until_stockout: days === 999 ? null : days,
+        risk_score: Math.round(risk * 100) / 100,
+        risk_level: level,
+        utilization_pct: Math.round((stock / max) * 100),
+        recommended_order_qty: reorder,
+        last_restock: inv.last_restock_at || null,
+        updated_at: inv.updated_at || null,
       };
     });
 
-    // Sort by risk (highest first)
     predictions.sort((a, b) => b.risk_score - a.risk_score);
 
-    // Calculate aggregate stats
-    const avgRiskScore = predictions.reduce((a, b) => a + b.risk_score, 0) / predictions.length;
-    const criticalItems = predictions.filter(p => p.risk_level === "CRITICAL").length;
-    const avgDaysUntilStockout = predictions
-      .filter(p => p.days_until_stockout !== null)
-      .reduce((a, b) => a + (b.days_until_stockout || 0), 0) / 
-      (predictions.filter(p => p.days_until_stockout !== null).length || 1);
+    const critical = predictions.filter((p) => p.risk_level === "CRITICAL").length;
+    const avgRisk = predictions.reduce((s, p) => s + p.risk_score, 0) / predictions.length;
 
-    // Store predictions in DB
-    if (outlet_id) {
-      for (const pred of predictions.slice(0, 3)) {
-        await supabase.from("ml_predictions").insert({
-          outlet_id,
-          sku_id: pred.sku_id,
-          prediction_type: "STOCKOUT",
-          days_until_stockout: pred.days_until_stockout,
-          stockout_probability: pred.risk_score,
-          recommended_order_qty: pred.recommended_order_qty,
-          model_version: "v2.0.0-velocity",
-          confidence: pred.confidence,
-          feature_importance: predictor.getFeatureImportance(),
-        });
-      }
-    }
+    return new Response(JSON.stringify({
+      predictions: predictions.slice(0, 20),
+      summary: {
+        total: predictions.length,
+        critical,
+        avg_risk_score: Math.round(avgRisk * 100) / 100,
+        outlets_checked: outletIds.length,
+        model: "ml-stockout-v4-real",
+        features: ["velocity", "stock_level", "min_stock_ratio"],
+      },
+    }), { headers: HEADERS });
 
-    return new Response(
-      JSON.stringify({
-        outlet_id,
-        summary: {
-          total_items: predictions.length,
-          critical_items: criticalItems,
-          avg_risk_score: Math.round(avgRiskScore * 100) / 100,
-          avg_days_until_stockout: Math.round(avgDaysUntilStockout * 10) / 10,
-        },
-        predictions: predictions.map(p => ({
-          ...p,
-          risk_score: Math.round(p.risk_score * 100) / 100,
-        })),
-        model_info: {
-          model_type: "velocity_based",
-          model_version: "v2.0.0",
-          features: ["sales_velocity", "trend", "seasonality", "stock_level"],
-        },
-      }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  } catch (error: any) {
-    console.error("Stockout Prediction Error:", error);
-    return new Response(
-      JSON.stringify({ error: error.message }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+  } catch (err) {
+    return new Response(JSON.stringify({ error: String(err) }), {
+      status: 500, headers: HEADERS,
+    });
   }
 });
