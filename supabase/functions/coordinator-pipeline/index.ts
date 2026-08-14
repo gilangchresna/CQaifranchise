@@ -19,28 +19,89 @@ function toSGD(currency) {
   return 1;
 }
 
+// ── Workflow helpers ────────────────────────────────────────────────────────────
+
+async function workflowCreate(workflowName: string, payload: any, triggeredBy = "manual"): Promise<string | null> {
+  try {
+    const { data, error } = await sb.rpc("workflow_create", {
+      p_workflow_name: workflowName,
+      p_payload: payload,
+      p_triggered_by: triggeredBy,
+    });
+    if (error) { console.error("workflow_create error:", error); return null; }
+    return data as string;
+  } catch (e) {
+    console.error("workflow_create exception:", e);
+    return null;
+  }
+}
+
+async function workflowUpdate(
+  instanceId: string,
+  status: string,
+  step?: string,
+  progress?: number,
+  result?: any,
+  errorDetail?: string,
+  incRetry = false
+) {
+  try {
+    await sb.rpc("workflow_update_status", {
+      p_instance_id: instanceId,
+      p_status: status,
+      p_step: step ?? null,
+      p_progress: progress ?? null,
+      p_result: result ?? null,
+      p_error: errorDetail ?? null,
+      p_inc_retry: incRetry,
+    });
+  } catch (e) {
+    console.error("workflow_update_status error:", e);
+  }
+}
+
+// ── Main pipeline ────────────────────────────────────────────────────────────────
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: HEADERS });
 
   const now = new Date();
   const t0 = now.toISOString().slice(0, 10);
-  const t7 = new Date(now.getTime() - 7 * 86400000).toISOString().slice(0, 10);
   const t30 = new Date(now.getTime() - 30 * 86400000).toISOString().slice(0, 10);
   const t1h = new Date(now.getTime() - 3600000).toISOString();
+
+  // Determine triggered_by
+  let triggeredBy = "manual";
+  try {
+    const body = await req.json().catch(() => ({}));
+    if (body?.triggered_by) triggeredBy = body.triggered_by;
+  } catch {}
+
   const out: any = { errors: [] };
+  let instanceId: string | null = null;
+
+  // Create workflow instance
+  instanceId = await workflowCreate("coordinator-pipeline", { date: t0 }, triggeredBy);
+
+  // Mark as running
+  if (instanceId) await workflowUpdate(instanceId, "running", "init", 5);
 
   try {
-    // STEP 1: Anomaly
+    // ── STEP 1: Anomaly ──────────────────────────────────────────────────
     try {
+      await workflowUpdate(instanceId, "running", "anomaly", 10);
+
       const { data: regions, error: rErr } = await sb.from("regions").select("id, currency_code");
       out.regions_count = (regions || []).length;
       if (rErr) throw new Error("regions: " + rErr.message);
+
       const rmap: any = {};
       (regions || []).forEach((r: any) => { rmap[r.id] = r.currency_code || "SGD"; });
 
       const { data: outlets, error: oErr } = await sb.from("outlets").select("id, name, region_id");
       out.outlets_count = (outlets || []).length;
       if (oErr) throw new Error("outlets: " + oErr.message);
+
       const cmap: any = {};
       (outlets || []).forEach((o: any) => { cmap[o.id] = rmap[o.region_id] || "SGD"; });
 
@@ -84,40 +145,65 @@ serve(async (req) => {
         else if (st === "WARNING") warn++;
         else okCnt++;
       }
+
       out.anomaly = { critical: crit, warning: warn, ok: okCnt };
+      await workflowUpdate(instanceId, "running", "stockout", 40);
     } catch (e: any) {
       out.anomaly = { error: e.message };
       out.errors.push("anomaly: " + e.message);
     }
 
-    // STEP 2: Stockout (skip if table empty)
+    // ── STEP 2: Stockout ─────────────────────────────────────────────────
     try {
       const { data: inventory, error: invErr } = await sb
         .from("inventory").select("id, outlet_id, current_stock").lt("current_stock", 25);
       out.inventory_low_count = (inventory || []).length;
       out.stockout = { checked: (inventory || []).length };
+      if (invErr) throw new Error("inventory: " + invErr.message);
+      await workflowUpdate(instanceId, "running", "alerts", 70);
     } catch (e: any) {
       out.stockout = { error: e.message };
+      out.errors.push("stockout: " + e.message);
     }
 
-    // STEP 3: Alert creation
+    // ── STEP 3: Alerts ──────────────────────────────────────────────────
     try {
-      const { data: crits } = await sb
+      const { data: crits, error: critErr } = await sb
         .from("ml_anomaly_scores").select("outlet_id, anomaly_score")
         .eq("status", "CRITICAL").gte("recorded_at", t1h);
       out.alerts = { crit_count: (crits || []).length };
+      if (critErr) throw new Error("alerts: " + critErr.message);
+      await workflowUpdate(instanceId, "running", "done", 95);
     } catch (e: any) {
       out.alerts = { error: e.message };
+      out.errors.push("alerts: " + e.message);
     }
+
+    // ── Complete ────────────────────────────────────────────────────────
+    if (instanceId) {
+      await workflowUpdate(instanceId, "completed", "done", 100, out);
+    }
+
+    return new Response(JSON.stringify({
+      success: true,
+      timestamp: now.toISOString(),
+      pipeline: out,
+      instance_id: instanceId,
+    }), { headers: { ...HEADERS, "Content-Type": "application/json" } });
 
   } catch (e: any) {
     out.fatal = e.message;
     out.errors.push(e.message);
-  }
 
-  return new Response(JSON.stringify({
-    success: true,
-    timestamp: now.toISOString(),
-    pipeline: out,
-  }), { headers: { ...HEADERS, "Content-Type": "application/json" } });
+    if (instanceId) {
+      await workflowUpdate(instanceId, "failed", "fatal", null, null, e.message, true);
+    }
+
+    return new Response(JSON.stringify({
+      success: false,
+      error: e.message,
+      pipeline: out,
+      instance_id: instanceId,
+    }), { status: 500, headers: { ...HEADERS, "Content-Type": "application/json" } });
+  }
 });
