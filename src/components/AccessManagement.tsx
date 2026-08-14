@@ -11,9 +11,10 @@ import {
   Edit2,
   Store,
   X,
+  Mail,
 } from "lucide-react";
 import { cn } from "@/src/lib/utils";
-import { supabase } from "@/src/lib/supabase";
+import { supabase, callEdgeFunction } from "@/src/lib/supabase";
 import { InviteModal } from "./InviteModal";
 import { OutletAssignment } from "./OutletAssignment";
 
@@ -66,6 +67,9 @@ export function AccessManagement({ activeRole }: AccessManagementProps) {
   // Role filter
   const [roleFilter, setRoleFilter] = useState("all");
 
+  // Reset password state
+  const [resettingUserId, setResettingUserId] = useState<string | null>(null);
+
   const fetchUsers = async () => {
     setLoading(true);
     setError(null);
@@ -99,6 +103,31 @@ export function AccessManagement({ activeRole }: AccessManagementProps) {
       console.error("Error fetching users:", err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Handle reset password via edge function
+  const handleResetPassword = async (user: UserProfile) => {
+    if (!user.email) {
+      alert("User has no email. Cannot send reset password.");
+      return;
+    }
+    
+    if (!confirm(`Send password reset email to ${user.email}?`)) return;
+    
+    setResettingUserId(user.id);
+    try {
+      const { data, error } = await callEdgeFunction('reset-password', { email: user.email });
+      
+      if (error || !data?.success) {
+        throw new Error(error?.message || data?.error || "Failed to send reset email");
+      }
+      
+      alert(`Password reset email sent to ${user.email}`);
+    } catch (err: any) {
+      alert(`Error: ${err.message}`);
+    } finally {
+      setResettingUserId(null);
     }
   };
 
@@ -369,6 +398,21 @@ export function AccessManagement({ activeRole }: AccessManagementProps) {
                               title="Assign outlets"
                             >
                               <Store className="w-4 h-4" />
+                            </button>
+                          )}
+                          {/* Reset Password */}
+                          {user.email && (
+                            <button
+                              onClick={() => handleResetPassword(user)}
+                              disabled={resettingUserId === user.id}
+                              className="p-1.5 text-slate-400 hover:bg-slate-100 hover:text-orange-600 rounded transition-colors disabled:opacity-50"
+                              title="Send password reset email"
+                            >
+                              {resettingUserId === user.id ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                              ) : (
+                                <Mail className="w-4 h-4" />
+                              )}
                             </button>
                           )}
                         </div>
