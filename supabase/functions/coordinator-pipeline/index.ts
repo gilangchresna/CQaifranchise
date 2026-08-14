@@ -71,20 +71,27 @@ serve(async (req) => {
   const t1h = new Date(now.getTime() - 3600000).toISOString();
 
   // Determine triggered_by
+  let instanceId: string | null = null;
   let triggeredBy = "manual";
+
   try {
     const body = await req.json().catch(() => ({}));
-    if (body?.triggered_by) triggeredBy = body.triggered_by;
-  } catch {}
+    // Re-use failed instance ID if this is a retry
+    if (body?._retry_instance_id) {
+      instanceId = body._retry_instance_id;
+      triggeredBy = "retry";
+      await workflowUpdate(instanceId, "running", "retry", 5);
+    } else {
+      if (body?.triggered_by) triggeredBy = body.triggered_by;
+      instanceId = await workflowCreate("coordinator-pipeline", { date: t0 }, triggeredBy);
+      if (instanceId) await workflowUpdate(instanceId, "running", "init", 5);
+    }
+  } catch (bodyErr) {
+    instanceId = await workflowCreate("coordinator-pipeline", { date: t0 }, triggeredBy);
+    if (instanceId) await workflowUpdate(instanceId, "running", "init", 5);
+  }
 
   const out: any = { errors: [] };
-  let instanceId: string | null = null;
-
-  // Create workflow instance
-  instanceId = await workflowCreate("coordinator-pipeline", { date: t0 }, triggeredBy);
-
-  // Mark as running
-  if (instanceId) await workflowUpdate(instanceId, "running", "init", 5);
 
   try {
     // ── STEP 1: Anomaly ──────────────────────────────────────────────────
