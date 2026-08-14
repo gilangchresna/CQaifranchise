@@ -87,6 +87,7 @@ export function Dashboard({ activeRole }: { activeRole: Role }) {
   }>>({});
   const [error, setError] = useState<string | null>(null);
   const [realtimeStatus, setRealtimeStatus] = useState<'connected' | 'connecting' | 'disconnected'>('connecting');
+  const [recentTasks, setRecentTasks] = useState<any[]>([]);
 
   useEffect(() => {
     fetchDashboardData();
@@ -122,9 +123,31 @@ export function Dashboard({ activeRole }: { activeRole: Role }) {
         else if (status === 'CLOSED' || status === 'CHANNEL_ERROR') setRealtimeStatus('disconnected');
       });
 
+    // Agent tasks realtime subscription
+    const agentChannel = supabase
+      .channel('agent-tasks')
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'agent_tasks'
+      }, (payload: any) => {
+        const newTask = payload.new as any;
+        if (newTask) {
+          setRecentTasks((prev) => {
+            const updated = [newTask, ...prev.filter((t: any) => t.id !== newTask.id)].slice(0, 10);
+            return updated;
+          });
+        }
+        if (payload.eventType === 'UPDATE' && newTask?.status === 'completed') {
+          fetchDashboardData();
+        }
+      })
+      .subscribe();
+
     return () => {
       supabase.removeChannel(alertsChannel);
       supabase.removeChannel(outletsChannel);
+      supabase.removeChannel(agentChannel);
     };
   }, [activeRole, selectedPeriod]);
 
@@ -604,10 +627,12 @@ export function Dashboard({ activeRole }: { activeRole: Role }) {
               <div className="flex justify-between items-center pt-2 border-t border-slate-100">
                 <span className="text-sm text-slate-600 flex items-center gap-1.5"><Bot className="w-4 h-4 text-slate-400"/> Autonomous Agents</span>
                 <div className="flex gap-1.5 items-center">
-                  <span className="text-[10px] text-slate-500 font-semibold uppercase tracking-wider">Active</span>
-                  <span className="w-2 h-2 rounded-full bg-blue-500" title="Monitoring Agent"></span>
-                  <span className="w-2 h-2 rounded-full bg-indigo-500" title="Root Cause Agent"></span>
-                  <span className="w-2 h-2 rounded-full bg-violet-500" title="Inventory Agent"></span>
+                  <span className="text-[10px] text-slate-500 font-semibold uppercase tracking-wider">
+                    {recentTasks.some((t: any) => t.status === 'running') ? 'Running' : 'Active'}
+                  </span>
+                  <span className={`w-2 h-2 rounded-full ${recentTasks.some((t: any) => t.agent_id === 'monitor') ? 'bg-blue-500 animate-pulse' : 'bg-blue-500'}`} title="Monitoring Agent"></span>
+                  <span className={`w-2 h-2 rounded-full ${recentTasks.some((t: any) => t.agent_id === 'analyst') ? 'bg-indigo-500 animate-pulse' : 'bg-indigo-500'}`} title="Root Cause Agent"></span>
+                  <span className={`w-2 h-2 rounded-full ${recentTasks.some((t: any) => t.agent_id === 'coordinator') ? 'bg-violet-500 animate-pulse' : 'bg-violet-500'}`} title="Inventory Agent"></span>
                 </div>
               </div>
             </div>
