@@ -54,41 +54,23 @@ export default function KnowledgeBaseAdmin() {
   }, [activeTab, pagination.page]);
 
   const fetchStats = async () => {
-    try {
-      const token = await getToken();
-      const res = await fetch(`${EDGE_FUNCTIONS_URL}/knowledge-list?type=sops&limit=1`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      const data = await res.json();
-      setStats(prev => ({ ...prev, sops: data.pagination?.total || 0 }));
-    } catch (e) { console.error(e); }
-
-    try {
-      const token = await getToken();
-      const res = await fetch(`${EDGE_FUNCTIONS_URL}/knowledge-list?type=incidents&limit=1`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      const data = await res.json();
-      setStats(prev => ({ ...prev, incidents: data.pagination?.total || 0 }));
-    } catch (e) { console.error(e); }
-
-    try {
-      const token = await getToken();
-      const res = await fetch(`${EDGE_FUNCTIONS_URL}/knowledge-list?type=policies&limit=1`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      const data = await res.json();
-      setStats(prev => ({ ...prev, policies: data.pagination?.total || 0 }));
-    } catch (e) { console.error(e); }
-
-    try {
-      const token = await getToken();
-      const res = await fetch(`${EDGE_FUNCTIONS_URL}/knowledge-list?type=embeddings&limit=1`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      const data = await res.json();
-      setStats(prev => ({ ...prev, embeddings: data.pagination?.total || 0 }));
-    } catch (e) { console.error(e); }
+    const fetchStat = async (type: string, key: keyof typeof stats) => {
+      try {
+        const token = await getToken();
+        if (!token) { console.warn(`No token for ${type}`); return; }
+        const res = await fetch(`${EDGE_FUNCTIONS_URL}/knowledge-list?type=${type}&limit=1`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = await res.json();
+        if (data && typeof data.pagination?.total === 'number') {
+          setStats(prev => ({ ...prev, [key]: data.pagination.total }));
+        }
+      } catch (e) { console.error(`${type} stats error:`, e); }
+    };
+    fetchStat('sops', 'sops');
+    fetchStat('incidents', 'incidents');
+    fetchStat('policies', 'policies');
+    fetchStat('embeddings', 'embeddings');
   };
 
   const fetchItems = async () => {
@@ -245,8 +227,8 @@ export default function KnowledgeBaseAdmin() {
                         {item.title || item.incident_type || 'Untitled'}
                       </h3>
                       <p className="mt-2 text-sm text-slate-600 line-clamp-3">
-                        {item.content.substring(0, 300)}
-                        {item.content.length > 300 && '...'}
+                        {(item.content || item.description || '').substring(0, 300)}
+                        {(item.content || item.description || '').length > 300 && '...'}
                       </p>
                       <p className="mt-2 text-xs text-slate-400">
                         Created: {new Date(item.created_at).toLocaleDateString()}
