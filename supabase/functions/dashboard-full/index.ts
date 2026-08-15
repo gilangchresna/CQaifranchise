@@ -21,17 +21,34 @@ serve(async (req: Request) => {
   }
   const user = authResult.userId ? { id: authResult.userId, role: authResult.role } : { id: "internal", role: authResult.role };
   const url = new URL(req.url);
-  // Demo override: allow ?role=Franchisee to simulate role in UI without re-login
-  const roleOverride = url.searchParams.get("role");
-  // Normalize: UI role names → DB role names
-  const roleMap: Record<string, string> = {
-    "HQ": "HQ_ADMIN",
-    "Regional": "REGIONAL_MANAGER",
-    "Franchisee": "FRANCHISEE_OWNER",
-  };
-  const effectiveRole = roleMap[roleOverride || ""] || roleOverride || user.role;
-
-  const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+  
+  // Create clients - user token respects RLS, service role bypasses RLS
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  
+  // Get user token from Authorization header for RLS-aware queries
+  const authHeader = req.headers.get("Authorization") || "";
+  const userToken = authHeader.startsWith("Bearer ") ? authHeader.substring(7) : serviceKey;
+  
+  const supabaseUser = createClient(supabaseUrl, userToken);
+  const supabaseService = createClient(supabaseUrl, serviceKey);
+const supabase = supabaseService; // alias for old code
+  
+  // Get REAL role from user_profiles
+  let userRole = user.role || "HQ_ADMIN";
+  if (user.id && user.id !== "internal") {
+    // Use service role for profile lookup (RLS bypass needed for profile lookup)
+    const { data: profile } = await supabaseService
+      .from("user_profiles")
+      .select("role")
+      .eq("id", user.id)
+      .single();
+    if (profile?.role) {
+      userRole = profile.role;
+    }
+  }
+  
+  const effectiveRole = userRole;
 
   try {
     const period = url.searchParams.get("period") || "7d";
@@ -258,11 +275,11 @@ serve(async (req: Request) => {
     if (allowedOutletIds) {
       outletCount = allowedOutletIds.length;
     } else {
-      const { count } = await supabase.from("outlets").select("*", { count: "exact", head: true });
+      const { count } = await supabaseUser.from("outlets").select("*", { count: "exact", head: true });
       outletCount = count;
     }
-    const alertsQuery = supabase.from("alerts").select("*", { count: "exact", head: true });
-    const lowStockQuery = supabase.from("inventory").select("id");
+    const alertsQuery = supabaseUser.from("alerts").select("*", { count: "exact", head: true });
+    const lowStockQuery = supabaseUser.from("inventory").select("id");
     if (allowedOutletIds) {
       alertsQuery.in("outlet_id", allowedOutletIds);
       lowStockQuery.in("outlet_id", allowedOutletIds);
