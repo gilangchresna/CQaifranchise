@@ -5,6 +5,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Book, FileText, AlertTriangle, Shield, Plus, Search, Edit2, Trash2, RefreshCw } from 'lucide-react';
+import { supabase } from '@/src/lib/supabase';
 
 interface KnowledgeItem {
   id: string;
@@ -116,7 +117,7 @@ export default function KnowledgeBaseAdmin() {
   };
 
   const getToken = async (): Promise<string> => {
-    const { data } = await import('../lib/supabase').then(m => m.supabase.auth.getSession());
+    const { data } = await supabase.auth.getSession();
     return data.session?.access_token || '';
   };
 
@@ -329,7 +330,7 @@ function AddKnowledgeModal({ type, onClose, onSuccess }: { type: string; onClose
     e.preventDefault();
     setLoading(true);
     try {
-      const { data } = await import('../lib/supabase').then(m => m.supabase.auth.getSession());
+      const { data } = await supabase.auth.getSession();
       const token = data.session?.access_token;
 
       await fetch(`${EDGE_FUNCTIONS_URL}/embeddings-create`, {
