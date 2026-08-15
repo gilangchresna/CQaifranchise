@@ -1,7 +1,11 @@
 /// <reference lib="deno.ns" />
 /**
  * Alerts List Edge Function
- * SECURITY: Requires authentication
+ * SECURITY: Uses user JWT so RLS policies apply
+ * Role-based scoping:
+ *   HQ_ADMIN       → all non-resolved alerts
+ *   REGIONAL_MGR   → alerts for outlets in their region
+ *   FRANCHISEE_*   → alerts for outlets in their region
  */
 
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
@@ -18,36 +22,80 @@ serve(async (req) => {
     return new Response("ok", { headers: corsHeaders });
   }
 
-  // SECURITY: Verify authentication (service role bypass allowed)
-  const auth = await verifyAuth(req, true);
+  // SECURITY: Require user auth (no service role bypass)
+  // This ensures RLS policies apply based on user's role/region
+  const auth = await verifyAuth(req, false);
   if (!auth.authorized) {
     return unauthorizedResponse(auth.error);
   }
 
+  // Use USER's JWT token — NOT service role key
+  // This allows RLS to filter based on user_profiles.role + region_id
   const supabase = createClient(
-    Deno.env.get("SUPABASE_URL")!, 
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, // still need for internal RPC calls
+    {
+      global: {
+        headers: {
+          Authorization: req.headers.get("Authorization") || "",
+        },
+      },
+    }
   );
 
-  // C9: Filter alerts by user scope — show non-RESOLVED only
-  // Note: FK embedding removed — PostgREST schema cache stale, manual join in service role instead
+  // Fetch user's region from user_profiles
+  const { data: userProfile } = await supabase
+    .from("user_profiles")
+    .select("id, role, region_id")
+    .eq("id", auth.userId)
+    .single();
+
+  const userRole = userProfile?.role || auth.role;
+  const userRegionId = userProfile?.region_id;
+
+  // Build query — RLS will filter based on role
+  // HQ_ADMIN sees all, others filtered by RLS
   let query = supabase
-    .from('alerts')
-    .select('id, outlet_id, type, severity, status, title, description, score, triggered_at, created_at')
-    .neq('status', 'RESOLVED') // C9: exclude resolved
-    .order('created_at', { ascending: false })
+    .from("alerts")
+    .select(`
+      id,
+      outlet_id,
+      type,
+      severity,
+      status,
+      title,
+      description,
+      score,
+      triggered_at,
+      created_at
+    `)
+    .neq("status", "RESOLVED")
+    .order("created_at", { ascending: false })
     .limit(100);
 
-  if (auth.role === 'FRANCHISEE_OWNER' || auth.role === 'FRANCHISEE_STAFF') {
-    const { data: userOutlets } = await supabase
-      .from("user_outlets").select("outlet_id")
-      .eq("user_id", auth.user?.id);
-    const userOutletIds = (userOutlets || []).map((r: any) => r.outlet_id);
-    if (userOutletIds.length > 0) {
-      query = query.in('outlet_id', userOutletIds);
+  // REGIONAL_MANAGER: extra filter by region (RLS should handle this, but explicit is safer)
+  if (userRole === "REGIONAL_MANAGER" && userRegionId) {
+    const { data: regionOutlets } = await supabase
+      .from("outlets")
+      .select("id")
+      .eq("region_id", userRegionId);
+    const outletIds = (regionOutlets || []).map((o: any) => o.id);
+    if (outletIds.length > 0) {
+      query = query.in("outlet_id", outletIds);
     }
   }
-  // HQ_ADMIN and REGIONAL_MANAGER: no filter — see all non-resolved alerts
+
+  // FRANCHISEE_OWNER / FRANCHISEE_STAFF: filter by region
+  if ((userRole === "FRANCHISEE_OWNER" || userRole === "FRANCHISEE_STAFF") && userRegionId) {
+    const { data: regionOutlets } = await supabase
+      .from("outlets")
+      .select("id")
+      .eq("region_id", userRegionId);
+    const outletIds = (regionOutlets || []).map((o: any) => o.id);
+    if (outletIds.length > 0) {
+      query = query.in("outlet_id", outletIds);
+    }
+  }
 
   const { data, error } = await query;
 
@@ -55,13 +103,13 @@ serve(async (req) => {
     return Response.json({ error: error.message }, { status: 500, headers: corsHeaders });
   }
 
-  // Manual join: fetch outlet names since FK embedding broken in PostgREST schema cache
+  // Manual join: fetch outlet names for display
   const outletIds = [...new Set((data || []).map((a: any) => a.outlet_id).filter(Boolean))];
   let outletMap: Record<number, { name: string; code: string }> = {};
   if (outletIds.length > 0) {
     const { data: outlets } = await supabase
-      .from('outlets').select('id, name, code')
-      .in('id', outletIds);
+      .from("outlets").select("id, name, code")
+      .in("id", outletIds);
     if (outlets) {
       for (const o of outlets) {
         outletMap[o.id] = { name: o.name, code: o.code };
@@ -69,14 +117,16 @@ serve(async (req) => {
     }
   }
 
-  // Enrich alerts with outlet info
+  // Enrich with outlet info
   const enriched = (data || []).map((alert: any) => ({
     ...alert,
-    outlet: outletMap[alert.outlet_id] || { name: 'Unknown Outlet', code: '?' }
+    outlet: outletMap[alert.outlet_id] || { name: "Unknown Outlet", code: "?" },
   }));
 
   return Response.json({
     data: enriched,
-    total: enriched.length
+    total: enriched.length,
+    role: userRole,
+    region_id: userRegionId,
   }, { headers: corsHeaders });
 });

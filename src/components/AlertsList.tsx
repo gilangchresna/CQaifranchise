@@ -101,14 +101,11 @@ export function AlertsList({ activeRole, alerts = [] }: AlertsListProps) {
     setDismissedAlerts(prev => new Set([...prev, alertId]));
   };
 
+  // RBAC: alerts are filtered by backend RLS + edge function
+  // Frontend only filters dismissed alerts (client-side only)
   const filteredAlerts = alerts.filter((a) => {
-    // Exclude dismissed alerts
     if (dismissedAlerts.has(a.id)) return false;
-    // Filter based on role if outlet info available
-    if (activeRole === "Franchisee" && a.outlet) {
-      return a.outlet.name.includes("089") || a.outlet.code.includes("089");
-    }
-    return true; // HQ sees all
+    return true; // RLS + edge function already scoped by role
   });
 
   const getIcon = (type: string) => {

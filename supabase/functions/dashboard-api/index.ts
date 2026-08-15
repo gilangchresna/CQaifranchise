@@ -22,9 +22,30 @@ async function verifyAuth(req: Request) {
     });
     if (!response.ok) return { authorized: false, error: 'Invalid token', status: 401 };
     const userData = await response.json();
+
+    // Get real role from user_profiles table
+    let role = userData.user_metadata?.role || 'FRANCHISEE_OWNER';
+    try {
+      const profileRes = await fetch(`${supabaseUrl}/rest/v1/user_profiles?id=eq.${userData.id}&select=role`, {
+        headers: {
+          'Authorization': `Bearer ${serviceKey}`,
+          'apikey': serviceKey,
+          'Content-Type': 'application/json'
+        }
+      });
+      if (profileRes.ok) {
+        const profiles = await profileRes.json();
+        if (profiles && profiles[0]?.role) {
+          role = profiles[0].role;
+        }
+      }
+    } catch {
+      // Use default role from metadata
+    }
+
     return {
       authorized: true,
-      user: { id: userData.id, email: userData.email, role: userData.user_metadata?.role || 'FRANCHISEE_OWNER' }
+      user: { id: userData.id, email: userData.email, role: role }
     };
   } catch (error) {
     return { authorized: false, error: 'Auth failed', status: 401 };
