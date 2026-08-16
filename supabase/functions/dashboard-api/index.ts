@@ -47,7 +47,7 @@ async function verifyAuth(req: Request) {
       authorized: true,
       user: { id: userData.id, email: userData.email, role: role }
     };
-  } catch (error) {
+  } catch (_error) {
     return { authorized: false, error: 'Auth failed', status: 401 };
   }
 }
@@ -121,7 +121,7 @@ async function fetchAllSales(supabase: any, startDate: string, endDate: string) 
   return allSales;
 }
 
-serve(async (req) => {
+serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
   const authResult = await verifyAuth(req);

@@ -1,0 +1,21 @@
+- generic [ref=f16e4]:
+  - generic [ref=f16e5]:
+    - img "CyberQuote" [ref=f16e7]
+    - heading "CyberQuote" [level=1] [ref=f16e8]
+    - paragraph [ref=f16e9]: AI Franchise Monitoring Platform
+  - generic [ref=f16e10]:
+    - generic [ref=f16e11]:
+      - button "Sign In" [ref=f16e12]
+      - button "Sign Up" [ref=f16e13]
+    - generic [ref=f16e14]:
+      - generic [ref=f16e15]:
+        - generic [ref=f16e16]: Email
+        - textbox "your@email.com" [ref=f16e17]
+      - generic [ref=f16e18]:
+        - generic [ref=f16e19]: Password
+        - textbox "••••••••" [ref=f16e20]
+      - button "Sign In" [ref=f16e21]
+    - paragraph [ref=f16e23]:
+      - text: Don't have an account?
+      - button "Sign up" [ref=f16e24]
+  - paragraph [ref=f16e25]: © 2026 CyberQuote Platform

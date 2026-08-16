@@ -1,0 +1,8 @@
+[     186ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:3000/node_modules/.vite/deps/react-dom_client.js?v=0562f045:20102
+[     325ms] [VERBOSE] [DOM] Input elements should have autocomplete attributes (suggested: "current-password"): (More info: https://goo.gl/9p2vKq) %o @ http://localhost:3000/:0
+[   17220ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:3000/node_modules/.vite/deps/react-dom_client.js?v=0562f045:20102
+[   22257ms] [ERROR] Error: <path> attribute d: Expected arc flag ('0' or '1'), "…-8.57 8.57 0 003-4.07 4.07z". @ http://localhost:3000/node_modules/.vite/deps/react-dom_client.js?v=0562f045:1451
+[   25701ms] [ERROR] Failed to load resource: the server responded with a status of 403 () @ https://ploqeifazcgzwjzmukgp.supabase.co/rest/v1/user_consents?on_conflict=user_id%2Cpolicy_type%2Cregion_id:0
+[  679377ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:3000/node_modules/.vite/deps/react-dom_client.js?v=0562f045:20102
+[  902189ms] [ERROR] Error: <path> attribute d: Expected arc flag ('0' or '1'), "…-8.57 8.57 0 003-4.07 4.07z". @ http://localhost:3000/node_modules/.vite/deps/react-dom_client.js?v=0562f045:1451
+[  905335ms] [ERROR] Failed to load resource: the server responded with a status of 403 () @ https://ploqeifazcgzwjzmukgp.supabase.co/rest/v1/user_consents?on_conflict=user_id%2Cpolicy_type%2Cregion_id:0

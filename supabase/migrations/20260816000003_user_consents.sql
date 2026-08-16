@@ -33,6 +33,19 @@ CREATE POLICY "Users can view own consents"
     TO authenticated
     USING (user_id = auth.uid());
 
+-- Users can insert their own consents
+CREATE POLICY "Users can insert own consents"
+    ON public.user_consents FOR INSERT
+    TO authenticated
+    WITH CHECK (user_id = auth.uid());
+
+-- Users can update their own consents (for upsert)
+CREATE POLICY "Users can update own consents"
+    ON public.user_consents FOR UPDATE
+    TO authenticated
+    USING (user_id = auth.uid())
+    WITH CHECK (user_id = auth.uid());
+
 -- Service role can manage all consents
 CREATE POLICY "Service role manages all consents"
     ON public.user_consents FOR ALL
