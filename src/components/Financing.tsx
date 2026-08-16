@@ -648,7 +648,7 @@ export function Financing({ activeRole }: { activeRole: Role }) {
       )}
 
       {/* PDPA Consent Dialog */}
-      {selectedPolicy && (
+      {showConsentDialog && selectedPolicy && (
         <ConsentDialog
           isOpen={showConsentDialog}
           onClose={closeConsentDialog}
