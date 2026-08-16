@@ -151,7 +151,8 @@ export function Financing({ activeRole }: { activeRole: Role }) {
 
   useEffect(() => {
     fetchAllData();
-    if (userId) checkConsent();
+    if (!userId) return;
+    checkConsent();
     // Set up realtime subscription
     const channel = supabase
       .channel('financing-changes')
@@ -296,14 +297,10 @@ export function Financing({ activeRole }: { activeRole: Role }) {
           <button
             onClick={async () => {
               if (!hasConsented) {
-                const hasPolicy = await openConsentDialog();
-                if (hasPolicy) {
-                  // Policy found — user must consent first (handled by dialog's onConsent → handleConsentGiven)
-                  // Dialog will close and openApplyModal will be set via handleConsentGiven
-                  return;
-                }
-                // No policy found in DB — bypass consent and open apply modal directly
-                setShowApplyModal(true);
+                // Always await openConsentDialog() — it sets showConsentDialog=true AFTER loadPolicy sets selectedPolicy
+                await openConsentDialog();
+                // Dialog is now open. User interacts, ConsentDialog calls handleConsentGiven
+                // which records consent and opens the apply modal.
               } else {
                 setShowApplyModal(true);
               }
