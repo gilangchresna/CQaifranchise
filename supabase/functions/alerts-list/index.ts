@@ -105,7 +105,7 @@ serve(async (req) => {
 
   // Manual join: fetch outlet names for display
   const outletIds = [...new Set((data || []).map((a: any) => a.outlet_id).filter(Boolean))];
-  let outletMap: Record<number, { name: string; code: string }> = {};
+  const outletMap: Record<number, { name: string; code: string }> = {};
   if (outletIds.length > 0) {
     const { data: outlets } = await supabase
       .from("outlets").select("id, name, code")

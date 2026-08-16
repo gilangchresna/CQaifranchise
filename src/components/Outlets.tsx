@@ -285,7 +285,7 @@ export function Outlets({ activeRole }: { activeRole: Role }) {
         headers: { 'Authorization': `Bearer ${session?.access_token || ''}` },
       });
       const alertsData = await alertsRes.json();
-      const alertsList = Array.isArray(alertsData) ? alertsData : (alertsData?.alerts || []);
+      const alertsList = alertsData?.data || [];
       const transformedAlerts: Alert[] = alertsList.slice(0, 10).map((a: any) => ({
         id: a.id,
         outlet_id: a.outlet_id,
