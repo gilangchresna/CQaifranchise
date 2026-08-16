@@ -129,8 +129,16 @@ export function Financing({ activeRole }: { activeRole: Role }) {
     checkConsent,
     openConsentDialog,
     closeConsentDialog,
-    handleConsentGiven,
+    handleConsentGiven: recordConsentOnly,
   } = useConsent(userId, userRegionId);
+
+  // Override: after consent is recorded, immediately open the apply modal
+  const handleConsentGiven = async () => {
+    await recordConsentOnly();
+    // recordConsentOnly already calls setHasConsented(true) and closeConsentDialog()
+    // Now open the apply modal
+    setShowApplyModal(true);
+  };
 
   useEffect(() => {
     fetchAllData();
@@ -280,10 +288,13 @@ export function Financing({ activeRole }: { activeRole: Role }) {
             onClick={async () => {
               if (!hasConsented) {
                 const hasPolicy = await openConsentDialog();
-                if (!hasPolicy) {
-                  // No policy found — bypass consent and open apply modal directly
-                  setShowApplyModal(true);
+                if (hasPolicy) {
+                  // Policy found — user must consent first (handled by dialog's onConsent → handleConsentGiven)
+                  // Dialog will close and openApplyModal will be set via handleConsentGiven
+                  return;
                 }
+                // No policy found in DB — bypass consent and open apply modal directly
+                setShowApplyModal(true);
               } else {
                 setShowApplyModal(true);
               }

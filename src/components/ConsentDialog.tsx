@@ -174,6 +174,9 @@ export function useConsent(
       let url = `${import.meta.env.VITE_SUPABASE_URL}/rest/v1/knowledge_policies?policy_type=eq.pdpa&is_active=eq.true&select=id,title,content&limit=1`;
       if (regionId) {
         url = `${import.meta.env.VITE_SUPABASE_URL}/rest/v1/knowledge_policies?policy_type=eq.pdpa&region_id=eq.${regionId}&is_active=eq.true&select=id,title,content&limit=1`;
+      } else {
+        // Malaysia and unassigned users — fall back to global policy (region_id IS NULL)
+        url = `${import.meta.env.VITE_SUPABASE_URL}/rest/v1/knowledge_policies?policy_type=eq.pdpa&is_active=eq.true&region_id=is.null&select=id,title,content&limit=1`;
       }
 
       const response = await fetch(url, {
