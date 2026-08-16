@@ -113,12 +113,21 @@ export function Financing({ activeRole }: { activeRole: Role }) {
   const [userRegionId, setUserRegionId] = useState<number | null>(null);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
+    supabase.auth.getSession().then(async ({ data }) => {
       const session = data.session;
       const user = session?.user as any;
-      setUserId(user?.id || '');
-      // Get region_id from user metadata (set during registration)
-      setUserRegionId(user?.user_metadata?.region_id ?? null);
+      const uid = user?.id || '';
+      setUserId(uid);
+
+      // Get region_id from user_profiles table
+      if (uid) {
+        const { data: profile } = await supabase
+          .from('user_profiles')
+          .select('region_id')
+          .eq('id', uid)
+          .single();
+        setUserRegionId(profile?.region_id ?? null);
+      }
     });
   }, []);
 
