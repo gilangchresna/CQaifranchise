@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { Role } from '@/src/types';
 import { supabase, EDGE_FUNCTIONS_URL } from '@/src/lib/supabase';
+import { ConsentDialog, useConsent } from './ConsentDialog';
 
 // Mirrors public.financing_application_status in
 // supabase/migrations/20260805000000_financing_and_reporting.sql
@@ -107,8 +108,29 @@ export function Financing({ activeRole }: { activeRole: Role }) {
   const [amount, setAmount] = useState('');
   const [termMonths, setTermMonths] = useState('12');
 
+  // PDPA Consent hook — get userId from auth on mount
+  const [userId, setUserId] = useState('');
+  const [userRegionId] = useState<number | null>(null);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      setUserId((data.session?.user as any)?.id || '');
+    });
+  }, []);
+
+  const {
+    hasConsented,
+    showConsentDialog,
+    selectedPolicy,
+    checkConsent,
+    openConsentDialog,
+    closeConsentDialog,
+    handleConsentGiven,
+  } = useConsent(userId, userRegionId);
+
   useEffect(() => {
     fetchAllData();
+    if (userId) checkConsent();
     // Set up realtime subscription
     const channel = supabase
       .channel('financing-changes')
@@ -246,7 +268,13 @@ export function Financing({ activeRole }: { activeRole: Role }) {
         </div>
         {activeTab === 'applications' && (
           <button
-            onClick={() => setShowApplyModal(true)}
+            onClick={() => {
+              if (!hasConsented) {
+                openConsentDialog();
+              } else {
+                setShowApplyModal(true);
+              }
+            }}
             className="rounded-md px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium transition-all flex items-center gap-2 shadow-sm"
           >
             <PlusCircle className="w-4 h-4" /> Apply for Bridge Loan
@@ -584,6 +612,18 @@ export function Financing({ activeRole }: { activeRole: Role }) {
             </form>
           </div>
         </div>
+      )}
+
+      {/* PDPA Consent Dialog */}
+      {selectedPolicy && (
+        <ConsentDialog
+          isOpen={showConsentDialog}
+          onClose={closeConsentDialog}
+          onConsent={handleConsentGiven}
+          policyTitle={selectedPolicy.title}
+          policyContent={selectedPolicy.content}
+          regionLabel={selectedPolicy.regionLabel}
+        />
       )}
     </div>
   );

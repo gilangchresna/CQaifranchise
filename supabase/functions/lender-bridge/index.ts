@@ -197,6 +197,28 @@ async function handleSubmit(req: Request, supabase: any, auth: { userId: string;
     };
   }
   
+  // FIX #6: PDPA Consent Check — verify franchisee has consented before submitting to lender
+  // SG PDPA s.20 / ID UU PDP / MY PDPA 2010 — consent required before sharing data with 3rd party (lender)
+  const hasConsent = await supabase
+    .from("user_consents")
+    .select("id, policy_type, region_id, is_active")
+    .eq("user_id", franchiseeId)
+    .eq("policy_type", "pdpa")
+    .eq("is_active", true)
+    .gte("consented_at", new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString()) // within 1 year
+    .limit(1);
+
+  if (!hasConsent.data || hasConsent.data.length === 0) {
+    return {
+      status: 403,
+      body: {
+        success: false,
+        error: "PDPA consent required. Please review and accept the privacy notice before submitting your financing application.",
+        code: "CONSENT_REQUIRED",
+      },
+    };
+  }
+  
   const submittedPayload = {
     franchisee_id: franchiseeId,
     outlet_id: body.outlet_id ?? null,
