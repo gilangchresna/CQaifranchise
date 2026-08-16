@@ -652,9 +652,9 @@ async function queryFranchiseData(ctx: SystemPromptContext): Promise<string | nu
     }
     // HQ_ADMIN sees all
 
-    // Last 7 days of sales
+    // Last 7 days of sales (match dashboard-full: today - 6 days = 7-day window)
     const sevenDaysAgo = new Date();
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
     salesQuery = salesQuery.gte("date", sevenDaysAgo.toISOString().split("T")[0]);
 
     const { data: sales } = await salesQuery.limit(50);
