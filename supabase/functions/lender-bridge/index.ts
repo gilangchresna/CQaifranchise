@@ -5,7 +5,8 @@
  * Generic bridge-loan financing integration for franchisee setup.
  *
  * POST /functions/v1/lender-bridge
- *   action: "submit_application" | "get_status" | "cancel_application"
+ *   action: "submit_application" | "get_status" | "cancel_application" | "upload_document"
+ *   action: "get_status" — optional
  *
  * POST /functions/v1/lender-bridge/webhook
  *   inbound from lender — approvals, declines, disbursement, repayments
@@ -74,6 +75,20 @@ interface CancelBody {
   action: "cancel_application";
   application_id: string;
 }
+
+interface UploadDocumentBody {
+  action: "upload_document";
+  document_type: "KYC_ID" | "BANK_STATEMENT" | "FRANCHISEE_CONTRACT" | "FINANCIAL_REPORT" | "OTHER";
+  title?: string;
+  file_data: string; // base64 encoded file
+  file_name: string;
+  file_mime_type: string;
+  application_id?: string;
+}
+
+const ALLOWED_DOC_TYPES = ["KYC_ID", "BANK_STATEMENT", "FRANCHISEE_CONTRACT", "FINANCIAL_REPORT", "OTHER"];
+const MAX_DOC_SIZE = 50 * 1024 * 1024; // 50MB
+const ALLOWED_MIME_TYPES = ["application/pdf", "image/png", "image/jpeg", "image/jpg"];
 
 async function verifyAuth(req: Request, supabaseUrl: string, serviceKey: string) {
   const authHeader = req.headers.get("Authorization");
@@ -369,6 +384,79 @@ async function handleCancel(supabase: any, auth: { userId: string; role: string 
   if (error) throw error;
 
   return { status: 200, body: { success: true, application_id: application.id, status: "CANCELLED" } };
+}
+
+/**
+ * Handle document upload
+ * Stores file in Supabase Storage + metadata in documents table
+ */
+async function handleUploadDocument(supabase: any, auth: { userId: string; role: string }, body: UploadDocumentBody) {
+  // Validate document type
+  if (!body.document_type || !ALLOWED_DOC_TYPES.includes(body.document_type)) {
+    return { status: 400, body: { success: false, error: `Invalid document_type. Must be one of: ${ALLOWED_DOC_TYPES.join(", ")}` } };
+  }
+
+  // Validate MIME type
+  if (!body.file_mime_type || !ALLOWED_MIME_TYPES.includes(body.file_mime_type)) {
+    return { status: 400, body: { success: false, error: `Invalid file_mime_type. Allowed: ${ALLOWED_MIME_TYPES.join(", ")}` } };
+  }
+
+  // Decode base64 file
+  let fileBuffer: ArrayBuffer;
+  try {
+    const binaryString = atob(body.file_data);
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+    fileBuffer = bytes.buffer;
+  } catch {
+    return { status: 400, body: { success: false, error: "Invalid base64 file data" } };
+  }
+
+  // Check file size
+  if (fileBuffer.byteLength > MAX_DOC_SIZE) {
+    return { status: 400, body: { success: false, error: `File too large. Maximum size is ${MAX_DOC_SIZE / (1024 * 1024)}MB` } };
+  }
+
+  // Generate storage path
+  const ext = body.file_name.split(".").pop() || "bin";
+  const storagePath = `${auth.userId}/${body.document_type}/${crypto.randomUUID()}.${ext}`;
+
+  // Upload to Storage
+  const { error: uploadError } = await supabase.storage
+    .from("franchise-documents")
+    .upload(storagePath, fileBuffer, {
+      contentType: body.file_mime_type,
+      upsert: false,
+    });
+
+  if (uploadError) {
+    return { status: 500, body: { success: false, error: `Storage upload failed: ${uploadError.message}` } };
+  }
+
+  // Insert metadata
+  const { data: doc, error: insertError } = await supabase
+    .from("documents")
+    .insert({
+      application_id: body.application_id || null,
+      user_id: auth.userId,
+      document_type: body.document_type,
+      title: body.title || body.file_name,
+      file_name: body.file_name,
+      storage_path: storagePath,
+      mime_type: body.file_mime_type,
+      file_size_bytes: fileBuffer.byteLength,
+      uploaded_by: auth.userId,
+    })
+    .select()
+    .single();
+
+  if (insertError) {
+    return { status: 500, body: { success: false, error: `Failed to save document metadata: ${insertError.message}` } };
+  }
+
+  return { status: 200, body: { success: true, document: doc } };
 }
 
 /**
@@ -900,8 +988,11 @@ serve(async (req: Request) => {
       case "cancel_application":
         result = await handleCancel(supabase, auth, body);
         break;
+      case "upload_document":
+        result = await handleUploadDocument(supabase, auth, body);
+        break;
       default:
-        result = { status: 400, body: { success: false, error: "action must be one of: submit_application, get_status, cancel_application" } };
+        result = { status: 400, body: { success: false, error: "action must be one of: submit_application, get_status, cancel_application, upload_document" } };
     }
 
     return new Response(JSON.stringify(result.body), {
