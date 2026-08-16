@@ -1,0 +1,113 @@
+- generic [ref=f2e1]:
+  - generic [ref=f2e3]:
+    - complementary [ref=f2e4]:
+      - generic [ref=f2e5]:
+        - generic [ref=f2e10]: CyberQuote
+        - button "Collapse sidebar" [ref=f2e11]
+      - navigation [ref=f2e15]:
+        - paragraph [ref=f2e16]: Menu
+        - generic [ref=f2e17]:
+          - button "Regional Dashboard" [ref=f2e18]
+          - button "Area Outlets" [ref=f2e25]
+          - button "Area Staff" [ref=f2e31]
+          - button "Active Escalations" [ref=f2e38]
+          - button "Case Management" [ref=f2e43]
+          - button "Agent Orchestration" [ref=f2e48]
+          - button "Stockout Risk" [ref=f2e53]
+          - button "Knowledge Base" [ref=f2e57]
+          - button "Peer Benchmark" [ref=f2e61]
+          - button "Approvals" [ref=f2e66]
+          - button "Area Integrations" [ref=f2e71]
+          - button "Bridge Financing" [active] [ref=f2e76]
+          - button "ML Models" [ref=f2e80]
+          - button "Access Control" [ref=f2e94]
+          - button "Regional Settings" [ref=f2e99]
+      - generic [ref=f2e104]:
+        - paragraph [ref=f2e105]: Active Role
+        - generic [ref=f2e106]: Regional
+    - main [ref=f2e108]:
+      - generic [ref=f2e109]:
+        - generic [ref=f2e110]:
+          - heading "Regional Dashboard" [level=1] [ref=f2e111]
+          - generic "POS transaction feed" [ref=f2e112]:
+            - generic [ref=f2e114]: Offline
+            - generic [ref=f2e142]: 7h ago
+        - generic [ref=f2e115]:
+          - textbox "Search..." [ref=f2e120]
+          - button "EN" [ref=f2e122]
+          - button [ref=f2e129]
+          - button "regional" [ref=f2e144]
+      - generic [ref=f2e134]:
+        - generic [ref=f2e2926]:
+          - generic [ref=f2e2927]:
+            - generic [ref=f2e2928]:
+              - heading "Franchisee Bridge Financing" [level=2] [ref=f2e2929]
+              - paragraph [ref=f2e2930]: Manage bridge loans with real-time repayment tracking and risk monitoring.
+            - button "Apply for Bridge Loan" [ref=f2e2931]
+          - generic [ref=f2e2934]:
+            - button "Applications" [ref=f2e2935]
+            - button "Repayments" [ref=f2e2938]
+            - button "Risk Scores" [ref=f2e2944]
+          - generic [ref=f2e2947]:
+            - generic [ref=f2e2948]:
+              - generic [ref=f2e2949]:
+                - paragraph [ref=f2e2950]: Active Applications
+                - paragraph [ref=f2e2951]: "4"
+              - generic [ref=f2e2952]:
+                - paragraph [ref=f2e2953]: Total Applications
+                - paragraph [ref=f2e2954]: "4"
+              - generic [ref=f2e2955]:
+                - paragraph [ref=f2e2956]: Total Disbursed
+                - paragraph [ref=f2e2957]: SGD 45,000
+            - generic [ref=f2e2958]:
+              - heading "Applications" [level=3] [ref=f2e2962]
+              - table [ref=f2e2963]:
+                - rowgroup [ref=f2e2964]:
+                  - row [ref=f2e2965]:
+                    - columnheader "Outlet" [ref=f2e2966]
+                    - columnheader "Purpose" [ref=f2e2967]
+                    - columnheader "Requested" [ref=f2e2968]
+                    - columnheader "Lender Ref" [ref=f2e2969]
+                    - columnheader "Status" [ref=f2e2970]
+                    - columnheader "Submitted" [ref=f2e2971]
+                - rowgroup [ref=f2e2972]:
+                  - row [ref=f2e2973]:
+                    - cell "BDG-005 (BDG-005)" [ref=f2e2974]
+                    - cell "FRANCHISEE SETUP" [ref=f2e2975]
+                    - cell "SGD 50,000" [ref=f2e2976]
+                    - cell "FRN-2024-SG-001" [ref=f2e2977]
+                    - cell "Approved" [ref=f2e2978]
+                    - cell "8/13/2026" [ref=f2e2983]
+                  - row [ref=f2e2984]:
+                    - cell "BDG-005 (BDG-005)" [ref=f2e2985]
+                    - cell "INVENTORY" [ref=f2e2986]
+                    - cell "SGD 15,000" [ref=f2e2987]
+                    - cell "—" [ref=f2e2988]
+                    - cell "Submitted" [ref=f2e2989]
+                    - cell "8/13/2026" [ref=f2e2994]
+                  - row [ref=f2e2995]:
+                    - cell "SBY-006 (SBY-006)" [ref=f2e2996]
+                    - cell "EQUIPMENT" [ref=f2e2997]
+                    - cell "SGD 25,000" [ref=f2e2998]
+                    - cell "—" [ref=f2e2999]
+                    - cell "Under Review" [ref=f2e3000]
+                    - cell "8/13/2026" [ref=f2e3005]
+                  - row [ref=f2e3006]:
+                    - cell "SG Marina Bay (SG-001)" [ref=f2e3007]
+                    - cell "WORKING CAPITAL" [ref=f2e3008]
+                    - cell "SGD 30,000" [ref=f2e3009]
+                    - cell "—" [ref=f2e3010]
+                    - cell "Draft" [ref=f2e3011]
+                    - cell "8/13/2026" [ref=f2e3016]
+        - button "Chat with AI" [ref=f2e139]
+        - generic:
+          - generic:
+            - generic: AI Assistant
+            - generic:
+              - button "Minimize"
+              - button "Close"
+          - generic: Hello! I'm your AI assistant. How can I help you today?
+          - generic:
+            - textbox "Ask me anything..."
+            - button [disabled]
+  - generic [ref=f2e2925]: "0"

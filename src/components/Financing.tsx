@@ -212,12 +212,17 @@ export function Financing({ activeRole }: { activeRole: Role }) {
 
     setSubmitting(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+
+      if (sessionError || !session?.access_token) {
+        throw new Error('You are not logged in. Please refresh the page and log in again.');
+      }
+
       const response = await fetch(`${EDGE_FUNCTIONS_URL}/lender-bridge`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${session?.access_token || ''}`,
+          Authorization: `Bearer ${session.access_token}`,
         },
         body: JSON.stringify({
           action: 'submit_application',

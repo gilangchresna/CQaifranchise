@@ -1,0 +1,113 @@
+- generic [ref=e1]:
+  - generic [ref=e3]:
+    - complementary [ref=e4]:
+      - generic [ref=e5]:
+        - generic [ref=e10]: CyberQuote
+        - button "Collapse sidebar" [ref=e11]
+      - navigation [ref=e15]:
+        - paragraph [ref=e16]: Menu
+        - generic [ref=e17]:
+          - button "Regional Dashboard" [ref=e18]
+          - button "Area Outlets" [ref=e25]
+          - button "Area Staff" [ref=e31]
+          - button "Active Escalations" [ref=e38]
+          - button "Case Management" [ref=e43]
+          - button "Agent Orchestration" [ref=e48]
+          - button "Stockout Risk" [ref=e53]
+          - button "Knowledge Base" [ref=e57]
+          - button "Peer Benchmark" [ref=e61]
+          - button "Approvals" [ref=e66]
+          - button "Area Integrations" [ref=e71]
+          - button "Bridge Financing" [active] [ref=e76]
+          - button "ML Models" [ref=e80]
+          - button "Access Control" [ref=e94]
+          - button "Regional Settings" [ref=e99]
+      - generic [ref=e104]:
+        - paragraph [ref=e105]: Active Role
+        - generic [ref=e106]: Regional
+    - main [ref=e108]:
+      - generic [ref=e109]:
+        - generic [ref=e110]:
+          - heading "Regional Dashboard" [level=1] [ref=e111]
+          - generic "POS transaction feed" [ref=e112]:
+            - generic [ref=e114]: Offline
+            - generic [ref=e142]: 7h ago
+        - generic [ref=e115]:
+          - textbox "Search..." [ref=e120]
+          - button "EN" [ref=e122]
+          - button [ref=e129]
+          - button "regional" [ref=e144]
+      - generic [ref=e134]:
+        - generic [ref=e2926]:
+          - generic [ref=e2927]:
+            - generic [ref=e2928]:
+              - heading "Franchisee Bridge Financing" [level=2] [ref=e2929]
+              - paragraph [ref=e2930]: Manage bridge loans with real-time repayment tracking and risk monitoring.
+            - button "Apply for Bridge Loan" [ref=e2931]
+          - generic [ref=e2934]:
+            - button "Applications" [ref=e2935]
+            - button "Repayments" [ref=e2938]
+            - button "Risk Scores" [ref=e2944]
+          - generic [ref=e2947]:
+            - generic [ref=e2948]:
+              - generic [ref=e2949]:
+                - paragraph [ref=e2950]: Active Applications
+                - paragraph [ref=e2951]: "4"
+              - generic [ref=e2952]:
+                - paragraph [ref=e2953]: Total Applications
+                - paragraph [ref=e2954]: "4"
+              - generic [ref=e2955]:
+                - paragraph [ref=e2956]: Total Disbursed
+                - paragraph [ref=e2957]: SGD 45,000
+            - generic [ref=e2958]:
+              - heading "Applications" [level=3] [ref=e2962]
+              - table [ref=e2963]:
+                - rowgroup [ref=e2964]:
+                  - row [ref=e2965]:
+                    - columnheader "Outlet" [ref=e2966]
+                    - columnheader "Purpose" [ref=e2967]
+                    - columnheader "Requested" [ref=e2968]
+                    - columnheader "Lender Ref" [ref=e2969]
+                    - columnheader "Status" [ref=e2970]
+                    - columnheader "Submitted" [ref=e2971]
+                - rowgroup [ref=e2972]:
+                  - row [ref=e2973]:
+                    - cell "BDG-005 (BDG-005)" [ref=e2974]
+                    - cell "FRANCHISEE SETUP" [ref=e2975]
+                    - cell "SGD 50,000" [ref=e2976]
+                    - cell "FRN-2024-SG-001" [ref=e2977]
+                    - cell "Approved" [ref=e2978]
+                    - cell "8/13/2026" [ref=e2983]
+                  - row [ref=e2984]:
+                    - cell "BDG-005 (BDG-005)" [ref=e2985]
+                    - cell "INVENTORY" [ref=e2986]
+                    - cell "SGD 15,000" [ref=e2987]
+                    - cell "—" [ref=e2988]
+                    - cell "Submitted" [ref=e2989]
+                    - cell "8/13/2026" [ref=e2994]
+                  - row [ref=e2995]:
+                    - cell "SBY-006 (SBY-006)" [ref=e2996]
+                    - cell "EQUIPMENT" [ref=e2997]
+                    - cell "SGD 25,000" [ref=e2998]
+                    - cell "—" [ref=e2999]
+                    - cell "Under Review" [ref=e3000]
+                    - cell "8/13/2026" [ref=e3005]
+                  - row [ref=e3006]:
+                    - cell "SG Marina Bay (SG-001)" [ref=e3007]
+                    - cell "WORKING CAPITAL" [ref=e3008]
+                    - cell "SGD 30,000" [ref=e3009]
+                    - cell "—" [ref=e3010]
+                    - cell "Draft" [ref=e3011]
+                    - cell "8/13/2026" [ref=e3016]
+        - button "Chat with AI" [ref=e139]
+        - generic:
+          - generic:
+            - generic: AI Assistant
+            - generic:
+              - button "Minimize"
+              - button "Close"
+          - generic: Hello! I'm your AI assistant. How can I help you today?
+          - generic:
+            - textbox "Ask me anything..."
+            - button [disabled]
+  - generic [ref=e2925]: "1500000"

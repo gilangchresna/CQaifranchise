@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { X, CheckCircle2, AlertTriangle, ExternalLink } from 'lucide-react';
+import { supabase } from '@/src/lib/supabase';
 
 interface ConsentDialogProps {
   isOpen: boolean;

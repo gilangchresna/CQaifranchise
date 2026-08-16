@@ -19,12 +19,21 @@
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": Deno.env.get("ALLOWED_ORIGINS") || "https://c-qaifranchise.vercel.app",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-lender-webhook-secret",
-  "Access-Control-Max-Age": "86400",
-};
+// CORS: allow production domain + all localhost variants for development
+function getCorsHeaders(req: Request): Record<string, string> {
+  const origin = req.headers.get("Origin") || "";
+  const allowedOrigins = Deno.env.get("ALLOWED_ORIGINS") || "https://c-qaifranchise.vercel.app";
+
+  // Allow localhost for  development (any port)
+  const isLocalhost = origin.match(/^http:\/\/localhost(:\d+)?$/);
+
+  return {
+    "Access-Control-Allow-Origin": isLocalhost ? origin : allowedOrigins,
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-lender-webhook-secret",
+    "Access-Control-Max-Age": "86400",
+  };
+}
 
 // =============================================================================
 // EVENT TYPE CONSTANTS
@@ -49,8 +58,8 @@ const REPAYMENT_EVENT_TYPES = {
 
 type RepaymentEventType = typeof REPAYMENT_EVENT_TYPES[keyof typeof REPAYMENT_EVENT_TYPES];
 
-const DELINQUENCY_LEVELS = ['NONE', 'MILD', 'MODERATE', 'SEVERE', 'CRITICAL'] as const;
-const RISK_LEVELS = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'] as const;
+const _DELINQUENCY_LEVELS = ['NONE', 'MILD', 'MODERATE', 'SEVERE', 'CRITICAL'] as const;
+const _RISK_LEVELS = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'] as const;
 
 const VALID_PURPOSES = ["FRANCHISEE_SETUP", "INVENTORY", "EQUIPMENT", "WORKING_CAPITAL"];
 
@@ -173,7 +182,7 @@ async function getSetting(supabase: any, key: string, fallback: string = ""): Pr
   return data?.value ?? fallback;
 }
 
-async function handleSubmit(req: Request, supabase: any, auth: { userId: string; role: string }, body: SubmitApplicationBody) {
+async function handleSubmit(_req: Request, supabase: any, auth: { userId: string; role: string }, body: SubmitApplicationBody) {
   if (!body.requested_amount || body.requested_amount <= 0) {
     return { status: 400, body: { success: false, error: "requested_amount must be a positive number" } };
   }
@@ -214,24 +223,39 @@ async function handleSubmit(req: Request, supabase: any, auth: { userId: string;
   
   // FIX #6: PDPA Consent Check — verify franchisee has consented before submitting to lender
   // SG PDPA s.20 / ID UU PDP / MY PDPA 2010 — consent required before sharing data with 3rd party (lender)
-  const hasConsent = await supabase
-    .from("user_consents")
-    .select("id, policy_type, region_id, is_active")
-    .eq("user_id", franchiseeId)
+  //
+  // First check: is there any active PDPA policy in the database?
+  // If no policy exists, skip consent check (development/demo mode)
+  const { data: activePolicies } = await supabase
+    .from("knowledge_policies")
+    .select("id")
     .eq("policy_type", "pdpa")
     .eq("is_active", true)
-    .gte("consented_at", new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString()) // within 1 year
     .limit(1);
 
-  if (!hasConsent.data || hasConsent.data.length === 0) {
-    return {
-      status: 403,
-      body: {
-        success: false,
-        error: "PDPA consent required. Please review and accept the privacy notice before submitting your financing application.",
-        code: "CONSENT_REQUIRED",
-      },
-    };
+  const requiresConsent = activePolicies && activePolicies.length > 0;
+
+  if (requiresConsent) {
+    // Policy exists — enforce consent
+    const hasConsent = await supabase
+      .from("user_consents")
+      .select("id, policy_type, region_id, is_active")
+      .eq("user_id", franchiseeId)
+      .eq("policy_type", "pdpa")
+      .eq("is_active", true)
+      .gte("consented_at", new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString()) // within 1 year
+      .limit(1);
+
+    if (!hasConsent.data || hasConsent.data.length === 0) {
+      return {
+        status: 403,
+        body: {
+          success: false,
+          error: "PDPA consent required. Please review and accept the privacy notice before submitting your financing application.",
+          code: "CONSENT_REQUIRED",
+        },
+      };
+    }
   }
   
   const submittedPayload = {
@@ -578,7 +602,7 @@ async function handleRepaymentWebhook(req: Request, supabase: any) {
   const lenderCode = payload.lender_code || 'GENERIC';
   const eventId = payload.event_id || null;
   const eventType = (payload.event_type || 'STATUS_CHANGE') as RepaymentEventType;
-  const webhookType = new URL(req.url).searchParams.get('type');
+  const _webhookType = new URL(req.url).searchParams.get('type');
 
   // Validate event type
   const validTypes = Object.values(REPAYMENT_EVENT_TYPES);
@@ -815,17 +839,17 @@ async function triggerDownstreamActions(
   actions.push(
     supabase.functions.invoke('repayment-risk-scorer', {
       body: { application_id: application.id }
-    }).catch(e => console.error('Risk scorer error:', e))
+    }).catch((e: unknown) => console.error('Risk scorer error:', e))
   );
 
   // 2. Create alert for risk events
-  const riskEventTypes = [
+  const riskEventTypes: RepaymentEventType[] = [
     REPAYMENT_EVENT_TYPES.EMI_OVERDUE,
     REPAYMENT_EVENT_TYPES.DELINQUENCY_STARTED,
     REPAYMENT_EVENT_TYPES.DEFAULT_NOTICE
   ];
 
-  if (riskEventTypes.includes(eventType)) {
+  if (riskEventTypes.includes(eventType as typeof riskEventTypes[number])) {
     actions.push(
       supabase.functions.invoke('repayment-alert-generator', {
         body: {
@@ -836,7 +860,7 @@ async function triggerDownstreamActions(
           severity: getSeverity(eventType, payload),
           message: getAlertMessage(eventType, payload),
         }
-      }).catch(e => console.error('Alert generator error:', e))
+      }).catch((e: unknown) => console.error('Alert generator error:', e))
     );
   }
 
@@ -850,14 +874,14 @@ async function triggerDownstreamActions(
         channel: 'ALL',
         priority: getPriority(eventType),
       }
-    }).catch(e => console.error('Notification error:', e))
+    }).catch((e: unknown) => console.error('Notification error:', e))
   );
 
   // Execute all actions in parallel
   await Promise.allSettled(actions);
 }
 
-function getSeverity(eventType: RepaymentEventType, payload: any): string {
+function getSeverity(eventType: RepaymentEventType, _payload: any): string {
   switch (eventType) {
     case REPAYMENT_EVENT_TYPES.DEFAULT_NOTICE: return 'CRITICAL';
     case REPAYMENT_EVENT_TYPES.DELINQUENCY_STARTED: return 'HIGH';
@@ -907,7 +931,8 @@ function getNotificationMessage(eventType: RepaymentEventType, payload: any): st
 }
 
 serve(async (req: Request) => {
-  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+  const cors = getCorsHeaders(req);
+  if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -930,7 +955,7 @@ serve(async (req: Request) => {
           error: "Webhook endpoint not configured. Contact administrator." 
         }), {
           status: 503, // Service Unavailable
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          headers: { ...cors, "Content-Type": "application/json" },
         });
       }
       
@@ -939,7 +964,7 @@ serve(async (req: Request) => {
         console.error('Lender Webhook: Invalid or missing webhook secret');
         return new Response(JSON.stringify({ success: false, error: "Invalid webhook secret" }), {
           status: 401,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          headers: { ...cors, "Content-Type": "application/json" },
         });
       }
 
@@ -949,7 +974,7 @@ serve(async (req: Request) => {
         const result = await handleRepaymentWebhook(req, supabase);
         return new Response(JSON.stringify(result.body), {
           status: result.status,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          headers: { ...cors, "Content-Type": "application/json" },
         });
       }
 
@@ -957,14 +982,14 @@ serve(async (req: Request) => {
       const result = await handleLenderWebhook(req, supabase);
       return new Response(JSON.stringify(result.body), {
         status: result.status,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...cors, "Content-Type": "application/json" },
       });
     }
 
     if (req.method !== "POST") {
       return new Response(JSON.stringify({ success: false, error: "Method not allowed. Use POST." }), {
         status: 405,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...cors, "Content-Type": "application/json" },
       });
     }
 
@@ -972,7 +997,7 @@ serve(async (req: Request) => {
     if (!auth.authorized) {
       return new Response(JSON.stringify({ success: false, error: auth.error }), {
         status: auth.status,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...cors, "Content-Type": "application/json" },
       });
     }
 
@@ -997,13 +1022,13 @@ serve(async (req: Request) => {
 
     return new Response(JSON.stringify(result.body), {
       status: result.status,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      headers: { ...cors, "Content-Type": "application/json" },
     });
   } catch (error: any) {
     console.error("Lender Bridge Error:", error);
     return new Response(JSON.stringify({ success: false, error: error.message || "Internal server error" }), {
       status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      headers: { ...cors, "Content-Type": "application/json" },
     });
   }
 });
