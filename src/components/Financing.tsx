@@ -108,13 +108,17 @@ export function Financing({ activeRole }: { activeRole: Role }) {
   const [amount, setAmount] = useState('');
   const [termMonths, setTermMonths] = useState('12');
 
-  // PDPA Consent hook — get userId from auth on mount
+  // PDPA Consent hook — get userId and regionId from auth on mount
   const [userId, setUserId] = useState('');
-  const [userRegionId] = useState<number | null>(null);
+  const [userRegionId, setUserRegionId] = useState<number | null>(null);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
-      setUserId((data.session?.user as any)?.id || '');
+      const session = data.session;
+      const user = session?.user as any;
+      setUserId(user?.id || '');
+      // Get region_id from user metadata (set during registration)
+      setUserRegionId(user?.user_metadata?.region_id ?? null);
     });
   }, []);
 
@@ -268,9 +272,13 @@ export function Financing({ activeRole }: { activeRole: Role }) {
         </div>
         {activeTab === 'applications' && (
           <button
-            onClick={() => {
+            onClick={async () => {
               if (!hasConsented) {
-                openConsentDialog();
+                const hasPolicy = await openConsentDialog();
+                if (!hasPolicy) {
+                  // No policy found — bypass consent and open apply modal directly
+                  setShowApplyModal(true);
+                }
               } else {
                 setShowApplyModal(true);
               }

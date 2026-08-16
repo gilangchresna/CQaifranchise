@@ -124,7 +124,7 @@ interface UseConsentReturn {
   selectedPolicy: { title: string; content: string; regionLabel: string } | null;
   checkConsent: () => Promise<boolean>;
   recordConsent: (policyId: string, regionId: number | null) => Promise<void>;
-  openConsentDialog: () => void;
+  openConsentDialog: () => Promise<boolean>;
   closeConsentDialog: () => void;
   handleConsentGiven: () => Promise<void>;
 }
@@ -199,11 +199,13 @@ export function useConsent(
     }
   };
 
-  const openConsentDialog = async () => {
+  const openConsentDialog = async (): Promise<boolean> => {
     const hasPolicy = await loadPolicy();
     if (hasPolicy) {
       setShowConsentDialog(true);
+      return true;
     }
+    return false;
   };
 
   const closeConsentDialog = () => {
