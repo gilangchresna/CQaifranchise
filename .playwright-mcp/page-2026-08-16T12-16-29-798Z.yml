@@ -1,0 +1,51 @@
+- generic [active] [ref=f1e1]:
+  - generic [ref=f1e5]:
+    - complementary [ref=f1e6]:
+      - generic [ref=f1e7]:
+        - generic [ref=f1e12]: CyberQuote
+        - button "Collapse sidebar" [ref=f1e13]
+      - navigation [ref=f1e17]:
+        - paragraph [ref=f1e18]: Menu
+        - generic [ref=f1e19]:
+          - button "Global Dashboard" [ref=f1e20]
+          - button "Network Directory" [ref=f1e27]
+          - button "Global Workforce" [ref=f1e33]
+          - button "Enterprise Workflows" [ref=f1e40]
+          - button "Case Management" [ref=f1e45]
+          - button "Agent Orchestration" [ref=f1e50]
+          - button "Stockout Risk" [ref=f1e55]
+          - button "Knowledge Base" [ref=f1e59]
+          - button "System Integrations" [ref=f1e63]
+          - button "Bridge Financing" [ref=f1e68]
+          - button "ML Models" [ref=f1e72]
+          - button "Access Control" [ref=f1e86]
+          - button "Platform Settings" [ref=f1e91]
+      - generic [ref=f1e96]:
+        - paragraph [ref=f1e97]: Active Role
+        - generic [ref=f1e98]: HQ
+    - main [ref=f1e100]:
+      - generic [ref=f1e101]:
+        - generic [ref=f1e102]:
+          - heading "HQ Dashboard" [level=1] [ref=f1e103]
+          - generic "POS transaction feed" [ref=f1e104]:
+            - generic [ref=f1e108]: Live
+            - generic [ref=f1e109]: 10s ago
+        - generic [ref=f1e110]:
+          - textbox "Search..." [ref=f1e115]
+          - button "EN" [ref=f1e117]
+          - button [ref=f1e124]
+          - button "steve.gilang" [ref=f1e130]
+      - generic [ref=f1e137]:
+        - paragraph [ref=f1e2928]: Loading dashboard...
+        - button "Chat with AI" [ref=f1e2923]
+        - generic:
+          - generic:
+            - generic: AI Assistant
+            - generic:
+              - button "Minimize"
+              - button "Close"
+          - generic: Hello! I'm your AI assistant. How can I help you today?
+          - generic:
+            - textbox "Ask me anything..."
+            - button [disabled]
+  - generic [ref=f1e2926]: "15"

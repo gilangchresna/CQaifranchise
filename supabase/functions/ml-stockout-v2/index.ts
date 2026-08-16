@@ -144,13 +144,46 @@ serve(async (req: Request) => {
     const critical = predictions.filter((p) => p.risk_level === "CRITICAL").length;
     const avgRisk = predictions.reduce((s, p) => s + p.risk_score, 0) / predictions.length;
 
+    // ===== PERSIST ml_stockout_risk (per outlet) =====
+    const outletRiskMap: Record<string, { worst_risk: number; worst_level: string; min_days: number | null }> = {};
+    for (const p of predictions) {
+      const oid = String(p.outlet_id);
+      if (!outletRiskMap[oid] || p.risk_score > outletRiskMap[oid].worst_risk) {
+        outletRiskMap[oid] = {
+          worst_risk: p.risk_score,
+          worst_level: p.risk_level,
+          min_days: p.days_until_stockout,
+        };
+      }
+    }
+
+    const records = Object.entries(outletRiskMap).map(([oid, r]) => ({
+      outlet_id: Number(oid),
+      risk_level: r.worst_level,
+      days_remaining: r.min_days,
+      recorded_at: new Date().toISOString(),
+    }));
+
+    if (records.length > 0) {
+      const { error: upsertError } = await sb
+        .from("ml_stockout_risk")
+        .upsert(records, { onConflict: "outlet_id" });
+      if (upsertError) {
+        console.error("Failed to persist ml_stockout_risk:", upsertError);
+      } else {
+        console.log(`Persisted stockout risk for ${records.length} outlets`);
+      }
+    }
+
     return new Response(JSON.stringify({
       predictions: predictions.slice(0, 20),
+      persisted_outlets: records.length,
       summary: {
         total: predictions.length,
         critical,
         avg_risk_score: Math.round(avgRisk * 100) / 100,
         outlets_checked: outletIds.length,
+        outlets_persisted: records.length,
         model: "ml-stockout-v4-real",
         features: ["velocity", "stock_level", "min_stock_ratio"],
       },

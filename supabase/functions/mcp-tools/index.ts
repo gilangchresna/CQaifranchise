@@ -400,6 +400,96 @@ async function sendNotification(params: {
 }
 
 // ============================================================
+// TOOL: get_sales_revenue
+// ============================================================
+async function getSalesRevenue(params: {
+  days?: number;
+  outlet_ids?: Array<string | number>;
+  region_id?: string | number;
+}) {
+  const supabase = getSupabase();
+  const { days = 7, outlet_ids, region_id } = params;
+
+  const cutoffDate = new Date();
+  cutoffDate.setDate(cutoffDate.getDate() - days);
+  const cutoffStr = cutoffDate.toISOString().split("T")[0];
+
+  // Build outlet filter
+  let outletFilter: any[] | undefined;
+  if (outlet_ids && outlet_ids.length > 0) {
+    outletFilter = outlet_ids.map(id => Number(id));
+  } else if (region_id) {
+    const { data: regionOutlets } = await supabase
+      .from("outlets")
+      .select("id")
+      .eq("region_id", Number(region_id));
+    outletFilter = regionOutlets?.map((o: any) => o.id);
+  }
+
+  let query = supabase
+    .from("sales_transactions")
+    .select("id, date, amount, transaction_count, anomaly_score, is_anomaly, outlet_id")
+    .gte("date", cutoffStr)
+    .order("date", { ascending: false });
+
+  if (outletFilter && outletFilter.length > 0) {
+    query = query.in("outlet_id", outletFilter);
+  }
+
+  const { data: sales, error } = await query;
+
+  if (error) {
+    return { error: error.message, status: 500 };
+  }
+
+  // Aggregate results
+  const totalAmount = sales?.reduce((sum, s) => sum + parseFloat(s.amount || 0), 0) || 0;
+  const totalTransactions = sales?.reduce((sum, s) => sum + (s.transaction_count || 0), 0) || 0;
+  const anomalyCount = sales?.filter((s: any) => s.is_anomaly).length || 0;
+
+  // Daily breakdown
+  const dailyTotals: Record<string, number> = {};
+  for (const s of sales || []) {
+    dailyTotals[s.date] = (dailyTotals[s.date] || 0) + parseFloat(s.amount || 0);
+  }
+  const dailyBreakdown = Object.entries(dailyTotals)
+    .sort(([a], [b]) => b.localeCompare(a))
+    .slice(0, days)
+    .map(([date, amount]) => ({ date, amount }));
+
+  // Per-outlet breakdown
+  const outletTotals: Record<number, number> = {};
+  for (const s of sales || []) {
+    outletTotals[s.outlet_id] = (outletTotals[s.outlet_id] || 0) + parseFloat(s.amount || 0);
+  }
+
+  // Fetch outlet names
+  const outletIds = Object.keys(outletTotals).map(Number);
+  const { data: outlets } = outletIds.length > 0
+    ? await supabase.from("outlets").select("id, name").in("id", outletIds)
+    : { data: [] };
+  const outletNameMap: Record<number, string> = {};
+  for (const o of outlets || []) {
+    outletNameMap[o.id] = o.name;
+  }
+
+  const outletBreakdown = Object.entries(outletTotals)
+    .sort(([, a], [, b]) => b - a)
+    .map(([id, amount]) => ({ outlet_id: Number(id), name: outletNameMap[Number(id)] || `Outlet #${id}`, amount }));
+
+  return {
+    period_days: days,
+    cutoff_date: cutoffStr,
+    total_amount: totalAmount,
+    total_transactions: totalTransactions,
+    anomaly_count: anomalyCount,
+    daily_breakdown: dailyBreakdown,
+    outlet_breakdown: outletBreakdown,
+    outlet_count: outletBreakdown.length,
+  };
+}
+
+// ============================================================
 // MAIN ROUTER
 // ============================================================
 serve(async (req: Request) => {
@@ -438,6 +528,10 @@ serve(async (req: Request) => {
         result = await sendNotification(parameters || {});
         break;
 
+      case "get_sales_revenue":
+        result = await getSalesRevenue(parameters || {});
+        break;
+
       case "health_check":
         result = { status: "healthy", timestamp: new Date().toISOString() };
         break;
@@ -451,6 +545,7 @@ serve(async (req: Request) => {
             { name: "create_case", description: "Create a workflow case" },
             { name: "explain_anomaly", description: "Explain ML anomaly detection" },
             { name: "send_notification", description: "Send notification via EMAIL/WHATSAPP/PUSH" },
+            { name: "get_sales_revenue", description: "Get sales revenue summary for outlets/regions over N days" },
             { name: "health_check", description: "Check MCP service health" },
             { name: "list_tools", description: "List available MCP tools" },
           ],

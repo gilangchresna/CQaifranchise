@@ -1,2 +1,34 @@
 [     824ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:3000/node_modules/.vite/deps/react-dom_client.js?v=0562f045:20102
 [     985ms] [VERBOSE] [DOM] Input elements should have autocomplete attributes (suggested: "current-password"): (More info: https://goo.gl/9p2vKq) %o @ http://localhost:3000/:0
+[  171188ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:3000/node_modules/.vite/deps/react-dom_client.js?v=0562f045:20102
+[ 5774774ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:3000/node_modules/.vite/deps/react-dom_client.js?v=0562f045:20102
+[ 5925990ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:3000/node_modules/.vite/deps/react-dom_client.js?v=0562f045:20102
+[ 8047018ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:3000/node_modules/.vite/deps/react-dom_client.js?v=0562f045:20102
+[ 8047376ms] [ERROR] Failed to load resource: the server responded with a status of 403 () @ https://ploqeifazcgzwjzmukgp.supabase.co/auth/v1/user:0
+[ 8047465ms] [ERROR] Failed to load resource: the server responded with a status of 401 () @ https://ploqeifazcgzwjzmukgp.supabase.co/functions/v1/dashboard-full?period=7d&role=Regional:0
+[ 8047465ms] [ERROR] Dashboard fetch error: Error: Failed to fetch stats
+    at fetchDashboardData (http://localhost:3000/src/components/Dashboard.tsx?t=1786878369604:142:31) @ http://localhost:3000/src/components/Dashboard.tsx?t=1786878369604:214
+[ 8047485ms] [VERBOSE] [DOM] Input elements should have autocomplete attributes (suggested: "current-password"): (More info: https://goo.gl/9p2vKq) %o @ http://localhost:3000/:0
+[ 8047504ms] [ERROR] Failed to load resource: the server responded with a status of 403 () @ https://ploqeifazcgzwjzmukgp.supabase.co/auth/v1/user:0
+[ 8047685ms] [ERROR] Failed to load resource: the server responded with a status of 401 () @ https://ploqeifazcgzwjzmukgp.supabase.co/functions/v1/dashboard-full?period=7d&role=HQ:0
+[ 8047685ms] [ERROR] Dashboard fetch error: Error: Failed to fetch stats
+    at fetchDashboardData (http://localhost:3000/src/components/Dashboard.tsx?t=1786878369604:142:31) @ http://localhost:3000/src/components/Dashboard.tsx?t=1786878369604:214
+[ 8049251ms] [ERROR] Failed to load resource: the server responded with a status of 401 () @ https://ploqeifazcgzwjzmukgp.supabase.co/functions/v1/dashboard-full?period=7d&role=Regional:0
+[ 8049251ms] [ERROR] Dashboard fetch error: Error: Failed to fetch stats
+    at fetchDashboardData (http://localhost:3000/src/components/Dashboard.tsx?t=1786878369604:142:31) @ http://localhost:3000/src/components/Dashboard.tsx?t=1786878369604:214
+[ 8079294ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:3000/node_modules/.vite/deps/react-dom_client.js?v=0562f045:20102
+[ 8079409ms] [VERBOSE] [DOM] Input elements should have autocomplete attributes (suggested: "current-password"): (More info: https://goo.gl/9p2vKq) %o @ http://localhost:3000/:0
+[ 8084031ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:3000/node_modules/.vite/deps/react-dom_client.js?v=0562f045:20102
+[ 8084147ms] [VERBOSE] [DOM] Input elements should have autocomplete attributes (suggested: "current-password"): (More info: https://goo.gl/9p2vKq) %o @ http://localhost:3000/:0
+[ 8089385ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:3000/node_modules/.vite/deps/react-dom_client.js?v=0562f045:20102
+[ 8089499ms] [VERBOSE] [DOM] Input elements should have autocomplete attributes (suggested: "current-password"): (More info: https://goo.gl/9p2vKq) %o @ http://localhost:3000/:0
+[ 8519244ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:3000/node_modules/.vite/deps/react-dom_client.js?v=0562f045:20102
+[ 8519400ms] [VERBOSE] [DOM] Input elements should have autocomplete attributes (suggested: "current-password"): (More info: https://goo.gl/9p2vKq) %o @ http://localhost:3000/:0
+[ 8524017ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:3000/node_modules/.vite/deps/react-dom_client.js?v=0562f045:20102
+[ 8524136ms] [VERBOSE] [DOM] Input elements should have autocomplete attributes (suggested: "current-password"): (More info: https://goo.gl/9p2vKq) %o @ http://localhost:3000/:0
+[ 8530983ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:3000/node_modules/.vite/deps/react-dom_client.js?v=0562f045:20102
+[ 8531097ms] [VERBOSE] [DOM] Input elements should have autocomplete attributes (suggested: "current-password"): (More info: https://goo.gl/9p2vKq) %o @ http://localhost:3000/:0
+[ 8542947ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:3000/node_modules/.vite/deps/react-dom_client.js?v=0562f045:20102
+[ 8543062ms] [VERBOSE] [DOM] Input elements should have autocomplete attributes (suggested: "current-password"): (More info: https://goo.gl/9p2vKq) %o @ http://localhost:3000/:0
+[ 8589464ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:3000/node_modules/.vite/deps/react-dom_client.js?v=0562f045:20102
+[ 8589584ms] [VERBOSE] [DOM] Input elements should have autocomplete attributes (suggested: "current-password"): (More info: https://goo.gl/9p2vKq) %o @ http://localhost:3000/:0

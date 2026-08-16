@@ -334,6 +334,18 @@ serve(async (req: Request) => {
     messages.push({ role: "user", content: sanitizedMessage });
 
     // =========================================
+    // STEP 3b: Shadow Mode — MCP tool-calling
+    // Run MCP equivalent of the SQL data in background, compare, and log.
+    // User experience is unchanged (SQL result used for response).
+    // =========================================
+    const shadowResult = await runShadowMode(supabase, {
+      user_id: userData.id,
+      user_role: userRole,
+      region_id: userRegionId,
+      outlet_id: userOutletId,
+    });
+
+    // =========================================
     // STEP 4: Call Claude via Bluepack
     // =========================================
     const claudeResponse = await callClaude(enrichedPrompt, messages, anthropicToken, anthropicBaseUrl, apiTimeout);
@@ -640,10 +652,10 @@ async function queryFranchiseData(ctx: SystemPromptContext): Promise<string | nu
     }
     // HQ_ADMIN sees all
 
-    // Last 14 days of sales
-    const fourteenDaysAgo = new Date();
-    fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14);
-    salesQuery = salesQuery.gte("date", fourteenDaysAgo.toISOString().split("T")[0]);
+    // Last 7 days of sales
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    salesQuery = salesQuery.gte("date", sevenDaysAgo.toISOString().split("T")[0]);
 
     const { data: sales } = await salesQuery.limit(50);
 
@@ -697,7 +709,7 @@ async function queryFranchiseData(ctx: SystemPromptContext): Promise<string | nu
       const totalAmount = sales.reduce((sum: number, s: any) => sum + parseFloat(s.amount || 0), 0);
       const totalTransactions = sales.reduce((sum: number, s: any) => sum + (s.transaction_count || 0), 0);
       const anomalyCount = sales.filter((s: any) => s.is_anomaly).length;
-      const avgDaily = totalAmount / 14;
+      const avgDaily = totalAmount / 7;
 
       // Get daily totals by date (aggregate all outlets)
       const dailyTotals: Record<string, number> = {};
@@ -750,7 +762,7 @@ async function queryFranchiseData(ctx: SystemPromptContext): Promise<string | nu
           return `  ${oname}: ${formatAmount(amt, rcode)}`;
         }).join("\n");
 
-      dataSections.push(`SALES SUMMARY (Last 14 Days):
+      dataSections.push(`SALES SUMMARY (Last 7 Days):
   Today's Revenue: S$${todayRevenue.toLocaleString(undefined, {minimumFractionDigits:2})} (${todayTransactions} transactions)
   Total Revenue: S$${totalAmount.toLocaleString(undefined, {minimumFractionDigits:2})}
   Total Transactions: ${totalTransactions}
@@ -760,7 +772,7 @@ async function queryFranchiseData(ctx: SystemPromptContext): Promise<string | nu
 Recent Daily Sales (Last 7 Days):
   ${last7Days}
 
-REVENUE BY REGION (Last 14 Days):
+REVENUE BY REGION (Last 7 Days):
 ${regionLines}
 
 TOP OUTLETS BY REVENUE (Last 7 Days):
@@ -972,3 +984,343 @@ async function callClaude(
     throw error;
   }
 }
+
+// ============================================================
+// SHADOW MODE: MCP vs SQL comparison
+// ============================================================
+
+interface ShadowCtx {
+  user_id: string;
+  user_role: string;
+  region_id?: number;
+  outlet_id?: number;
+}
+
+/**
+ * Shadow Mode: Call MCP tools to compare against hardcoded SQL results.
+ * - Runs in parallel with the normal flow
+ * - Logs comparison to ai_audit_log
+ * - Never affects user-facing output
+ */
+async function runShadowMode(
+  supabase: any,
+  ctx: ShadowCtx
+): Promise<{ matched: boolean; discrepancy: string }> {
+  try {
+    const mcpBaseUrl = Deno.env.get("SUPABASE_URL")! + "/functions/v1/mcp-tools";
+
+    // Build filter params based on user role (same logic as queryFranchiseData)
+    let outletIds: number[] = [];
+    let regionId: number | undefined;
+
+    if (ctx.user_role === "FRANCHISEE_OWNER" || ctx.user_role === "FRANCHISEE_STAFF") {
+      if (ctx.outlet_id) {
+        outletIds = [ctx.outlet_id];
+      } else {
+        const { data: myOutlets } = await supabase
+          .from("outlets")
+          .select("id")
+          .eq("franchisee_id", ctx.user_id);
+        outletIds = myOutlets?.map((o: any) => o.id) || [];
+      }
+    } else if (ctx.user_role === "REGIONAL_MANAGER" && ctx.region_id) {
+      regionId = ctx.region_id;
+    }
+
+    // Call get_sales_revenue via MCP
+    const mcpResult = await callMcpTool(mcpBaseUrl, "get_sales_revenue", {
+      days: 7,
+      ...(outletIds.length > 0 ? { outlet_ids: outletIds } : {}),
+      ...(regionId ? { region_id: regionId } : {}),
+    });
+
+    // Run equivalent SQL query for comparison
+    const sqlResult = await runSqlSalesRevenue(supabase, ctx);
+
+    // Compare
+    const sqlTotal = sqlResult?.total_amount || 0;
+    const mcpTotal = mcpResult?.total_amount || 0;
+    const diff = Math.abs(sqlTotal - mcpTotal);
+    const tolerance = sqlTotal * 0.001; // 0.1% tolerance for float rounding
+
+    const matched = diff <= tolerance;
+    const discrepancy = matched
+      ? ""
+      : `Sales total mismatch: SQL=${sqlTotal}, MCP=${mcpTotal}, diff=${diff}`;
+
+    // Log shadow comparison to ai_audit_log
+    await logShadowComparison(supabase, {
+      user_id: ctx.user_id,
+      user_role: ctx.user_role,
+      outlet_id: ctx.outlet_id,
+      sql_total: sqlTotal,
+      sql_transactions: sqlResult?.total_transactions || 0,
+      mcp_total: mcpTotal,
+      mcp_transactions: mcpResult?.total_transactions || 0,
+      matched,
+      discrepancy,
+      mcp_result: mcpResult,
+    });
+
+    return { matched, discrepancy };
+  } catch (err) {
+    // Shadow mode failures are non-fatal
+    console.error("Shadow mode error (non-fatal):", err);
+    return { matched: false, discrepancy: `Shadow mode error: ${String(err)}` };
+  }
+}
+
+/**
+ * Call a single MCP tool via the mcp-tools edge function.
+ */
+async function callMcpTool(
+  baseUrl: string,
+  tool: string,
+  parameters: Record<string, unknown>
+): Promise<any> {
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  const response = await fetch(baseUrl, {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${serviceKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ tool, parameters }),
+  });
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`MCP tool ${tool} failed: ${response.status} - ${text}`);
+  }
+  return response.json();
+}
+
+/**
+ * Replicate the SQL sales revenue logic from queryFranchiseData for comparison.
+ */
+async function runSqlSalesRevenue(
+  supabase: any,
+  ctx: ShadowCtx
+): Promise<{ total_amount: number; total_transactions: number }> {
+  const sevenDaysAgo = new Date();
+  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+  const cutoffStr = sevenDaysAgo.toISOString().split("T")[0];
+
+  let query = supabase
+    .from("sales_transactions")
+    .select("amount, transaction_count")
+    .gte("date", cutoffStr);
+
+  if (ctx.user_role === "FRANCHISEE_OWNER" || ctx.user_role === "FRANCHISEE_STAFF") {
+    if (ctx.outlet_id) {
+      query = query.eq("outlet_id", ctx.outlet_id);
+    } else {
+      const { data: myOutlets } = await supabase
+        .from("outlets")
+        .select("id")
+        .eq("franchisee_id", ctx.user_id);
+      if (myOutlets && myOutlets.length > 0) {
+        query = query.in("outlet_id", myOutlets.map((o: any) => o.id));
+      }
+    }
+  } else if (ctx.user_role === "REGIONAL_MANAGER" && ctx.region_id) {
+    const { data: regionOutlets } = await supabase
+      .from("outlets")
+      .select("id")
+      .eq("region_id", ctx.region_id);
+    if (regionOutlets && regionOutlets.length > 0) {
+      query = query.in("outlet_id", regionOutlets.map((o: any) => o.id));
+    }
+  }
+
+  const { data: sales } = await query;
+
+  const totalAmount = sales?.reduce(
+    (sum: number, s: any) => sum + parseFloat(s.amount || 0), 0
+  ) || 0;
+  const totalTransactions = sales?.reduce(
+    (sum: number, s: any) => sum + (s.transaction_count || 0), 0
+  ) || 0;
+
+  return { total_amount: totalAmount, total_transactions: totalTransactions };
+}
+
+interface ShadowLogEntry {
+  user_id: string;
+  user_role: string;
+  outlet_id?: number;
+  sql_total: number;
+  sql_transactions: number;
+  mcp_total: number;
+  mcp_transactions: number;
+  matched: boolean;
+  discrepancy: string;
+  mcp_result?: any;
+}
+
+/**
+ * Log shadow mode comparison to ai_audit_log.
+ * Adds a shadow_comparison JSON column log entry.
+ */
+async function logShadowComparison(
+  supabase: any,
+  entry: ShadowLogEntry
+): Promise<void> {
+  try {
+    // Store shadow comparison in the audit log extras column.
+    // The ai_audit_log table stores this in the sources_used + extra fields.
+    const shadowPayload = {
+      source: "shadow_mode",
+      sql: {
+        total_amount: entry.sql_total,
+        total_transactions: entry.sql_transactions,
+      },
+      mcp: {
+        total_amount: entry.mcp_total,
+        total_transactions: entry.mcp_transactions,
+      },
+      match: entry.matched,
+      discrepancy: entry.discrepancy,
+      logged_at: new Date().toISOString(),
+    };
+
+    // Try to insert into ai_audit_log with shadow comparison as sources_used
+    await supabase.from("ai_audit_log").insert({
+      user_id: entry.user_id,
+      role: entry.user_role,
+      outlet_id: entry.outlet_id || null,
+      prompt_hash: "SHADOW_MODE_COMPARISON",
+      response_hash: JSON.stringify(shadowPayload),
+      model: "shadow-mcp",
+      tokens_in: 0,
+      tokens_out: 0,
+      sources_used: ["shadow_comparison"],
+      latency_ms: 0,
+    });
+  } catch (e) {
+    console.error("Shadow comparison log failed (non-fatal):", e);
+  }
+}
+
+// ============================================================
+// MCP TOOL DEFINITIONS (for Claude tool-calling future use)
+// ============================================================
+
+/**
+ * Tool definitions to pass to Claude for tool-use capability.
+ * Currently used for documentation; MCP calls are made server-side.
+ */
+const MCP_TOOL_DEFINITIONS = [
+  {
+    name: "get_sales_revenue",
+    description: "Get sales revenue summary for outlets over a configurable number of days. Returns total amount, transaction count, anomaly count, daily breakdown, and per-outlet breakdown.",
+    input_schema: {
+      type: "object",
+      properties: {
+        days: {
+          type: "number",
+          description: "Number of days to look back (default: 7)",
+          default: 7,
+        },
+        outlet_ids: {
+          type: "array",
+          items: { type: "number" },
+          description: "Filter to specific outlet IDs",
+        },
+        region_id: {
+          type: "number",
+          description: "Filter to a specific region ID",
+        },
+      },
+    },
+  },
+  {
+    name: "get_outlet_status",
+    description: "Get current status, KPIs, and recent alerts for a specific outlet. Includes today's sales, vs-target %, stockout risk, and anomaly score.",
+    input_schema: {
+      type: "object",
+      properties: {
+        outlet_id: { type: "number", description: "The outlet ID to query" },
+        include_kpis: { type: "boolean", default: true },
+        include_recent_alerts: { type: "boolean", default: true },
+        time_range_hours: { type: "number", default: 24 },
+      },
+      required: ["outlet_id"],
+    },
+  },
+  {
+    name: "list_active_alerts",
+    description: "List all active alerts (NEW, ACKNOWLEDGED, IN_PROGRESS) filtered by user role and optional severity/status filters.",
+    input_schema: {
+      type: "object",
+      properties: {
+        role: { type: "string" },
+        user_id: { type: "string" },
+        region_id: { type: "string" },
+        franchisee_id: { type: "string" },
+        severity_filter: { type: "string" },
+        status_filter: { type: "string" },
+        limit: { type: "number", default: 50 },
+        offset: { type: "number", default: 0 },
+      },
+      required: ["role", "user_id"],
+    },
+  },
+  {
+    name: "triage_alert",
+    description: "Perform an action on an alert: ACKNOWLEDGE, ASSIGN, or DISMISS.",
+    input_schema: {
+      type: "object",
+      properties: {
+        alert_id: { type: "number" },
+        action: { type: "string", enum: ["ACKNOWLEDGE", "ASSIGN", "DISMISS"] },
+        assigned_to: { type: "string" },
+        notes: { type: "string" },
+      },
+      required: ["alert_id", "action"],
+    },
+  },
+  {
+    name: "create_case",
+    description: "Create a workflow case from an alert or standalone. Auto-calculates due date by priority.",
+    input_schema: {
+      type: "object",
+      properties: {
+        alert_id: { type: "number" },
+        title: { type: "string" },
+        description: { type: "string" },
+        priority: { type: "string", enum: ["P0_CRITICAL", "P1_HIGH", "P2_MEDIUM", "P3_LOW"], default: "P2_MEDIUM" },
+        assigned_to: { type: "string" },
+        outlet_id: { type: "number" },
+      },
+      required: ["title"],
+    },
+  },
+  {
+    name: "explain_anomaly",
+    description: "Explain the ML anomaly detection score for an outlet. Returns statistical breakdown and possible causes.",
+    input_schema: {
+      type: "object",
+      properties: {
+        outlet_id: { type: "number" },
+        alert_id: { type: "number" },
+      },
+      required: ["outlet_id"],
+    },
+  },
+  {
+    name: "send_notification",
+    description: "Send a notification via EMAIL, WHATSAPP, or PUSH channel. Logs to notification_logs table.",
+    input_schema: {
+      type: "object",
+      properties: {
+        alert_id: { type: "number" },
+        case_id: { type: "number" },
+        channel: { type: "string", enum: ["EMAIL", "WHATSAPP", "PUSH"] },
+        recipient: { type: "string" },
+        message: { type: "string" },
+        type: { type: "string", default: "CUSTOM" },
+      },
+      required: ["channel", "recipient", "message"],
+    },
+  },
+];
