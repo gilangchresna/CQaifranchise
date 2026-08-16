@@ -149,7 +149,7 @@ export function Dashboard({ activeRole }: { activeRole: Role }) {
       supabase.removeChannel(outletsChannel);
       supabase.removeChannel(agentChannel);
     };
-  }, [activeRole, selectedPeriod]);
+  }, [activeRole, selectedPeriod, selectedCountry]);
 
 
   async function fetchAlerts() {

@@ -47,8 +47,20 @@ const supabase = supabaseService; // alias for old code
       userRole = profile.role;
     }
   }
-  
-  const effectiveRole = userRole;
+
+  // Map UI role to DB role (UI sends "HQ", "Regional", "Franchisee")
+  const uiToDbRole: Record<string, string> = {
+    "HQ": "HQ_ADMIN",
+    "Regional": "REGIONAL_MANAGER",
+    "Regional Manager": "REGIONAL_MANAGER",
+    "Franchisee": "FRANCHISEE_OWNER",
+    "Franchisee Owner": "FRANCHISEE_OWNER",
+  };
+  const dbRole = uiToDbRole[userRole] || userRole;
+
+  // Check if role param was passed (from UI) and use DB role
+  const roleParam = url.searchParams.get("role");
+  const effectiveRole = (roleParam && uiToDbRole[roleParam]) ? uiToDbRole[roleParam] : dbRole;
 
   try {
     const period = url.searchParams.get("period") || "7d";
