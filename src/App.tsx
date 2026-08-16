@@ -26,7 +26,7 @@ export type Tab =
   | "Dashboard" | "Outlets" | "Workforce" | "Workflows" | "Agents" | "Risk" | "Knowledge" | "Peer" | "Approval" | "Integrations" | "Models" | "Settings" | "Access" | "Financing" | "Cases";
 
 export default function App() {
-  const [activeRole, setActiveRole] = useState<Role>("Regional");
+  const [activeRole, setActiveRole] = useState<Role | null>(null);
   const [activeTab, setActiveTab] = useState<Tab>("Dashboard");
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
 
