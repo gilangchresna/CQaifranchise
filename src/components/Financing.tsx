@@ -16,10 +16,12 @@ import {
   Shield,
   Activity,
   Calendar,
+  FileText,
 } from 'lucide-react';
 import { Role } from '@/src/types';
 import { supabase, EDGE_FUNCTIONS_URL } from '@/src/lib/supabase';
 import { ConsentDialog, useConsent } from './ConsentDialog';
+import { DocumentVault } from './DocumentVault';
 
 // Mirrors public.financing_application_status in
 // supabase/migrations/20260805000000_financing_and_reporting.sql
@@ -27,7 +29,7 @@ type FinancingStatus =
   | 'DRAFT' | 'SUBMITTED' | 'UNDER_REVIEW' | 'APPROVED' | 'DECLINED'
   | 'DISBURSED' | 'REPAYING' | 'CLOSED' | 'CANCELLED';
 
-type TabType = 'applications' | 'repayments' | 'risk';
+type TabType = 'applications' | 'repayments' | 'risk' | 'documents';
 
 interface FinancingApplication {
   id: string;
@@ -282,6 +284,7 @@ export function Financing({ activeRole }: { activeRole: Role }) {
     { id: 'applications' as const, label: 'Applications', icon: Landmark },
     { id: 'repayments' as const, label: 'Repayments', icon: RefreshCw },
     { id: 'risk' as const, label: 'Risk Scores', icon: Shield },
+    { id: 'documents' as const, label: 'Document Vault', icon: FileText },
   ];
 
   return (
@@ -568,6 +571,13 @@ export function Financing({ activeRole }: { activeRole: Role }) {
               </table>
             )}
           </div>
+        </div>
+      )}
+
+      {/* Documents Tab */}
+      {activeTab === 'documents' && (
+        <div>
+          <DocumentVault />
         </div>
       )}
 
