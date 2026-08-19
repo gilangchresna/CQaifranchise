@@ -78,10 +78,24 @@ export async function verifyAuth(
     }
 
     const userData = await resp.json();
+    
+    // Get role from user_profiles table, not JWT metadata
+    const profileResp = await fetch(
+      `${supabaseUrl}/rest/v1/user_profiles?id=eq.${userData.id}&select=role&limit=1`,
+      { headers: { "Authorization": `Bearer ${serviceKey}`, "apikey": serviceKey } }
+    );
+    let role = "FRANCHISEE_OWNER"; // default
+    if (profileResp.ok) {
+      const profiles = await profileResp.json();
+      if (profiles && profiles.length > 0 && profiles[0].role) {
+        role = profiles[0].role;
+      }
+    }
+    
     return {
       authorized: true,
       userId: userData.id,
-      role: userData.user_metadata?.role || "FRANCHISEE_OWNER",
+      role: role,
       status: 200
     };
   } catch (e: any) {

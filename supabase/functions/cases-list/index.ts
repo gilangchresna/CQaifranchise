@@ -56,23 +56,36 @@ serve(async (req) => {
     .limit(limit);
 
   // Role-based filtering (C9)
-  // NOTE: cases table has alert_id (FK to alerts), NOT outlet_id
-  // FRANCHISEE sees cases via their alerts' outlets — filter through alerts
+  // NOTE: cases table has alert_id (not source_alert_id), NO outlet_id
+  // FRANCHISEE sees cases via: (1) their alerts' outlets OR (2) assigned to them
   if (auth.role === 'FRANCHISEE_OWNER' || auth.role === 'FRANCHISEE_STAFF') {
+    const userId = auth.userId;
+    
+    // First: check cases assigned directly to this user
+    const { data: assignedCases } = await supabase
+      .from("cases")
+      .select("id")
+      .eq("assigned_to_id", userId);
+    const assignedCaseIds = (assignedCases || []).map((c: any) => c.id);
+    
+    // Second: check cases via their alerts' outlets
     const { data: userOutlets } = await supabase
       .from("user_outlets").select("outlet_id")
-      .eq("user_id", auth.user?.id);
+      .eq("user_id", userId);
     const userOutletIds = (userOutlets || []).map((r: any) => r.outlet_id);
+    
+    let alertIds: number[] = [];
     if (userOutletIds.length > 0) {
-      // Filter cases: only those whose alert belongs to user's outlets
       const { data: userAlerts } = await supabase
         .from("alerts").select("id").in("outlet_id", userOutletIds);
-      const alertIds = (userAlerts || []).map((a: any) => a.id);
-      if (alertIds.length > 0) {
-        query = query.in("alert_id", alertIds);
-      } else {
-        return Response.json({ data: [], total: 0, counts: {} }, { headers: corsHeaders });
-      }
+      alertIds = (userAlerts || []).map((a: any) => a.id);
+    }
+    
+    // Combine: cases assigned to user OR cases linked to user's outlet alerts
+    if (assignedCaseIds.length > 0 || alertIds.length > 0) {
+      // Use OR filter - cases where alert_id in user's alert IDs OR assigned_to_id = user ID
+      const orFilter = `assigned_to_id.eq.${userId}${alertIds.length > 0 ? `,alert_id.in.(${alertIds.join(',')})` : ''}`;
+      query = query.or(orFilter);
     } else {
       return Response.json({ data: [], total: 0, counts: {} }, { headers: corsHeaders });
     }
