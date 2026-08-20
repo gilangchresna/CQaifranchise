@@ -154,28 +154,56 @@ async function seedInventory(outletId) {
   for (const product of PRODUCTS) {
     const currentStock = randomInt(product.stock_min, product.stock_max);
     
-    const { error } = await supabase
+    // Check if exists first
+    const { data: existing } = await supabase
       .from('inventory')
-      .upsert({
-        outlet_id: outletId,
-        sku: product.sku,
-        product_name: product.name,
-        category: product.category,
-        current_stock: currentStock,
-        min_stock: product.stock_min,
-        max_stock: product.stock_max,
-        unit: product.unit,
-        cost_price: product.cost,
-        sell_price: product.sell,
-        updated_at: new Date().toISOString()
-      }, {
-        onConflict: 'outlet_id,sku'
-      });
+      .select('id')
+      .eq('outlet_id', outletId)
+      .eq('sku', product.sku)
+      .single();
     
-    if (error) {
-      console.log(`  ❌ ${product.name}: ${error.message}`);
+    if (existing) {
+      // Update
+      const { error } = await supabase
+        .from('inventory')
+        .update({
+          product_name: product.name,
+          category: product.category,
+          current_stock: currentStock,
+          min_stock: product.stock_min,
+          max_stock: product.stock_max,
+          unit: product.unit,
+          updated_at: new Date().toISOString()
+        })
+        .eq('outlet_id', outletId)
+        .eq('sku', product.sku);
+      
+      if (error) {
+        console.log(`  ❌ ${product.name}: ${error.message}`);
+      } else {
+        console.log(`  ✅ ${product.name}: ${currentStock} ${product.unit} (updated)`);
+      }
     } else {
-      console.log(`  ✅ ${product.name}: ${currentStock} ${product.unit}`);
+      // Insert
+      const { error } = await supabase
+        .from('inventory')
+        .insert({
+          outlet_id: outletId,
+          sku: product.sku,
+          product_name: product.name,
+          category: product.category,
+          current_stock: currentStock,
+          min_stock: product.stock_min,
+          max_stock: product.stock_max,
+          unit: product.unit,
+          updated_at: new Date().toISOString()
+        });
+      
+      if (error) {
+        console.log(`  ❌ ${product.name}: ${error.message}`);
+      } else {
+        console.log(`  ✅ ${product.name}: ${currentStock} ${product.unit}`);
+      }
     }
   }
 }
@@ -215,22 +243,9 @@ async function updateInventory(outletId, items) {
       .eq('outlet_id', outletId)
       .eq('sku', item.sku);
     
-    // Log movement
-    await supabase
-      .from('inventory_movements')
-      .insert({
-        outlet_id: outletId,
-        sku: item.sku,
-        movement_type: 'sale',
-        quantity: -item.qty,
-        stock_before: current.current_stock,
-        stock_after: newStock,
-        reference: item.transaction_id,
-        created_at: new Date().toISOString()
-      });
-    
     results.deducted.push({
       sku: item.sku,
+      name: current.product_name,
       qty: item.qty,
       stockBefore: current.current_stock,
       stockAfter: newStock
