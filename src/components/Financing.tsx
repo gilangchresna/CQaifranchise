@@ -129,14 +129,15 @@ export function Financing({ activeRole }: { activeRole: Role }) {
   const [userId, setUserId] = useState('');
   const [userRegionId, setUserRegionId] = useState<number | null>(null);
 
-  // Check required regulatory documents before applying
+  // Check required documents AND filing links before applying
   async function checkRequiredDocuments(entityId: string, country: string) {
     setCheckDocsLoading(true);
     try {
+      // 1. Check regulatory documents (regulatory_documents table)
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.access_token) return true; // Allow through on error
+      if (!session?.access_token) return true;
 
-      const response = await fetch(
+      const docsResponse = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/check-required-docs`,
         {
           method: 'POST',
@@ -148,10 +149,33 @@ export function Financing({ activeRole }: { activeRole: Role }) {
         }
       );
 
-      const result = await response.json();
+      const docsResult = await docsResponse.json();
       
-      if (!result.valid && result.missing_docs?.length > 0) {
-        setMissingDocs(result.missing_docs);
+      // 2. Check filing links from profile
+      const { data: profile } = await supabase
+        .from('user_profiles')
+        .select('filing_links, filing_status')
+        .eq('id', entityId)
+        .single();
+
+      // Combine issues
+      const issues: string[] = [];
+      
+      // Add missing regulatory documents
+      if (!docsResult.valid && docsResult.missing_docs?.length > 0) {
+        issues.push(...docsResult.missing_docs.map((d: string) => `Doc: ${d.replace(/_/g, ' ')}`));
+      }
+      
+      // Check if filing links are set
+      const filingLinks = profile?.filing_links || {};
+      const hasFilingLinks = Object.values(filingLinks).some(v => v && typeof v === 'object' && Object.values(v).some(x => x));
+      
+      if (!hasFilingLinks) {
+        issues.push('Filing: Links not verified in profile');
+      }
+
+      if (issues.length > 0) {
+        setMissingDocs(issues);
         setShowDocBlockModal(true);
         return false;
       }
