@@ -17,11 +17,15 @@ import {
   Activity,
   Calendar,
   FileText,
+  Wallet,
 } from 'lucide-react';
 import { Role } from '@/src/types';
 import { supabase, EDGE_FUNCTIONS_URL } from '@/src/lib/supabase';
 import { ConsentDialog, useConsent } from './ConsentDialog';
 import { DocumentVault } from './DocumentVault';
+import { CashFlowUpload } from './CashFlowUpload';
+import { CashFlowDashboard } from './CashFlowDashboard';
+import { CashFlowTemplateDownload } from './CashFlowTemplateDownload';
 
 // Mirrors public.financing_application_status in
 // supabase/migrations/20260805000000_financing_and_reporting.sql
@@ -29,7 +33,7 @@ type FinancingStatus =
   | 'DRAFT' | 'SUBMITTED' | 'UNDER_REVIEW' | 'APPROVED' | 'DECLINED'
   | 'DISBURSED' | 'REPAYING' | 'CLOSED' | 'CANCELLED';
 
-type TabType = 'applications' | 'repayments' | 'risk' | 'documents';
+type TabType = 'applications' | 'repayments' | 'risk' | 'documents' | 'cashflow';
 
 interface FinancingApplication {
   id: string;
@@ -285,6 +289,7 @@ export function Financing({ activeRole }: { activeRole: Role }) {
     { id: 'repayments' as const, label: 'Repayments', icon: RefreshCw },
     { id: 'risk' as const, label: 'Risk Scores', icon: Shield },
     { id: 'documents' as const, label: 'Document Vault', icon: FileText },
+    { id: 'cashflow' as const, label: 'Cash Flow', icon: Wallet },
   ];
 
   return (
@@ -578,6 +583,30 @@ export function Financing({ activeRole }: { activeRole: Role }) {
       {activeTab === 'documents' && (
         <div>
           <DocumentVault />
+        </div>
+      )}
+
+      {/* Cash Flow Tab */}
+      {activeTab === 'cashflow' && (
+        <div className="space-y-6">
+          <div>
+            <h3 className="text-lg font-semibold text-slate-900">Bank Cash Flow</h3>
+            <p className="text-sm text-slate-500 mt-1">
+              Track your income and expenses from bank statements.
+            </p>
+          </div>
+          
+          <div className="grid lg:grid-cols-2 gap-6">
+            <div className="bg-white rounded-xl border p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h4 className="font-medium">Upload Cash Flow Data</h4>
+                <CashFlowTemplateDownload />
+              </div>
+              <CashFlowUpload userId={userId} onUploadComplete={() => {}} />
+            </div>
+            
+            <CashFlowDashboard userId={userId} />
+          </div>
         </div>
       )}
 
