@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { DocumentUpload } from './DocumentUpload';
 import { HQDocumentUpload } from './HQDocumentUpload';
-import { Trash2, X, AlertCircle, CheckCircle, Upload, Users } from 'lucide-react';
+import { FilingLinksEdit } from './FilingLinksEdit';
+import { Trash2, X, AlertCircle, CheckCircle, Upload, Users, Globe } from 'lucide-react';
 import { supabase } from '@/src/lib/supabase';
 import { Role } from '@/src/types';
 
@@ -156,9 +157,38 @@ export function DocumentVault({ activeRole }: { activeRole?: Role }) {
 
   // Check if user is HQ
   const isHQ = activeRole === 'HQ';
+  
+  // Fetch profile data for filing links
+  const [profileData, setProfileData] = useState<any>(null);
+  
+  useEffect(() => {
+    async function fetchProfile() {
+      if (!userId) return;
+      const { data } = await supabase
+        .from('user_profiles')
+        .select('*')
+        .eq('id', userId)
+        .single();
+      setProfileData(data);
+    }
+    fetchProfile();
+  }, [userId]);
 
   return (
     <div className="space-y-6">
+      {/* Filing Links Section - for both HQ and Franchisee */}
+      {userId && profileData && (
+        <FilingLinksEdit
+          userId={userId}
+          initialData={profileData}
+          onSave={() => {
+            // Refresh profile
+            supabase.from('user_profiles').select('*').eq('id', userId).single()
+              .then(({ data }) => setProfileData(data));
+          }}
+        />
+      )}
+      
       <div className="flex items-center justify-between">
         <div>
           <h3 className="text-lg font-semibold text-slate-900">Document Vault</h3>
