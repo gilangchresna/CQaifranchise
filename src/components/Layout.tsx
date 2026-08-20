@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from "react";
-import { Role } from "@/src/types";
+import React, { useState, useEffect } from 'react';
+import { Role } from '@/src/types';
 import UserMenu from "./UserMenu";
+import Logo from '../../Images/cyberquote-icon-fullcolor.png';
 import { LanguageSwitcher } from "./LanguageSwitcher";
 import { useI18n } from "@/src/i18n/I18nContext";
 import {
@@ -140,11 +141,15 @@ export function Layout({ children, activeRole, onRoleChange, activeTab, onTabCha
       {/* Sidebar */}
       <aside className={cn("flex flex-col border-r border-slate-200 bg-white z-10 transition-all duration-200", collapsed ? "w-16" : "w-64")}>
         {/* Logo + Collapse Toggle */}
-        <div className={cn("h-16 flex items-center gap-3 border-b border-slate-200", collapsed ? "justify-center px-2" : "px-6")}>
-          <div className="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center shrink-0">
-            <ActivitySquare className="w-4 h-4" />
-          </div>
-          {!collapsed && <span className="text-sm font-semibold">CyberQuote</span>}
+        <div className={cn("h-16 flex items-center gap-3 border-b border-slate-200", collapsed ? "justify-center px-2" : "px-4")}>
+          {collapsed ? (
+            <img src={Logo} alt="CyberQuote" className="w-8 h-8 rounded-lg shrink-0" />
+          ) : (
+            <>
+              <img src={Logo} alt="CyberQuote" className="w-8 h-8 rounded-lg shrink-0" />
+              <span className="text-sm font-semibold">CyberQuote</span>
+            </>
+          )}
           <button
             onClick={() => setCollapsed(c => !c)}
             className={cn("ml-auto p-1.5 rounded-md hover:bg-slate-100 text-slate-400 shrink-0", collapsed && "mx-auto")}
