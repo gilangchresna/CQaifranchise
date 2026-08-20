@@ -26,6 +26,7 @@ import { DocumentVault } from './DocumentVault';
 import { CashFlowUpload } from './CashFlowUpload';
 import { CashFlowDashboard } from './CashFlowDashboard';
 import { CashFlowTemplateDownload } from './CashFlowTemplateDownload';
+import { BankStatementUpload } from './BankStatementUpload';
 
 // Mirrors public.financing_application_status in
 // supabase/migrations/20260805000000_financing_and_reporting.sql
@@ -100,13 +101,14 @@ const STATUS_STYLE: Record<FinancingStatus, { label: string; className: string; 
 };
 
 export function Financing({ activeRole }: { activeRole: Role }) {
-  const [activeTab, setActiveTab] = useState<'applications' | 'repayments' | 'risk'>('applications');
+  const [activeTab, setActiveTab] = useState<'applications' | 'repayments' | 'risk' | 'documents' | 'cashflow'>('applications');
   const [applications, setApplications] = useState<FinancingApplication[]>([]);
   const [repaymentEvents, setRepaymentEvents] = useState<RepaymentEvent[]>([]);
   const [repaymentSchedule, setRepaymentSchedule] = useState<RepaymentScheduleEntry[]>([]);
   const [riskScores, setRiskScores] = useState<RiskScore[]>([]);
   const [loading, setLoading] = useState(true);
   const [showApplyModal, setShowApplyModal] = useState(false);
+  const [uploadMode, setUploadMode] = useState<'csv' | 'pdf'>('csv');
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
@@ -596,17 +598,58 @@ export function Financing({ activeRole }: { activeRole: Role }) {
             </p>
           </div>
           
-          <div className="grid lg:grid-cols-2 gap-6">
-            <div className="bg-white rounded-xl border p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h4 className="font-medium">Upload Cash Flow Data</h4>
-                <CashFlowTemplateDownload />
-              </div>
-              <CashFlowUpload userId={userId} onUploadComplete={() => {}} />
+          <div className="bg-white rounded-xl border p-6">
+            {/* Toggle between CSV and PDF */}
+            <div className="flex gap-2 mb-6">
+              <button
+                onClick={() => setUploadMode('csv')}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  uploadMode === 'csv' 
+                    ? 'bg-blue-600 text-white' 
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                CSV Template
+              </button>
+              <button
+                onClick={() => setUploadMode('pdf')}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  uploadMode === 'pdf' 
+                    ? 'bg-blue-600 text-white' 
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                Bank Statement PDF
+              </button>
             </div>
             
-            <CashFlowDashboard userId={userId} />
+            {/* CSV Upload */}
+            {uploadMode === 'csv' && (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h4 className="font-medium">Upload CSV Template</h4>
+                    <p className="text-sm text-slate-500">Use our template for manual data entry</p>
+                  </div>
+                  <CashFlowTemplateDownload />
+                </div>
+                <CashFlowUpload userId={userId} onUploadComplete={() => {}} />
+              </div>
+            )}
+            
+            {/* PDF Upload */}
+            {uploadMode === 'pdf' && (
+              <div className="space-y-4">
+                <div className="mb-4">
+                  <h4 className="font-medium">Upload Bank Statement</h4>
+                  <p className="text-sm text-slate-500">Automatically extract transactions from PDF statements</p>
+                </div>
+                <BankStatementUpload userId={userId} onUploadComplete={() => {}} />
+              </div>
+            )}
           </div>
+          
+          <CashFlowDashboard userId={userId} />
         </div>
       )}
 
