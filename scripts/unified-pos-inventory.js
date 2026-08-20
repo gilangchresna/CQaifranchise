@@ -305,15 +305,17 @@ async function sendWebhook(payload) {
 // ── Sale Generator ────────────────────────────────────────────────────────────
 function generateSale(outletId) {
   const transactionId = `TXN-${Date.now()}-${outletId}-${randomInt(100000, 999999)}`;
+  const now = new Date();
+  const hour = now.getHours();
+  const dayOfWeek = now.getDay();
   
   // Generate 1-5 items per transaction
   const itemCount = randomInt(1, 5);
   const items = [];
-  let total = 0;
+  let subtotal = 0;
   
   // Weight: beverages more common as add-ons
   for (let i = 0; i < itemCount; i++) {
-    // 70% beverages if > 1 item (add-on), else balanced
     let pool = PRODUCTS;
     if (i > 0 && items.length > 0) {
       const beverages = PRODUCTS.filter(p => p.category === 'Beverages');
@@ -321,48 +323,58 @@ function generateSale(outletId) {
     }
     
     const product = randomChoice(pool);
-    const qty = i === 0 ? 1 : randomInt(1, 2); // First item qty=1
-    const amount = parseFloat((product.sell * qty).toFixed(2));
+    const qty = i === 0 ? 1 : randomInt(1, 2);
+    const sellPrice = product.sell;
+    const costPrice = product.cost;
     
     items.push({
       sku: product.sku,
       name: product.name,
       quantity: qty,
-      unit_price: product.sell,
-      amount: amount
+      sell_price: sellPrice,
+      cost_price: costPrice,
+      amount: sellPrice * qty
     });
     
-    total += amount;
+    subtotal += sellPrice * qty;
   }
   
-  const timestamp = new Date().toISOString();
-  const hour = new Date(timestamp).getHours();
+  // Calculate totals
+  const discount = 0; // No discount for now
+  const tax = parseFloat((subtotal * 0.08).toFixed(2)); // GST 8%
+  const serviceCharge = parseFloat((subtotal * 0.10).toFixed(2)); // 10% SC
+  const grossAmount = subtotal + discount;
+  const totalAmount = parseFloat((grossAmount + tax + serviceCharge).toFixed(2));
+  const cost = parseFloat((items.reduce((sum, item) => sum + (item.cost_price * item.quantity), 0)).toFixed(2));
+  const netAmount = parseFloat((totalAmount - cost).toFixed(2));
   
-  // Payment methods weighted by time of day
-  let paymentMethods = ['cash', 'card', 'qr_code', 'ewallet'];
-  let paymentWeights = [25, 20, 40, 15];
-  
-  // Lunch/dinner = more card/qr
-  if ((hour >= 11 && hour <= 14) || (hour >= 18 && hour <= 21)) {
-    paymentWeights = [15, 25, 45, 15];
-  }
-  
-  const paymentMethod = randomChoice(
-    paymentMethods.filter((_, i) => paymentWeights[i] > 0)
-  );
+  // Platform fee (2.5% for delivery platforms)
+  const paymentMethod = randomChoice(['cash', 'card', 'qrcode', 'ewallet']);
+  const platform = paymentMethod === 'cash' || paymentMethod === 'card' 
+    ? 'dine_in' 
+    : randomChoice(['dine_in', 'takeaway', 'delivery']);
+  const platformFee = platform === 'delivery' ? parseFloat((totalAmount * 0.025).toFixed(2)) : 0;
+  const settlementAmount = parseFloat((totalAmount - platformFee).toFixed(2));
   
   return {
     outlet_id: outletId,
     transaction_id: transactionId,
-    items: items,
-    subtotal: parseFloat(total.toFixed(2)),
-    tax: parseFloat((total * 0.08).toFixed(2)), // GST 8%
-    service_charge: parseFloat((total * 0.1).toFixed(2)), // 10% SC
-    total: parseFloat((total * 1.18).toFixed(2)), // Inclusive GST+SC
+    date: now.toISOString().split('T')[0],
+    amount: totalAmount,
+    currency_code: 'SGD',
+    transaction_count: 1,
+    hour: hour,
+    day_of_week: dayOfWeek,
     payment_method: paymentMethod,
-    platform: randomChoice(['dine_in', 'takeaway', 'delivery']),
-    customer_count: randomInt(1, 4),
-    timestamp: timestamp
+    platform: platform,
+    discount: discount,
+    tax: tax,
+    cost: cost,
+    net_amount: netAmount,
+    platform_fee: platformFee,
+    settlement_amount: settlementAmount,
+    items: items, // For inventory deduction
+    timestamp: now.toISOString()
   };
 }
 
@@ -385,18 +397,19 @@ async function runSingleSale(outletId, dryRun = false) {
   console.log('─'.repeat(50));
   console.log(`Outlet: ${sale.outlet_id}`);
   console.log(`TXN: ${sale.transaction_id}`);
-  console.log(`Time: ${sale.timestamp}`);
+  console.log(`Date: ${sale.date} ${sale.hour}:00`);
   console.log('\nItems:');
   
   for (const item of sale.items) {
     console.log(`  • ${item.name} x${item.quantity} = S$${item.amount.toFixed(2)}`);
   }
   
-  console.log(`\nSubtotal: S$${sale.subtotal.toFixed(2)}`);
-  console.log(`GST (8%): S$${sale.tax.toFixed(2)}`);
+  console.log(`\nSubtotal: S$${(sale.amount - sale.tax - sale.service_charge + sale.discount).toFixed(2)}`);
+  console.log(`Tax (8%): S$${sale.tax.toFixed(2)}`);
   console.log(`Service (10%): S$${sale.service_charge.toFixed(2)}`);
-  console.log(`TOTAL: S$${sale.total.toFixed(2)}`);
+  console.log(`TOTAL: S$${sale.amount.toFixed(2)}`);
   console.log(`Payment: ${sale.payment_method}`);
+  console.log(`Platform: ${sale.platform}`);
   
   if (dryRun) {
     console.log('\n🔍 DRY RUN - Not sending to webhook');
@@ -421,7 +434,7 @@ async function runSingleSale(outletId, dryRun = false) {
     if (invResult) {
       console.log('\nInventory changes:');
       for (const d of invResult.deducted) {
-        console.log(`  ${d.sku}: ${d.stockBefore} → ${d.stockAfter} (-${d.qty})`);
+        console.log(`  ${d.name}: ${d.stockBefore} → ${d.stockAfter} (-${d.qty})`);
       }
       
       if (invResult.lowStock.length > 0) {
@@ -463,13 +476,13 @@ async function runSimulation(intervalSeconds = 10, count = 0) {
     
     const sale = generateSale(outletId);
     totalSales++;
-    totalRevenue += sale.total;
+    totalRevenue += sale.amount;
     
     // Console output
     const time = new Date().toLocaleTimeString();
     const icon = sale.items.length > 2 ? '🛒' : '💰';
     console.log(`${icon} [${time}] ${sale.transaction_id}`);
-    console.log(`   Outlet ${outletId} | ${sale.items.length} items | S$${sale.total.toFixed(2)} | ${sale.payment_method}`);
+    console.log(`   Outlet ${outletId} | ${sale.items.length} items | S$${sale.amount.toFixed(2)} | ${sale.payment_method}`);
     
     // Send to webhook
     const result = await sendWebhook(sale);
