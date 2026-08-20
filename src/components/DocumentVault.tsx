@@ -68,12 +68,22 @@ export function DocumentVault({ activeRole }: { activeRole?: Role }) {
     try {
       const { data, error } = await supabase
         .from('user_profiles')
-        .select('id, full_name, country')
+        .select('id, full_name, region_id')
         .eq('role', 'FRANCHISEE_OWNER')
         .order('full_name', { ascending: true });
       
       if (error) throw error;
-      setFranchisees(data || []);
+      
+      // Map region_id to country
+      const withCountry = (data || []).map((f: any) => {
+        const sgRegions = [1, 114];
+        const idRegions = [2, 115, 116, 117];
+        let country = 'SGP';
+        if (idRegions.includes(f.region_id)) country = 'IDN';
+        return { ...f, country };
+      });
+      
+      setFranchisees(withCountry);
     } catch (err) {
       console.error('Error fetching franchisees:', err);
     } finally {

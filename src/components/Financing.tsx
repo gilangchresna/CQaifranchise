@@ -165,19 +165,30 @@ export function Financing({ activeRole }: { activeRole: Role }) {
     }
   }
 
-  // Get user's country from profile
+  // Get user's country from region_id
   useEffect(() => {
     async function getUserCountry() {
       if (!userId) return;
       
       const { data: profile } = await supabase
         .from('user_profiles')
-        .select('country')
+        .select('region_id')
         .eq('id', userId)
         .single();
       
-      if (profile?.country) {
-        setUserCountry(profile.country === 'Indonesia' ? 'IDN' : 'SGP');
+      if (profile?.region_id) {
+        // Map region_id to country code
+        // 114 = Singapore, 115 = Indonesia, etc.
+        const sgRegions = [1, 114]; // Singapore
+        const idRegions = [2, 115, 116, 117]; // Indonesia
+        
+        if (sgRegions.includes(profile.region_id)) {
+          setUserCountry('SGP');
+        } else if (idRegions.includes(profile.region_id)) {
+          setUserCountry('IDN');
+        } else {
+          setUserCountry('SGP'); // Default to Singapore
+        }
       }
     }
     getUserCountry();
