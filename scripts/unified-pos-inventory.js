@@ -276,6 +276,7 @@ async function sendWebhook(payload) {
         'Content-Type': 'application/json',
         'Content-Length': Buffer.byteLength(body),
         'x-pos-signature': signature,
+        'x-pos-dev-bypass': 'dev-mode-2026', // Dev bypass for testing
         'apikey': SUPABASE_ANON_KEY
       }
     };
