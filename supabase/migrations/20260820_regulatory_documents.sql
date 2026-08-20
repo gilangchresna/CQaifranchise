@@ -2,6 +2,14 @@
 -- Purpose: Store regulatory filings uploaded by HQ for each franchisee
 -- Date: 2026-08-20
 
+-- Drop existing policies if they exist
+DROP POLICY IF EXISTS "HQ can upload regulatory documents" ON regulatory_documents;
+DROP POLICY IF EXISTS "HQ can view regulatory documents" ON regulatory_documents;
+DROP POLICY IF EXISTS "HQ can delete regulatory documents" ON regulatory_documents;
+DROP POLICY IF EXISTS "Franchisee can view own regulatory documents" ON regulatory_documents;
+DROP POLICY IF EXISTS "financial_docs_owner_policy" ON regulatory_documents;
+DROP POLICY IF EXISTS "financial_docs_view_policy" ON regulatory_documents;
+
 CREATE TABLE IF NOT EXISTS public.regulatory_documents (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   entity_id UUID NOT NULL REFERENCES public.user_profiles(id) ON DELETE CASCADE,
@@ -69,6 +77,9 @@ CREATE POLICY "Franchisee can view own regulatory documents" ON regulatory_docum
   USING (entity_id = auth.uid());
 
 -- Trigger for updated_at
+DROP TRIGGER IF EXISTS regulatory_documents_updated_at ON regulatory_documents;
+DROP FUNCTION IF EXISTS update_updated_at();
+
 CREATE OR REPLACE FUNCTION update_updated_at()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -76,8 +87,6 @@ BEGIN
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
-
-DROP TRIGGER IF EXISTS regulatory_documents_updated_at ON regulatory_documents;
 
 CREATE TRIGGER regulatory_documents_updated_at
   BEFORE UPDATE ON regulatory_documents
