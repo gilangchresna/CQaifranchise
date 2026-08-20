@@ -19,16 +19,22 @@
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0";
 
-// CORS: allow production domain + all localhost variants for development
+// CORS: allow production domains + all localhost variants for development
 function getCorsHeaders(req: Request): Record<string, string> {
   const origin = req.headers.get("Origin") || "";
-  const allowedOrigins = Deno.env.get("ALLOWED_ORIGINS") || "https://c-qaifranchise.vercel.app";
 
-  // Allow localhost for  development (any port)
+  // Allowed production domains
+  const allowedOrigins = Deno.env.get("ALLOWED_ORIGINS") || "https://c-qaifranchise.vercel.app,https://cqaifrc.cqit.sg";
+  const allowedList = allowedOrigins.split(',').map(s => s.trim());
+
+  // Allow localhost for development (any port)
   const isLocalhost = origin.match(/^http:\/\/localhost(:\d+)?$/);
+  const isAllowedOrigin = allowedList.some(allowed =>
+    origin === allowed || (allowed.endsWith('*') && origin.startsWith(allowed.slice(0, -1)))
+  );
 
   return {
-    "Access-Control-Allow-Origin": isLocalhost ? origin : allowedOrigins,
+    "Access-Control-Allow-Origin": (isLocalhost || isAllowedOrigin) ? origin : allowedList[0] || '*',
     "Access-Control-Allow-Methods": "POST, OPTIONS",
     "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-lender-webhook-secret",
     "Access-Control-Max-Age": "86400",
