@@ -352,10 +352,11 @@ function generateSale(outletId) {
   
   // Platform fee (2.5% for delivery platforms)
   const paymentMethod = randomChoice(['cash', 'card', 'qrcode', 'ewallet']);
+  // Valid platforms: dine_in, gofood, grabfood, shopeefood, pos
   const platform = paymentMethod === 'cash' || paymentMethod === 'card' 
     ? 'dine_in' 
-    : randomChoice(['dine_in', 'takeaway', 'delivery']);
-  const platformFee = platform === 'delivery' ? parseFloat((totalAmount * 0.025).toFixed(2)) : 0;
+    : randomChoice(['dine_in', 'gofood', 'grabfood', 'shopeefood']);
+  const platformFee = platform !== 'dine_in' ? parseFloat((totalAmount * 0.025).toFixed(2)) : 0;
   const settlementAmount = parseFloat((totalAmount - platformFee).toFixed(2));
   
   return {
