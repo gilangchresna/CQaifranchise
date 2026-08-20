@@ -2,11 +2,11 @@
 -- Purpose: Store regulatory filings uploaded by HQ for each franchisee
 -- Date: 2026-08-20
 
--- Step 1: Create the table
+-- Step 1: Create the table (without FK to auth.users)
 CREATE TABLE IF NOT EXISTS public.regulatory_documents (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  entity_id UUID NOT NULL REFERENCES public.user_profiles(id) ON DELETE CASCADE,
-  uploaded_by_id UUID NOT NULL REFERENCES public.auth.users(id),
+  entity_id UUID NOT NULL, -- FK to user_profiles.id (set via app logic)
+  uploaded_by_id UUID NOT NULL, -- FK to auth.users (set via app logic)
   country VARCHAR(3) NOT NULL, -- 'SGP' or 'IDN'
   document_type VARCHAR(50) NOT NULL,
   -- Singapore: 'SGP_ACRA_ANNUAL', 'SGP_ACRA_XBRL'
@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS public.regulatory_documents (
   period VARCHAR(10), -- 'Q1_2026', 'Q2_2026', etc.
   uploaded_at TIMESTAMPTZ DEFAULT NOW(),
   verified BOOLEAN DEFAULT FALSE,
-  verified_by UUID REFERENCES public.auth.users(id),
+  verified_by UUID,
   verified_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
