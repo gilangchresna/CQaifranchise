@@ -189,7 +189,8 @@ export function FilingLinksEdit({ userId, regionId, initialData, onSave }: Filin
 
       {/* Filing Links Form */}
       <div className="p-6 space-y-4">
-        {activeTab === 'sg' && FILING_PLATFORMS.sg.map(platform => (
+        {/* Show SG content if SG tab is available or if no tabs (default to SG) */}
+        {(showSGTab || !showBothTabs) && activeTab === 'sg' && FILING_PLATFORMS.sg.map(platform => (
           <div key={platform.key} className="space-y-2">
             <div className="flex items-center justify-between">
               <label className="text-sm font-medium text-slate-700">
@@ -215,7 +216,8 @@ export function FilingLinksEdit({ userId, regionId, initialData, onSave }: Filin
           </div>
         ))}
 
-        {activeTab === 'id' && FILING_PLATFORMS.id.map(platform => (
+        {/* Show ID content if ID tab is available */}
+        {showIDTab && activeTab === 'id' && FILING_PLATFORMS.id.map(platform => (
           <div key={platform.key} className="space-y-2">
             <div className="flex items-center justify-between">
               <label className="text-sm font-medium text-slate-700">
