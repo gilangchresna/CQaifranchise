@@ -362,6 +362,7 @@ function generateSale(outletId) {
     transaction_id: transactionId,
     date: now.toISOString().split('T')[0],
     amount: totalAmount,
+    subtotal: subtotal,
     currency_code: 'SGD',
     transaction_count: 1,
     hour: hour,
@@ -372,6 +373,7 @@ function generateSale(outletId) {
     tax: tax,
     cost: cost,
     net_amount: netAmount,
+    serviceCharge: serviceCharge,
     platform_fee: platformFee,
     settlement_amount: settlementAmount,
     items: items, // For inventory deduction
@@ -405,10 +407,10 @@ async function runSingleSale(outletId, dryRun = false) {
     console.log(`  • ${item.name} x${item.quantity} = S$${item.amount.toFixed(2)}`);
   }
   
-  console.log(`\nSubtotal: S$${(sale.amount - sale.tax - sale.serviceCharge + sale.discount).toFixed(2)}`);
-  console.log(`Tax (8%): S$${sale.tax.toFixed(2)}`);
-  console.log(`Service (10%): S$${sale.serviceCharge.toFixed(2)}`);
-  console.log(`TOTAL: S$${sale.amount.toFixed(2)}`);
+  console.log(`\nSubtotal (calculated): S$${sale.subtotal}`);
+  console.log(`Tax (8%): S$${sale.tax}`);
+  console.log(`Service (10%): S$${sale.serviceCharge}`);
+  console.log(`TOTAL: S$${sale.amount}`);
   console.log(`Payment: ${sale.payment_method}`);
   console.log(`Platform: ${sale.platform}`);
   
