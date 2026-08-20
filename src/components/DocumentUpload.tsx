@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Upload, File, Download, AlertCircle } from 'lucide-react';
+import { Upload, File, Download, AlertCircle, Trash2 } from 'lucide-react';
 import { supabase } from '@/src/lib/supabase';
 
 interface Document {
@@ -144,6 +144,40 @@ export function DocumentUpload({ applicationId, onUploadComplete, readOnly = fal
     }
   }
 
+  async function handleDelete(doc: Document) {
+    if (!confirm(`Delete "${doc.title}"? This cannot be undone.`)) {
+      return;
+    }
+
+    setError(null);
+
+    try {
+      // Delete from storage
+      const { error: storageError } = await supabase.storage
+        .from('franchise-documents')
+        .remove([doc.storage_path]);
+
+      if (storageError) {
+        console.error('Storage delete error:', storageError);
+        // Continue to delete from DB even if storage fails
+      }
+
+      // Delete from database
+      const { error: dbError } = await supabase
+        .from('documents')
+        .delete()
+        .eq('id', doc.id);
+
+      if (dbError) throw dbError;
+
+      // Refresh documents list
+      await fetchDocuments();
+      onUploadComplete?.(null);
+    } catch (err: any) {
+      setError('Delete failed: ' + (err.message || 'Unknown error'));
+    }
+  }
+
   function formatSize(bytes: number): string {
     if (bytes < 1024) return `${bytes} B`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -249,13 +283,24 @@ export function DocumentUpload({ applicationId, onUploadComplete, readOnly = fal
                   </p>
                 </div>
               </div>
-              <button
-                onClick={() => handleDownload(doc)}
-                className="p-2 hover:bg-slate-200 rounded transition-colors flex-shrink-0"
-                title="Download"
-              >
-                <Download className="w-4 h-4 text-slate-600" />
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => handleDownload(doc)}
+                  className="p-2 hover:bg-slate-200 rounded transition-colors flex-shrink-0"
+                  title="Download"
+                >
+                  <Download className="w-4 h-4 text-slate-600" />
+                </button>
+                {!readOnly && (
+                  <button
+                    onClick={() => handleDelete(doc)}
+                    className="p-2 hover:bg-red-50 rounded transition-colors flex-shrink-0"
+                    title="Delete"
+                  >
+                    <Trash2 className="w-4 h-4 text-red-500" />
+                  </button>
+                )}
+              </div>
             </div>
           ))}
         </div>
