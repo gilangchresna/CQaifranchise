@@ -63,13 +63,13 @@ if ENV_FILE.exists():
 WEBHOOK_URL = f"{SUPABASE_URL}/functions/v1/pos-webhook" if SUPABASE_URL else ""
 
 # ── Realistic Simulation Config ──────────────────────────────────
-# Outlet IDs per region (from seeded database)
-SG_OUTLETS  = [1, 2, 3, 164, 165, 166, 167, 168, 169, 170, 171, 200, 201, 202]  # FIX Aug14: real DB IDs  # Singapore: 156-163, WKW/MYB/SAP
-JKT_OUTLETS = [4, 11, 12, 22, 24, 203, 204, 205]  # FIX Aug14: real DB IDs   # Jakarta: JKT-004 + JKT-001..005
-BDG_OUTLETS = [5, 206, 207]  # FIX Aug14: real DB IDs                           # Bandung
-SBY_OUTLETS = [6, 208, 209]  # FIX Aug14                           # Surabaya
-BKK_OUTLETS = [7, 212, 213]  # FIX Aug14                           # Bangkok
-KUL_OUTLETS = [8, 210, 211]  # FIX Aug14                           # Kuala Lumpur
+# SG Outlets (region_id = 114)
+SG_OUTLETS  = [164, 165, 167, 168, 169, 170, 171, 200, 201, 202]  # 10 SG outlets
+JKT_OUTLETS = [4, 11, 12, 22, 24, 203, 204, 205]  # Jakarta
+BDG_OUTLETS = [5, 206, 207]  # Bandung
+SBY_OUTLETS = [6, 208, 209]  # Surabaya
+BKK_OUTLETS = [7, 212, 213]  # Bangkok
+KUL_OUTLETS = [8, 210, 211]  # Kuala Lumpur
 ALL_OUTLETS = SG_OUTLETS + JKT_OUTLETS + BDG_OUTLETS + SBY_OUTLETS + BKK_OUTLETS + KUL_OUTLETS
 PREMIUM_OUTLETS = SG_OUTLETS  # Singapore = premium pricing tier
 
@@ -503,8 +503,10 @@ def main():
                     help="HMAC secret (production mode)")
     p.add_argument("--dev",      action="store_true",
                     help="Use dev bypass (skip HMAC). No --secret needed.")
-    p.add_argument("--outlet",   type=int, default=1,
-                    help="Outlet ID. Default: 1")
+    p.add_argument("--outlet",   type=int, default=None,
+                    help="Outlet ID. Default: random SG outlet")
+    p.add_argument("--region",   type=str, default="SG",
+                    help="Region to simulate. Default: SG (all 10 SG outlets)")
     p.add_argument("--platform", default="dine_in", choices=VALID_PLATFORMS,
                     help=f"Platform. Default: dine_in")
     p.add_argument("--interval", type=int, default=5,
@@ -577,6 +579,15 @@ def main():
         print("  python3 pos-simulator.py --dev --count 1 --outlet 1")
         sys.exit(1)
 
+    # ── Select outlet based on args ──
+    if args.outlet:
+        target_outlet = args.outlet
+        print(f"Target outlet: {args.outlet}")
+    else:
+        # Use SG outlets by default
+        target_outlet = random.choice(SG_OUTLETS)
+        print(f"Random SG outlet: {target_outlet}")
+
     mode = "DEV BYPASS" if dev_mode else "PRODUCTION HMAC"
     loop = args.count == 0
 
@@ -585,10 +596,11 @@ def main():
 ║           🚀  CQaiFranchise POS SIMULATOR               ║
 ╠══════════════════════════════════════════════════════════╣
 ║  Webhook : {SUPABASE_URL}/functions/v1/pos-webhook
-║  Outlet  : {args.outlet}
+║  Region  : {args.region} (10 SG outlets)
+║  Outlet  : {target_outlet}
 ║  Platform: {args.platform}
 ║  Mode    : {mode}
-║  Interval: {args.interval}s{'':19}║
+║  Interval: {args.interval}s
 ║  Count   : {'∞ (loop)' if loop else args.count}
 ╚══════════════════════════════════════════════════════════╝
   Ctrl+C to stop
@@ -600,7 +612,7 @@ def main():
 
     while True:
         count += 1
-        payload = build_txn(args.outlet, args.platform)
+        payload = build_txn(target_outlet, args.platform)
 
         if args.dry_run:
             print(f"[{datetime.now().strftime('%H:%M:%S')}] DRY RUN #{count}")

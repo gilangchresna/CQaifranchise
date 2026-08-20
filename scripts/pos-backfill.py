@@ -34,7 +34,8 @@ with open(ENV_FILE) as f:
 
 # ── Outlets ────────────────────────────────────────────────────────────────────
 # All outlets that appear in existing transactions + any that need seeding
-OUTLET_IDS = [1, 2, 3, 4, 5, 6, 7, 8, 11, 12, 22, 24, 164]
+# SG Outlets (region_id = 114)
+OUTLET_IDS = [164, 165, 167, 168, 169, 170, 171, 200, 201, 202]
 
 # Each outlet has a base daily revenue (in IDR × 1000 for precision in $5–$50 range)
 # We'll generate amounts in IDR then store as decimal string

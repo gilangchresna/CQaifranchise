@@ -22,8 +22,8 @@ const CONFIG = {
   anonKey: process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY,
 };
 
-// 24 Outlet IDs that exist in DB
-const OUTLET_IDS = [37, 36, 41, 9, 33, 35, 25, 27, 26, 23, 22, 24, 28, 30, 29, 39, 11, 40, 10, 34, 38, 12, 8, 32];
+// SG Outlets (region_id = 114)
+const OUTLET_IDS = [164, 165, 167, 168, 169, 170, 171, 200, 201, 202];
 
 // Product catalog (SKU -> name, category, unit)
 const PRODUCTS = [

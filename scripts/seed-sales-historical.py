@@ -32,13 +32,13 @@ REGION_PROFILES = {
     "KUL": {"count_range": (35, 65),   "amount_range": (25, 180),      "currency": "MYR"},
     "BKK": {"count_range": (30, 55),   "amount_range": (180, 900),     "currency": "THB"},
 }
+# SG Outlets (region_id = 114)
 OUTLET_IDS = {
-    "SG-001":  1, "SG-002":  2, "SG-003":  3,
-    "JKT-001": 4, "JKT-002": 5, "JKT-003": 6,
-    "BDG-001": 7, "BDG-002": 8,
-    "SBY-001": 9, "SBY-002": 10,
-    "KUL-001": 11, "KUL-002": 12,
-    "BKK-001": 13, "BKK-002": 14,
+    "KT-TMP-001": 164, "CR-JGP-001": 165,
+    "LK-PLB-001": 167, "KT-CMT-001": 168,
+    "MT-WDL-001": 169, "RP-HGM-001": 170,
+    "ER-BSN-001": 171,
+    "SG-001": 200, "SG-002": 201, "SG-003": 202,
 }
 PLATFORMS   = ["dine_in", "takeaway", "delivery", "qris"]
 PAYMENT_METHODS = ["cash", "card", "qr_code", "ewallet"]
