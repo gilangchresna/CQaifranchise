@@ -18,6 +18,7 @@ import {
   Calendar,
   FileText,
   Wallet,
+  FileSpreadsheet,
 } from 'lucide-react';
 import { Role } from '@/src/types';
 import { supabase, EDGE_FUNCTIONS_URL } from '@/src/lib/supabase';
@@ -27,6 +28,7 @@ import { CashFlowUpload } from './CashFlowUpload';
 import { CashFlowDashboard } from './CashFlowDashboard';
 import { CashFlowTemplateDownload } from './CashFlowTemplateDownload';
 import { BankStatementUpload } from './BankStatementUpload';
+import { FinancialStatementUpload } from './FinancialStatementUpload';
 
 // Mirrors public.financing_application_status in
 // supabase/migrations/20260805000000_financing_and_reporting.sql
@@ -34,7 +36,7 @@ type FinancingStatus =
   | 'DRAFT' | 'SUBMITTED' | 'UNDER_REVIEW' | 'APPROVED' | 'DECLINED'
   | 'DISBURSED' | 'REPAYING' | 'CLOSED' | 'CANCELLED';
 
-type TabType = 'applications' | 'repayments' | 'risk' | 'documents' | 'cashflow';
+type TabType = 'applications' | 'repayments' | 'risk' | 'documents' | 'cashflow' | 'financial';
 
 interface FinancingApplication {
   id: string;
@@ -292,6 +294,7 @@ export function Financing({ activeRole }: { activeRole: Role }) {
     { id: 'risk' as const, label: 'Risk Scores', icon: Shield },
     { id: 'documents' as const, label: 'Document Vault', icon: FileText },
     { id: 'cashflow' as const, label: 'Cash Flow', icon: Wallet },
+    { id: 'financial' as const, label: 'Financial Docs', icon: FileSpreadsheet },
   ];
 
   return (
@@ -650,6 +653,22 @@ export function Financing({ activeRole }: { activeRole: Role }) {
           </div>
           
           <CashFlowDashboard userId={userId} />
+        </div>
+      )}
+
+      {/* Financial Docs Tab */}
+      {activeTab === 'financial' && (
+        <div className="space-y-6">
+          <div>
+            <h3 className="text-lg font-semibold text-slate-900">Financial Documents</h3>
+            <p className="text-sm text-slate-500 mt-1">
+              Upload and manage financial statements for credit assessment.
+            </p>
+          </div>
+          
+          <div className="bg-white rounded-xl border p-6">
+            <FinancialStatementUpload userId={userId} onUploadComplete={() => {}} />
+          </div>
         </div>
       )}
 
