@@ -25,6 +25,27 @@ import crypto from 'crypto';
 import { createClient } from '@supabase/supabase-js';
 
 // ── Configuration ────────────────────────────────────────────────────────────────
+import { readFileSync } from 'fs';
+import { resolve, dirname } from 'path';
+import { fileURLToPath } from 'url';
+
+// Load .env.local
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const envFile = resolve(__dirname, '../.env.local');
+try {
+  const envContent = readFileSync(envFile, 'utf-8');
+  for (const line of envContent.split('\n')) {
+    const trimmed = line.trim();
+    if (trimmed && !trimmed.startsWith('#') && trimmed.includes('=')) {
+      const [key, ...valueParts] = trimmed.split('=');
+      const value = valueParts.join('=').trim();
+      if (!process.env[key]) process.env[key] = value;
+    }
+  }
+} catch (e) {
+  // .env.local not found, use env vars
+}
+
 const SUPABASE_URL = process.env.SUPABASE_URL || 'https://ploqeifazcgzwjzmukgp.supabase.co';
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
 const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
