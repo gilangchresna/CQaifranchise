@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { DocumentUpload } from './DocumentUpload';
 
 /**
@@ -6,6 +6,18 @@ import { DocumentUpload } from './DocumentUpload';
  * Wraps DocumentUpload with enhanced vault experience
  */
 export function DocumentVault() {
+  const [userId, setUserId] = useState<string | null>(null);
+
+  // Get current user ID
+  useEffect(() => {
+    async function getUser() {
+      const { data: { session } } = await import('@/src/lib/supabase').then(m => m.supabase.auth.getSession());
+      if (session?.user?.id) {
+        setUserId(session.user.id);
+      }
+    }
+    getUser();
+  }, []);
   return (
     <div className="space-y-6">
       <div>
@@ -38,7 +50,7 @@ export function DocumentVault() {
 
       {/* Upload Component */}
       <div className="bg-white rounded-xl border border-slate-200 p-6">
-        <DocumentUpload />
+        <DocumentUpload userId={userId} />
       </div>
 
       {/* Info */}
