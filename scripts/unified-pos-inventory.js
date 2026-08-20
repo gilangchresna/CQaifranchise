@@ -231,7 +231,7 @@ async function updateInventory(outletId, items) {
       continue;
     }
     
-    const newStock = Math.max(0, current.current_stock - item.qty);
+    const newStock = Math.max(0, current.current_stock - item.quantity);
     
     // Update stock
     await supabase
@@ -246,7 +246,7 @@ async function updateInventory(outletId, items) {
     results.deducted.push({
       sku: item.sku,
       name: current.product_name,
-      qty: item.qty,
+      qty: item.quantity,
       stockBefore: current.current_stock,
       stockAfter: newStock
     });
