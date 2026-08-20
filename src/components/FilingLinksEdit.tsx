@@ -59,7 +59,16 @@ export function FilingLinksEdit({ userId, regionId, initialData, onSave }: Filin
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [activeTab, setActiveTab] = useState<'sg' | 'id'>(getInitialTab());
+  const [activeTab, setActiveTab] = useState<'sg' | 'id'>(() => {
+    if (regionId === 114) return 'sg';
+    if (regionId && [115, 116, 117].includes(regionId)) return 'id';
+    return 'sg';
+  });
+
+  // Determine which tabs to show based on region
+  const showSGTab = !regionId || regionId === 114 || regionId === 1;
+  const showIDTab = regionId && [115, 116, 117, 2].includes(regionId);
+  const showBothTabs = !regionId || (showSGTab && showIDTab);
 
   async function handleSave() {
     setSaving(true);
@@ -148,8 +157,10 @@ export function FilingLinksEdit({ userId, regionId, initialData, onSave }: Filin
         </div>
       </div>
 
-      {/* Country Tabs */}
+      {/* Country Tabs - only show relevant tabs based on region */}
+      {showBothTabs && (
       <div className="flex border-b border-slate-200">
+        {showSGTab && (
         <button
           onClick={() => setActiveTab('sg')}
           className={`px-6 py-3 font-medium text-sm border-b-2 transition-colors ${
@@ -160,6 +171,8 @@ export function FilingLinksEdit({ userId, regionId, initialData, onSave }: Filin
         >
           🇸🇬 Singapore
         </button>
+        )}
+        {showIDTab && (
         <button
           onClick={() => setActiveTab('id')}
           className={`px-6 py-3 font-medium text-sm border-b-2 transition-colors ${
@@ -170,7 +183,9 @@ export function FilingLinksEdit({ userId, regionId, initialData, onSave }: Filin
         >
           🇮🇩 Indonesia
         </button>
+        )}
       </div>
+      )}
 
       {/* Filing Links Form */}
       <div className="p-6 space-y-4">
