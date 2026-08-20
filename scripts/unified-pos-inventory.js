@@ -405,9 +405,9 @@ async function runSingleSale(outletId, dryRun = false) {
     console.log(`  • ${item.name} x${item.quantity} = S$${item.amount.toFixed(2)}`);
   }
   
-  console.log(`\nSubtotal: S$${(sale.amount - sale.tax - sale.service_charge + sale.discount).toFixed(2)}`);
+  console.log(`\nSubtotal: S$${(sale.amount - sale.tax - sale.serviceCharge + sale.discount).toFixed(2)}`);
   console.log(`Tax (8%): S$${sale.tax.toFixed(2)}`);
-  console.log(`Service (10%): S$${sale.service_charge.toFixed(2)}`);
+  console.log(`Service (10%): S$${sale.serviceCharge.toFixed(2)}`);
   console.log(`TOTAL: S$${sale.amount.toFixed(2)}`);
   console.log(`Payment: ${sale.payment_method}`);
   console.log(`Platform: ${sale.platform}`);
