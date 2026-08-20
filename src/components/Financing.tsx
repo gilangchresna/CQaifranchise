@@ -5,6 +5,7 @@ import {
   Clock,
   CheckCircle2,
   XCircle,
+  X,
   Banknote,
   RefreshCw,
   AlertCircle,
@@ -114,6 +115,12 @@ export function Financing({ activeRole }: { activeRole: Role }) {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
+  // Doc check state for financing gate
+  const [checkDocsLoading, setCheckDocsLoading] = useState(false);
+  const [missingDocs, setMissingDocs] = useState<string[]>([]);
+  const [showDocBlockModal, setShowDocBlockModal] = useState(false);
+  const [userCountry, setUserCountry] = useState('SGP');
+
   const [purpose, setPurpose] = useState('FRANCHISEE_SETUP');
   const [amount, setAmount] = useState('');
   const [termMonths, setTermMonths] = useState('12');
@@ -121,6 +128,60 @@ export function Financing({ activeRole }: { activeRole: Role }) {
   // PDPA Consent hook — get userId and regionId from auth on mount
   const [userId, setUserId] = useState('');
   const [userRegionId, setUserRegionId] = useState<number | null>(null);
+
+  // Check required regulatory documents before applying
+  async function checkRequiredDocuments(entityId: string, country: string) {
+    setCheckDocsLoading(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) return true; // Allow through on error
+
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/check-required-docs`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({ entity_id: entityId, country }),
+        }
+      );
+
+      const result = await response.json();
+      
+      if (!result.valid && result.missing_docs?.length > 0) {
+        setMissingDocs(result.missing_docs);
+        setShowDocBlockModal(true);
+        return false;
+      }
+
+      return true;
+    } catch (error) {
+      console.error('Error checking docs:', error);
+      return true; // Allow through on error
+    } finally {
+      setCheckDocsLoading(false);
+    }
+  }
+
+  // Get user's country from profile
+  useEffect(() => {
+    async function getUserCountry() {
+      if (!userId) return;
+      
+      const { data: profile } = await supabase
+        .from('user_profiles')
+        .select('country')
+        .eq('id', userId)
+        .single();
+      
+      if (profile?.country) {
+        setUserCountry(profile.country === 'Indonesia' ? 'IDN' : 'SGP');
+      }
+    }
+    getUserCountry();
+  }, [userId]);
 
   useEffect(() => {
     supabase.auth.getSession().then(async ({ data }) => {
@@ -315,12 +376,26 @@ export function Financing({ activeRole }: { activeRole: Role }) {
                 // Dialog is now open. User interacts, ConsentDialog calls handleConsentGiven
                 // which records consent and opens the apply modal.
               } else {
-                setShowApplyModal(true);
+                // Check required docs first before opening apply modal
+                const hasDocs = await checkRequiredDocuments(userId, userCountry);
+                if (hasDocs) {
+                  setShowApplyModal(true);
+                }
               }
             }}
-            className="rounded-md px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium transition-all flex items-center gap-2 shadow-sm"
+            disabled={checkDocsLoading}
+            className="rounded-md px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-medium transition-all flex items-center gap-2 shadow-sm"
           >
-            <PlusCircle className="w-4 h-4" /> Apply for Bridge Loan
+            {checkDocsLoading ? (
+              <>
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                Checking...
+              </>
+            ) : (
+              <>
+                <PlusCircle className="w-4 h-4" /> Apply for Bridge Loan
+              </>
+            )}
           </button>
         )}
       </div>
@@ -741,6 +816,56 @@ export function Financing({ activeRole }: { activeRole: Role }) {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Document Block Modal */}
+      {showDocBlockModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full mx-4">
+            <div className="p-6">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
+                  <AlertCircle className="w-6 h-6 text-red-600" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-slate-900">Documents Required</h3>
+                  <p className="text-sm text-slate-500">Cannot proceed with application</p>
+                </div>
+              </div>
+              
+              <p className="text-slate-600 mb-4">
+                Your franchisor has not uploaded the required regulatory documents yet. 
+                Financing application is blocked until all required documents are submitted.
+              </p>
+
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
+                <h4 className="font-medium text-red-800 mb-2 flex items-center gap-2">
+                  <X className="w-4 h-4" />
+                  Missing Documents ({missingDocs.length})
+                </h4>
+                <ul className="space-y-1">
+                  {missingDocs.map((doc, i) => (
+                    <li key={i} className="text-sm text-red-700 flex items-center gap-2">
+                      <div className="w-1.5 h-1.5 bg-red-500 rounded-full"></div>
+                      {doc.replace(/_/g, ' ')}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              <p className="text-sm text-slate-500 mb-4">
+                Please contact your franchisor to upload these required documents before applying for financing.
+              </p>
+
+              <button
+                onClick={() => setShowDocBlockModal(false)}
+                className="w-full px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium rounded-lg transition-colors"
+              >
+                Close
+              </button>
+            </div>
           </div>
         </div>
       )}
