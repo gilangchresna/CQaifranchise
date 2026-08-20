@@ -5,6 +5,7 @@ import { supabase } from '@/src/lib/supabase';
 
 interface FilingLinksEditProps {
   userId: string;
+  regionId?: number;
   initialData?: {
     filing_links?: any;
     filing_status?: string;
@@ -33,7 +34,15 @@ const FILING_PLATFORMS = {
   ],
 };
 
-export function FilingLinksEdit({ userId, initialData, onSave }: FilingLinksEditProps) {
+export function FilingLinksEdit({ userId, regionId, initialData, onSave }: FilingLinksEditProps) {
+  // Auto-select tab based on region_id
+  // 114 = Singapore, 115-117 = Indonesia
+  const getInitialTab = (): 'sg' | 'id' => {
+    if (regionId === 114) return 'sg';
+    if (regionId && [115, 116, 117].includes(regionId)) return 'id';
+    return 'sg'; // default
+  };
+  
   const [links, setLinks] = useState<FilingLink>(() => {
     // Parse initial links from either flat structure or nested
     const initial = initialData?.filing_links || {};
@@ -50,7 +59,7 @@ export function FilingLinksEdit({ userId, initialData, onSave }: FilingLinksEdit
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [activeTab, setActiveTab] = useState<'sg' | 'id'>('sg');
+  const [activeTab, setActiveTab] = useState<'sg' | 'id'>(getInitialTab());
 
   async function handleSave() {
     setSaving(true);

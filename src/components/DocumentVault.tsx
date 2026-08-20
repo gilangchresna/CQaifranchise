@@ -180,6 +180,7 @@ export function DocumentVault({ activeRole }: { activeRole?: Role }) {
       {userId && profileData && (
         <FilingLinksEdit
           userId={userId}
+          regionId={profileData.region_id}
           initialData={profileData}
           onSave={() => {
             // Refresh profile
