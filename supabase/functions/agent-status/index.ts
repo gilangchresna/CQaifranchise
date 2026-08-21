@@ -55,24 +55,37 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    // Calculate 24 hours ago
-    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
-
-    // Get recent tasks (last 24 hours)
+    // Calculate 24 hours ago in UTC
+    // Edge Functions run on Deno Deploy (UTC)
+    const now = new Date();
+    const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    
+    // Get recent tasks (last 24 hours in UTC)
     const { data: recentTasks, error: tasksError } = await supabase
       .from('agent_tasks')
       .select('*')
-      .gte('created_at', twentyFourHoursAgo)
+      .gte('created_at', twentyFourHoursAgo.toISOString())
+      .order('created_at', { ascending: false });
 
-    if (tasksError) throw tasksError
+    if (tasksError) {
+      console.error('Tasks error:', tasksError);
+      throw tasksError;
+    }
 
     // Get latest metrics
     const { data: metrics, error: metricsError } = await supabase
       .from('agent_metrics')
       .select('*')
-      .gte('recorded_at', twentyFourHoursAgo)
+      .gte('recorded_at', twentyFourHoursAgo.toISOString())
+      .order('recorded_at', { ascending: false });
 
-    if (metricsError) throw metricsError
+    if (metricsError) {
+      console.error('Metrics error:', metricsError);
+      throw metricsError;
+    }
+    
+    console.log(`Found ${recentTasks?.length || 0} tasks in last 24 hours`);
+    console.log(`Found ${metrics?.length || 0} metrics in last 24 hours`);
 
     // Define all agents
     const agentDefinitions = [
@@ -119,13 +132,20 @@ Deno.serve(async (req: Request) => {
     })
 
     // Summary stats
+    // Note: Use recentTasks count directly, not agentStatuses which might have issues
+    const totalTasksInWindow = (recentTasks || []).length;
+    const totalCompleted = (recentTasks || []).filter(t => t.status === 'completed').length;
+    const totalFailed = (recentTasks || []).filter(t => t.status === 'failed').length;
+    
     const summary = {
-      total_tasks_today: (recentTasks || []).length,
-      total_completed: agentStatuses.reduce((sum, a) => sum + a.tasks_completed, 0),
-      total_failed: agentStatuses.reduce((sum, a) => sum + a.tasks_failed, 0),
-      avg_uptime: agentStatuses.reduce((sum, a) => sum + a.uptime_percent, 0) / agentStatuses.length,
+      total_tasks_today: totalTasksInWindow,
+      total_completed: totalCompleted,
+      total_failed: totalFailed,
+      avg_uptime: agentStatuses.length > 0 
+        ? agentStatuses.reduce((sum, a) => sum + a.uptime_percent, 0) / agentStatuses.length 
+        : 100,
       coordinator_up: agentStatuses.find(a => a.agent_id === 'coordinator')?.status !== 'offline'
-    }
+    };
 
     return new Response(JSON.stringify({
       success: true,
