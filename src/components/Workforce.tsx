@@ -1,605 +1,481 @@
-import React, { useState, useEffect } from "react";
-import { Users, UserCheck, UserMinus, Clock, ArrowLeft, Sparkles, RefreshCw, MessageSquare, Phone, Building2, Calendar, TrendingUp, AlertTriangle } from "lucide-react";
-import { Role } from "@/src/types";
+"use client";
+import React, { useState, useEffect, useMemo } from "react";
+import { Users, AlertTriangle, TrendingUp, Building2, RefreshCw, ChevronDown, Search } from "lucide-react";
 import { supabase } from "@/src/lib/supabase";
 
-const EDGE_FUNCTIONS_URL = 'https://ploqeifazcgzwjzmukgp.supabase.co/functions/v1';
-
-interface Staff {
-  id: number;
-  employee_id?: string;
-  name: string;
-  role: string;
+interface OutletStaffing {
   outlet_id: number;
-  status: 'present' | 'absent' | 'late';
-  shift_start: string;
-  shift_end: string;
-  contact: string;
-  hire_date?: string;
-  performance_score?: number;
-  sales_handled?: number;
-  attendance_rate?: number;
-  outlet?: {
-    id: number;
-    name: string;
-    code: string;
-    region?: {
-      name: string;
-    };
-  };
+  outlet_name: string;
+  total_staff: number;
+  managers: number;
+  cashiers: number;
+  cooks: number;
+  other: number;
+  revenue_7d: number;
+  revenue_30d: number;
+  revenue_per_staff: number;
+  risk_score: number;
+  anomaly_score: number;
 }
 
-interface StaffInsight {
-  summary: string;
-  performance_analysis: string;
-  recommendations: string[];
-  alerts: string[];
+interface RegionalStats {
+  total_outlets: number;
+  total_staff: number;
+  avg_staff_per_outlet: number;
+  total_weekly_revenue: number;
+  avg_revenue_per_staff: number;
+  understaffed_outlets: number;
 }
 
-export function Workforce({ activeRole }: { activeRole: Role }) {
-  const [staff, setStaff] = useState<Staff[]>([]);
+const STAFFING_THRESHOLD = 5; // Alert if < 5 staff
+
+export function Workforce({ activeRole }: { activeRole: any }) {
+  const [outletStaffing, setOutletStaffing] = useState<OutletStaffing[]>([]);
+  const [regionalStats, setRegionalStats] = useState<RegionalStats | null>(null);
   const [loading, setLoading] = useState(true);
-  const [selectedStaff, setSelectedStaff] = useState<Staff | null>(null);
-  const [isAskingAI, setIsAskingAI] = useState(false);
-  const [staffInsight, setStaffInsight] = useState<StaffInsight | null>(null);
-  const [filterStatus, setFilterStatus] = useState<string>('all');
-  const [filterRole, setFilterRole] = useState<string>('all');
+  const [error, setError] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [sortBy, setSortBy] = useState<"name" | "staff" | "revenue">("revenue");
+  const [expandedOutlet, setExpandedOutlet] = useState<number | null>(null);
 
   useEffect(() => {
-    fetchStaff();
+    fetchOutletStaffing();
   }, []);
 
-  async function fetchStaff() {
+  async function fetchOutletStaffing() {
     setLoading(true);
+    setError(null);
     try {
-      // Fetch staff with outlet info
-      const { data, error } = await supabase
-        .from('staff')
+      // Fetch staffing per outlet
+      const { data: staffingData, error: staffingError } = await supabase
+        .from('outlets')
         .select(`
-          *,
-          outlet:outlets(id, name, code, region:regions(name))
+          id,
+          name,
+          staff:staff(
+            id,
+            role
+          )
         `)
-        .order('name');
+        .eq('region_id', 114);
 
-      if (error) throw error;
+      if (staffingError) throw staffingError;
 
-      // Flatten employee data
-      const staffWithEmployee = (data || []).map((s: any) => ({
-        ...s,
-        performance_score: s.performance_score || 75,
-        attendance_rate: s.attendance_rate || 95,
-      }));
+      // Fetch outlet features (sales data)
+      const { data: featuresData, error: featuresError } = await supabase
+        .from('outlet_features')
+        .select(`
+          outlet_id,
+          revenue_7d_avg,
+          revenue_30d_avg,
+          staff_productivity,
+          risk_score,
+          anomaly_score
+        `)
+        .gt('revenue_7d_avg', 0);
 
-      setStaff(staffWithEmployee);
-    } catch (err) {
-      console.error('Error fetching staff:', err);
-      // Show empty state - staff table may be empty
-      setStaff([]);
+      if (featuresError) console.warn('Features error:', featuresError);
+
+      // Process and combine data
+      const featuresMap = new Map(
+        (featuresData || []).map(f => [f.outlet_id, f])
+      );
+
+      const processedData: OutletStaffing[] = (staffingData || [])
+        .map((outlet: any) => {
+          const staff = outlet.staff || [];
+          const features = featuresMap.get(outlet.id) || {};
+          
+          const managers = staff.filter((s: any) => 
+            s.role?.toLowerCase().includes('manager')
+          ).length;
+          const cashiers = staff.filter((s: any) => 
+            s.role?.toLowerCase().includes('cashier')
+          ).length;
+          const cooks = staff.filter((s: any) => 
+            s.role?.toLowerCase().includes('cook')
+          ).length;
+          const other = staff.length - managers - cashiers - cooks;
+
+          const totalStaff = staff.length;
+          const revenue7d = parseFloat(features.revenue_7d_avg) || 0;
+          const revenuePerStaff = totalStaff > 0 ? revenue7d / totalStaff : 0;
+
+          return {
+            outlet_id: outlet.id,
+            outlet_name: outlet.name,
+            total_staff: totalStaff,
+            managers,
+            cashiers,
+            cooks,
+            other,
+            revenue_7d: revenue7d,
+            revenue_30d: parseFloat(features.revenue_30d_avg) || 0,
+            revenue_per_staff: revenuePerStaff,
+            risk_score: parseFloat(features.risk_score) || 0,
+            anomaly_score: parseFloat(features.anomaly_score) || 0,
+          };
+        })
+        .filter((o: OutletStaffing) => o.total_staff > 0 || o.revenue_7d > 0)
+        .sort((a: OutletStaffing, b: OutletStaffing) => b.revenue_7d - a.revenue_7d);
+
+      setOutletStaffing(processedData);
+
+      // Calculate regional stats
+      const totalStaff = processedData.reduce((sum, o) => sum + o.total_staff, 0);
+      const totalRevenue = processedData.reduce((sum, o) => sum + o.revenue_7d, 0);
+      const understaffed = processedData.filter(o => o.total_staff < STAFFING_THRESHOLD).length;
+
+      setRegionalStats({
+        total_outlets: processedData.length,
+        total_staff: totalStaff,
+        avg_staff_per_outlet: processedData.length > 0 ? totalStaff / processedData.length : 0,
+        total_weekly_revenue: totalRevenue,
+        avg_revenue_per_staff: totalStaff > 0 ? totalRevenue / totalStaff : 0,
+        understaffed_outlets: understaffed,
+      });
+    } catch (err: any) {
+      console.error('Error fetching staffing:', err);
+      setError(err.message);
     } finally {
       setLoading(false);
     }
   }
 
-  // Get unique roles for filter
-  const uniqueRoles = [...new Set(staff.map(s => s.role))];
+  // Filter and sort
+  const filteredOutlets = useMemo(() => {
+    let filtered = outletStaffing.filter(o =>
+      o.outlet_name.toLowerCase().includes(searchTerm.toLowerCase())
+    );
 
-  // Filter staff
-  const filteredStaff = staff.filter((s) => {
-    const matchesStatus = filterStatus === 'all' || s.status === filterStatus;
-    const matchesRole = filterRole === 'all' || s.role === filterRole;
-    return matchesStatus && matchesRole;
-  });
-
-  // Calculate stats
-  const totalStaff = filteredStaff.length;
-  const presentCount = filteredStaff.filter(s => s.status === 'present').length;
-  const absentCount = filteredStaff.filter(s => s.status === 'absent').length;
-  const lateCount = filteredStaff.filter(s => s.status === 'late').length;
-  const coverageRate = totalStaff > 0 ? Math.round((presentCount / totalStaff) * 100) : 0;
-  const avgPerformance = totalStaff > 0 ? Math.round(filteredStaff.reduce((acc, s) => acc + (s.performance_score || 0), 0) / totalStaff) : 0;
-
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'present': return <UserCheck className="w-3 h-3" />;
-      case 'absent': return <UserMinus className="w-3 h-3" />;
-      case 'late': return <Clock className="w-3 h-3" />;
-      default: return null;
+    switch (sortBy) {
+      case "name":
+        filtered.sort((a, b) => a.outlet_name.localeCompare(b.outlet_name));
+        break;
+      case "staff":
+        filtered.sort((a, b) => b.total_staff - a.total_staff);
+        break;
+      case "revenue":
+      default:
+        filtered.sort((a, b) => b.revenue_7d - a.revenue_7d);
     }
-  };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'present': return 'bg-green-50 border-green-200 text-green-700';
-      case 'absent': return 'bg-red-50 border-red-200 text-red-700';
-      case 'late': return 'bg-orange-50 border-orange-200 text-orange-700';
-      default: return 'bg-slate-50 border-slate-200 text-slate-700';
-    }
-  };
+    return filtered;
+  }, [outletStaffing, searchTerm, sortBy]);
 
-  const getPerformanceColor = (score: number) => {
-    if (score >= 85) return 'text-green-600';
-    if (score >= 70) return 'text-yellow-600';
-    return 'text-red-600';
-  };
+  // Get understaffed outlets
+  const understaffedOutlets = useMemo(() => 
+    outletStaffing.filter(o => o.total_staff < STAFFING_THRESHOLD),
+    [outletStaffing]
+  );
 
-  // Staff Detail View
-  if (selectedStaff) {
+  // Get top/bottom performers
+  const topPerformer = useMemo(() => 
+    outletStaffing.length > 0 
+      ? outletStaffing.reduce((best, o) => 
+          o.revenue_per_staff > best.revenue_per_staff ? o : best
+        )
+      : null,
+    [outletStaffing]
+  );
+
+  const lowestPerformer = useMemo(() => 
+    outletStaffing.length > 0 
+      ? outletStaffing.reduce((worst, o) => 
+          o.revenue_per_staff < worst.revenue_per_staff ? o : worst
+        )
+      : null,
+    [outletStaffing]
+  );
+
+  if (loading) {
     return (
-      <StaffDetailView 
-        staff={selectedStaff} 
-        onBack={() => { setSelectedStaff(null); setStaffInsight(null); }}
-        isAskingAI={isAskingAI}
-        setIsAskingAI={setIsAskingAI}
-        staffInsight={staffInsight}
-        setStaffInsight={setStaffInsight}
-      />
+      <div className="flex items-center justify-center h-64">
+        <RefreshCw className="w-6 h-6 animate-spin text-slate-400" />
+      </div>
     );
   }
 
-  // Main Staff List View
-  if (loading) {
+  if (error) {
     return (
-      <div className="min-h-[400px] flex items-center justify-center">
-        <div className="animate-spin rounded-full h-10 w-10 border-3 border-blue-600 border-t-transparent"></div>
+      <div className="text-center py-8 text-red-500">
+        <p className="text-sm">{error}</p>
+        <button onClick={fetchOutletStaffing} className="mt-2 text-sm text-blue-600 hover:underline">
+          Retry
+        </button>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
+    <div className="p-6 space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
-          <Users className="w-5 h-5" /> Workforce Management
-        </h2>
-        <span className="text-sm text-slate-500">{totalStaff} employees</span>
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">Workforce Management</h1>
+          <p className="text-sm text-slate-500">Real-time staffing & performance metrics</p>
+        </div>
+        <button
+          onClick={fetchOutletStaffing}
+          className="flex items-center gap-2 px-3 py-2 text-sm bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
+        >
+          <RefreshCw className="w-4 h-4" />
+          Refresh
+        </button>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-lg bg-blue-50 flex items-center justify-center">
-              <Users className="h-5 w-5 text-blue-600" />
+      {/* Regional Stats Cards */}
+      {regionalStats && (
+        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
+          <StatCard
+            icon={<Users className="w-5 h-5" />}
+            label="Total Staff"
+            value={regionalStats.total_staff.toString()}
+            sublabel={`${regionalStats.total_outlets} outlets`}
+            color="blue"
+          />
+          <StatCard
+            icon={<Building2 className="w-5 h-5" />}
+            label="Avg Staff/Outlet"
+            value={regionalStats.avg_staff_per_outlet.toFixed(1)}
+            sublabel="per outlet"
+            color="purple"
+          />
+          <StatCard
+            icon={<TrendingUp className="w-5 h-5" />}
+            label="Weekly Revenue"
+            value={`$${(regionalStats.total_weekly_revenue / 1000).toFixed(1)}K`}
+            sublabel="total"
+            color="green"
+          />
+          <StatCard
+            icon={<TrendingUp className="w-5 h-5" />}
+            label="Revenue/Staff"
+            value={`$${regionalStats.avg_revenue_per_staff.toFixed(0)}`}
+            sublabel="per week"
+            color="emerald"
+          />
+          <StatCard
+            icon={<AlertTriangle className="w-5 h-5" />}
+            label="Understaffed"
+            value={regionalStats.understaffed_outlets.toString()}
+            sublabel="< 5 staff"
+            color={regionalStats.understaffed_outlets > 0 ? "red" : "gray"}
+          />
+        </div>
+      )}
+
+      {/* Performance Highlights */}
+      {topPerformer && lowestPerformer && topPerformer.outlet_id !== lowestPerformer.outlet_id && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="p-4 bg-green-50 border border-green-200 rounded-xl">
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-green-600">🏆</span>
+              <span className="text-sm font-medium text-green-800">Top Performer</span>
             </div>
-            <div>
-              <p className="text-xs text-slate-500">Total Staff</p>
-              <p className="text-xl font-semibold">{totalStaff}</p>
+            <p className="text-lg font-semibold text-green-900">{topPerformer.outlet_name}</p>
+            <p className="text-2xl font-bold text-green-700">
+              ${topPerformer.revenue_per_staff.toFixed(0)}/staff
+            </p>
+          </div>
+          <div className="p-4 bg-orange-50 border border-orange-200 rounded-xl">
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-orange-600">📉</span>
+              <span className="text-sm font-medium text-orange-800">Needs Improvement</span>
             </div>
+            <p className="text-lg font-semibold text-orange-900">{lowestPerformer.outlet_name}</p>
+            <p className="text-2xl font-bold text-orange-700">
+              ${lowestPerformer.revenue_per_staff.toFixed(0)}/staff
+            </p>
           </div>
         </div>
+      )}
 
-        <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-lg bg-green-50 flex items-center justify-center">
-              <UserCheck className="h-5 w-5 text-green-600" />
-            </div>
-            <div>
-              <p className="text-xs text-slate-500">Present</p>
-              <p className="text-xl font-semibold text-green-600">{presentCount}</p>
-            </div>
+      {/* Understaffing Alerts */}
+      {understaffedOutlets.length > 0 && (
+        <div className="p-4 bg-red-50 border border-red-200 rounded-xl">
+          <div className="flex items-center gap-2 mb-3">
+            <AlertTriangle className="w-5 h-5 text-red-600" />
+            <h3 className="font-semibold text-red-800">Staffing Alerts</h3>
           </div>
-        </div>
-
-        <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-lg bg-red-50 flex items-center justify-center">
-              <UserMinus className="h-5 w-5 text-red-500" />
-            </div>
-            <div>
-              <p className="text-xs text-slate-500">Absent</p>
-              <p className="text-xl font-semibold text-red-600">{absentCount}</p>
-            </div>
-          </div>
-        </div>
-
-        <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-lg bg-purple-50 flex items-center justify-center">
-              <TrendingUp className="h-5 w-5 text-purple-600" />
-            </div>
-            <div>
-              <p className="text-xs text-slate-500">Avg Performance</p>
-              <p className={`text-xl font-semibold ${getPerformanceColor(avgPerformance)}`}>{avgPerformance}%</p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Filters */}
-      <div className="flex gap-4 items-center">
-        <div>
-          <label className="text-xs text-slate-500 block mb-1">Status</label>
-          <select 
-            value={filterStatus} 
-            onChange={(e) => setFilterStatus(e.target.value)}
-            className="px-3 py-2 border rounded-lg text-sm"
-          >
-            <option value="all">All Status</option>
-            <option value="present">Present</option>
-            <option value="absent">Absent</option>
-            <option value="late">Late</option>
-          </select>
-        </div>
-        <div>
-          <label className="text-xs text-slate-500 block mb-1">Role</label>
-          <select 
-            value={filterRole} 
-            onChange={(e) => setFilterRole(e.target.value)}
-            className="px-3 py-2 border rounded-lg text-sm"
-          >
-            <option value="all">All Roles</option>
-            {uniqueRoles.map(role => (
-              <option key={role} value={role}>{role}</option>
+          <div className="space-y-2">
+            {understaffedOutlets.map(outlet => (
+              <div key={outlet.outlet_id} className="flex items-center justify-between p-2 bg-white rounded-lg">
+                <div>
+                  <span className="font-medium text-red-900">{outlet.outlet_name}</span>
+                  <span className="text-sm text-red-600 ml-2">
+                    ({outlet.total_staff} staff - need {STAFFING_THRESHOLD - outlet.total_staff} more)
+                  </span>
+                </div>
+                <button className="px-3 py-1 text-sm bg-red-100 text-red-700 rounded-lg hover:bg-red-200">
+                  Create Case
+                </button>
+              </div>
             ))}
-          </select>
+          </div>
         </div>
+      )}
+
+      {/* Search & Sort */}
+      <div className="flex flex-col sm:flex-row gap-4">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+          <input
+            type="text"
+            placeholder="Search outlets..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full pl-10 pr-4 py-2 border rounded-lg"
+          />
+        </div>
+        <select
+          value={sortBy}
+          onChange={(e) => setSortBy(e.target.value as any)}
+          className="px-4 py-2 border rounded-lg"
+        >
+          <option value="revenue">Sort by Revenue</option>
+          <option value="staff">Sort by Staff Count</option>
+          <option value="name">Sort by Name</option>
+        </select>
       </div>
 
-      {/* Staff Table */}
-      <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-        <table className="w-full text-left text-sm text-slate-700">
-          <thead className="bg-slate-50 text-xs font-semibold text-slate-500 border-b border-slate-200">
-            <tr>
-              <th className="px-6 py-4 font-semibold">Employee</th>
-              <th className="px-6 py-4 font-semibold">Role</th>
-              <th className="px-6 py-4 font-semibold">Outlet</th>
-              <th className="px-6 py-4 font-semibold">Shift</th>
-              <th className="px-6 py-4 font-semibold">Performance</th>
-              <th className="px-6 py-4 font-semibold">Status</th>
+      {/* Outlet Staffing Table */}
+      <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
+        <table className="w-full">
+          <thead className="bg-slate-50">
+            <tr className="text-left text-xs font-semibold text-slate-500">
+              <th className="px-6 py-4">Outlet</th>
+              <th className="px-6 py-4 text-center">Staff Count</th>
+              <th className="px-6 py-4 text-center">Role Mix</th>
+              <th className="px-6 py-4 text-right">Weekly Revenue</th>
+              <th className="px-6 py-4 text-right">Rev/Staff</th>
+              <th className="px-6 py-4 text-center">Risk</th>
+              <th className="px-6 py-4"></th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100">
-            {filteredStaff.length === 0 ? (
-              <tr>
-                <td colSpan={6} className="px-6 py-8 text-center text-slate-500">
-                  No staff found matching filters
-                </td>
-              </tr>
-            ) : (
-              filteredStaff.map((emp) => (
-                <tr 
-                  key={emp.id} 
-                  onClick={() => setSelectedStaff(emp)}
-                  className="hover:bg-blue-50/50 cursor-pointer transition-colors"
-                >
+          <tbody className="divide-y">
+            {filteredOutlets.map((outlet) => (
+              <React.Fragment key={outlet.outlet_id}>
+                <tr className="hover:bg-slate-50">
                   <td className="px-6 py-4">
-                    <div className="flex items-center gap-3">
-                      <div className="h-10 w-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center text-white font-medium">
-                        {emp.name.split(' ').map(n => n[0]).join('')}
-                      </div>
-                      <div>
-                        <p className="font-medium text-slate-900">{emp.name}</p>
-                        <p className="text-xs text-slate-400">{emp.employee_id || `EMP-${String(emp.id).padStart(3, '0')}`}</p>
-                      </div>
+                    <div className="font-medium text-slate-900">{outlet.outlet_name}</div>
+                    <div className="text-xs text-slate-500">ID: {outlet.outlet_id}</div>
+                  </td>
+                  <td className="px-6 py-4 text-center">
+                    <div className={`text-lg font-bold ${outlet.total_staff < STAFFING_THRESHOLD ? 'text-red-600' : 'text-slate-900'}`}>
+                      {outlet.total_staff}
                     </div>
+                    {outlet.total_staff < STAFFING_THRESHOLD && (
+                      <div className="text-xs text-red-500">Understaffed</div>
+                    )}
                   </td>
                   <td className="px-6 py-4">
-                    <span className="bg-slate-100 px-2 py-1 rounded text-xs">{emp.role}</span>
-                  </td>
-                  <td className="px-6 py-4">
-                    <div>
-                      <p className="text-slate-900">{emp.outlet?.name || 'N/A'}</p>
-                      <p className="text-xs text-slate-400">{emp.outlet?.region?.name || emp.outlet?.code || ''}</p>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 text-xs">
-                    {emp.shift_start} - {emp.shift_end}
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="flex items-center gap-2">
-                      <div className="w-16 h-2 bg-slate-200 rounded-full overflow-hidden">
-                        <div 
-                          className={`h-full rounded-full ${(emp.performance_score || 0) >= 85 ? 'bg-green-500' : (emp.performance_score || 0) >= 70 ? 'bg-yellow-500' : 'bg-red-500'}`}
-                          style={{ width: `${emp.performance_score || 0}%` }}
-                        />
-                      </div>
-                      <span className={`text-xs font-medium ${getPerformanceColor(emp.performance_score || 0)}`}>
-                        {emp.performance_score || 0}%
+                    <div className="flex items-center justify-center gap-2 text-xs">
+                      <span className="px-2 py-1 bg-purple-100 text-purple-700 rounded">
+                        {outlet.managers} Mgr
+                      </span>
+                      <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded">
+                        {outlet.cashiers} Cash
+                      </span>
+                      <span className="px-2 py-1 bg-orange-100 text-orange-700 rounded">
+                        {outlet.cooks} Cook
                       </span>
                     </div>
                   </td>
-                  <td className="px-6 py-4">
-                    <span className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs font-medium capitalize ${getStatusColor(emp.status)}`}>
-                      {getStatusIcon(emp.status)}
-                      {emp.status}
+                  <td className="px-6 py-4 text-right">
+                    <div className="font-semibold text-slate-900">
+                      ${outlet.revenue_7d.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                    </div>
+                    <div className="text-xs text-slate-500">7-day avg</div>
+                  </td>
+                  <td className="px-6 py-4 text-right">
+                    <div className={`font-bold ${outlet.revenue_per_staff > 1000 ? 'text-green-600' : outlet.revenue_per_staff > 500 ? 'text-yellow-600' : 'text-red-600'}`}>
+                      ${outlet.revenue_per_staff.toFixed(0)}
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 text-center">
+                    <span className={`px-2 py-1 text-xs font-medium rounded ${
+                      outlet.risk_score > 0.5 ? 'bg-red-100 text-red-700' :
+                      outlet.risk_score > 0.3 ? 'bg-yellow-100 text-yellow-700' :
+                      'bg-green-100 text-green-700'
+                    }`}>
+                      {(outlet.risk_score * 100).toFixed(0)}%
                     </span>
                   </td>
+                  <td className="px-6 py-4 text-center">
+                    <button
+                      onClick={() => setExpandedOutlet(expandedOutlet === outlet.outlet_id ? null : outlet.outlet_id)}
+                      className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+                    >
+                      <ChevronDown className={`w-4 h-4 transition-transform ${expandedOutlet === outlet.outlet_id ? 'rotate-180' : ''}`} />
+                    </button>
+                  </td>
                 </tr>
-              ))
-            )}
+                {expandedOutlet === outlet.outlet_id && (
+                  <tr>
+                    <td colSpan={7} className="px-6 py-4 bg-slate-50">
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div>
+                          <div className="text-xs text-slate-500">Monthly Revenue</div>
+                          <div className="font-semibold">${outlet.revenue_30d.toLocaleString()}</div>
+                        </div>
+                        <div>
+                          <div className="text-xs text-slate-500">Anomaly Score</div>
+                          <div className="font-semibold">{(outlet.anomaly_score * 100).toFixed(1)}%</div>
+                        </div>
+                        <div>
+                          <div className="text-xs text-slate-500">Other Staff</div>
+                          <div className="font-semibold">{outlet.other}</div>
+                        </div>
+                        <div>
+                          <div className="text-xs text-slate-500">Benchmark</div>
+                          <div className="font-semibold">
+                            {outlet.revenue_per_staff > (regionalStats?.avg_revenue_per_staff || 0) ? '↑ Above Avg' : '↓ Below Avg'}
+                          </div>
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </React.Fragment>
+            ))}
           </tbody>
         </table>
+        {filteredOutlets.length === 0 && (
+          <div className="text-center py-12 text-slate-400">
+            <Users className="w-10 h-10 mx-auto mb-2" />
+            <p>No outlets found</p>
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
-// Staff Detail View Component
-function StaffDetailView({ 
-  staff, 
-  onBack, 
-  isAskingAI, 
-  setIsAskingAI,
-  staffInsight,
-  setStaffInsight
-}: { 
-  staff: Staff; 
-  onBack: () => void;
-  isAskingAI: boolean;
-  setIsAskingAI: (v: boolean) => void;
-  staffInsight: StaffInsight | null;
-  setStaffInsight: (v: StaffInsight | null) => void;
+function StatCard({ icon, label, value, sublabel, color }: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  sublabel: string;
+  color: "blue" | "purple" | "green" | "emerald" | "red" | "gray";
 }) {
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'present': return 'bg-green-100 text-green-700';
-      case 'absent': return 'bg-red-100 text-red-700';
-      case 'late': return 'bg-orange-100 text-orange-700';
-      default: return 'bg-slate-100 text-slate-700';
-    }
+  const colors = {
+    blue: "bg-blue-50 text-blue-600 border-blue-200",
+    purple: "bg-purple-50 text-purple-600 border-purple-200",
+    green: "bg-green-50 text-green-600 border-green-200",
+    emerald: "bg-emerald-50 text-emerald-600 border-emerald-200",
+    red: "bg-red-50 text-red-600 border-red-200",
+    gray: "bg-slate-50 text-slate-600 border-slate-200",
   };
-
-  const getPerformanceColor = (score: number) => {
-    if (score >= 85) return 'text-green-600';
-    if (score >= 70) return 'text-yellow-600';
-    return 'text-red-600';
-  };
-
-  async function generateAIInsights() {
-    setIsAskingAI(true);
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      // Call athena-chat for staff insights
-      const response = await fetch(`${EDGE_FUNCTIONS_URL}/athena-chat`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${session?.access_token || ''}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          message: `Analyze staff member ${staff.name} (${staff.role}) at ${staff.outlet?.name || 'Unknown outlet'}. Performance: ${staff.performance_score || 0}%, Attendance: ${staff.attendance_rate || 0}%, Sales handled: S$${(staff.sales_handled || 0).toLocaleString()}. Provide insights about their performance, potential issues, and recommendations.`,
-          context: {
-            user_id: session?.user?.id,
-            role: 'HQ_ADMIN'
-          }
-        }),
-      });
-      
-      const data = await response.json();
-      
-      setStaffInsight({
-        summary: data.response || 'Analysis complete',
-        performance_analysis: `Performance Score: ${staff.performance_score || 0}% | Attendance Rate: ${staff.attendance_rate || 0}% | Sales Handled: S$${(staff.sales_handled || 0).toLocaleString()}`,
-        recommendations: data.suggestions || ['Continue monitoring performance'],
-        alerts: []
-      });
-    } catch (err) {
-      console.error('AI insights error:', err);
-      // Fallback
-      const insights = generateMockInsights(staff);
-      setStaffInsight(insights);
-    }
-    setIsAskingAI(false);
-  }
-
-  function generateMockInsights(staff: Staff): StaffInsight {
-    const alerts: string[] = [];
-    const recommendations: string[] = [];
-
-    if ((staff.attendance_rate || 0) < 90) {
-      alerts.push('⚠️ Attendance rate below 90% - needs attention');
-      recommendations.push('Schedule attendance review meeting');
-    }
-
-    if ((staff.performance_score || 0) < 70) {
-      alerts.push('🚨 Performance score below target');
-      recommendations.push('Provide additional training');
-    }
-
-    if (staff.status === 'absent') {
-      alerts.push('📋 Currently absent - coverage needed');
-    }
-
-    if ((staff.performance_score || 0) >= 85) {
-      recommendations.push('🌟 High performer - consider for promotion');
-    }
-
-    return {
-      summary: `${staff.name} is a ${staff.role} at ${staff.outlet?.name || 'Unknown'}. ${(staff.performance_score || 0) >= 80 ? 'Showing strong performance with good attendance.' : 'Performance could be improved with some adjustments.'}`,
-      performance_analysis: `Score: ${staff.performance_score || 0}% | Attendance: ${staff.attendance_rate || 0}% | Sales: S$${(staff.sales_handled || 0).toLocaleString()}`,
-      recommendations: recommendations.length > 0 ? recommendations : ['Continue current performance management'],
-      alerts
-    };
-  }
 
   return (
-    <div className="space-y-6">
-      {/* Back Button */}
-      <button 
-        onClick={onBack}
-        className="flex items-center gap-2 text-slate-600 hover:text-slate-900 transition-colors"
-      >
-        <ArrowLeft className="w-4 h-4" />
-        Back to Staff List
-      </button>
-
-      {/* Staff Header */}
-      <div className="bg-gradient-to-r from-slate-900 to-slate-800 rounded-2xl p-6 text-white">
-        <div className="flex items-start gap-6">
-          <div className="h-20 w-20 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center text-white text-2xl font-bold">
-            {staff.name.split(' ').map(n => n[0]).join('')}
-          </div>
-          <div className="flex-1">
-            <div className="flex items-center gap-3 mb-2">
-              <h2 className="text-2xl font-bold">{staff.name}</h2>
-              <span className={`px-3 py-1 rounded-full text-xs font-medium capitalize ${getStatusColor(staff.status)}`}>
-                {staff.status}
-              </span>
-            </div>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
-              <div>
-                <p className="text-slate-400 text-xs">Employee ID</p>
-                <p className="font-mono font-medium">{staff.employee_id || `EMP-${String(staff.id).padStart(3, '0')}`}</p>
-              </div>
-              <div>
-                <p className="text-slate-400 text-xs">Role</p>
-                <p className="font-medium">{staff.role}</p>
-              </div>
-              <div>
-                <p className="text-slate-400 text-xs">Contact</p>
-                <p className="font-medium flex items-center gap-1">
-                  <Phone className="w-3 h-3" />
-                  {staff.contact}
-                </p>
-              </div>
-              <div>
-                <p className="text-slate-400 text-xs">Hire Date</p>
-                <p className="font-medium flex items-center gap-1">
-                  <Calendar className="w-3 h-3" />
-                  {staff.hire_date ? new Date(staff.hire_date).toLocaleDateString('id-ID') : 'N/A'}
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
+    <div className={`p-4 rounded-xl border ${colors[color]}`}>
+      <div className="flex items-center gap-2 mb-2">
+        {icon}
+        <span className="text-xs font-medium opacity-75">{label}</span>
       </div>
-
-      {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="bg-white border rounded-2xl p-5">
-          <p className="text-xs text-slate-500 mb-2">Performance Score</p>
-          <p className={`text-3xl font-bold ${getPerformanceColor(staff.performance_score || 0)}`}>
-            {staff.performance_score || 0}%
-          </p>
-          <div className="w-full h-2 bg-slate-200 rounded-full mt-2">
-            <div 
-              className={`h-full rounded-full ${(staff.performance_score || 0) >= 85 ? 'bg-green-500' : (staff.performance_score || 0) >= 70 ? 'bg-yellow-500' : 'bg-red-500'}`}
-              style={{ width: `${staff.performance_score || 0}%` }}
-            />
-          </div>
-        </div>
-
-        <div className="bg-white border rounded-2xl p-5">
-          <p className="text-xs text-slate-500 mb-2">Attendance Rate</p>
-          <p className={`text-3xl font-bold ${(staff.attendance_rate || 0) >= 90 ? 'text-green-600' : 'text-orange-600'}`}>
-            {staff.attendance_rate || 0}%
-          </p>
-          <p className="text-xs text-slate-400 mt-2">Last 30 days</p>
-        </div>
-
-        <div className="bg-white border rounded-2xl p-5">
-          <p className="text-xs text-slate-500 mb-2">Sales Handled</p>
-          <p className="text-3xl font-bold text-slate-900">
-            S${(staff.sales_handled || 0).toLocaleString()}
-          </p>
-          <p className="text-xs text-slate-400 mt-2">This month</p>
-        </div>
-
-        <div className="bg-white border rounded-2xl p-5">
-          <p className="text-xs text-slate-500 mb-2">Shift Hours</p>
-          <p className="text-3xl font-bold text-slate-900">
-            {staff.shift_start}
-          </p>
-          <p className="text-xs text-slate-400 mt-2">to {staff.shift_end}</p>
-        </div>
-      </div>
-
-      {/* Outlet Info */}
-      <div className="bg-white border rounded-2xl p-6">
-        <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-          <Building2 className="w-5 h-5 text-slate-500" />
-          Assigned Outlet
-        </h3>
-        <div className="grid md:grid-cols-3 gap-4">
-          <div>
-            <p className="text-xs text-slate-500">Outlet Name</p>
-            <p className="font-medium">{staff.outlet?.name || 'N/A'}</p>
-          </div>
-          <div>
-            <p className="text-xs text-slate-500">Outlet Code</p>
-            <p className="font-medium">{staff.outlet?.code || 'N/A'}</p>
-          </div>
-          <div>
-            <p className="text-xs text-slate-500">Region</p>
-            <p className="font-medium">{staff.outlet?.region?.name || 'N/A'}</p>
-          </div>
-        </div>
-      </div>
-
-      {/* AI Insights */}
-      <div className="bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl p-6 text-white">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold flex items-center gap-2">
-            <Sparkles className="w-5 h-5" />
-            Athena AI Staff Analysis
-          </h3>
-          {staffInsight && <span className="text-xs bg-white/20 px-3 py-1 rounded-full">Analyzed</span>}
-        </div>
-
-        {!staffInsight ? (
-          <div className="text-center py-8">
-            <p className="text-white/80 mb-4">Get AI-powered insights about {staff.name}'s performance.</p>
-            <button
-              onClick={generateAIInsights}
-              disabled={isAskingAI}
-              className="px-6 py-3 bg-white text-indigo-600 font-semibold rounded-xl flex items-center gap-2 mx-auto hover:bg-indigo-50 transition-colors"
-            >
-              {isAskingAI ? (
-                <><RefreshCw className="w-4 h-4 animate-spin" /> Analyzing...</>
-              ) : (
-                <><Sparkles className="w-4 h-4" /> Generate AI Analysis</>
-              )}
-            </button>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            <div className="bg-white/10 rounded-xl p-4">
-              <p className="text-sm font-medium mb-2 opacity-80">Summary</p>
-              <p className="leading-relaxed">{staffInsight.summary}</p>
-            </div>
-
-            <div className="bg-white/10 rounded-xl p-4">
-              <p className="text-sm font-medium mb-2 opacity-80">Performance Details</p>
-              <p className="text-sm">{staffInsight.performance_analysis}</p>
-            </div>
-
-            {staffInsight.alerts.length > 0 && (
-              <div className="bg-red-500/20 rounded-xl p-4">
-                <p className="text-sm font-medium mb-2 flex items-center gap-2">
-                  <AlertTriangle className="w-4 h-4" /> Alerts
-                </p>
-                {staffInsight.alerts.map((alert, idx) => (
-                  <p key={idx} className="text-sm">{alert}</p>
-                ))}
-              </div>
-            )}
-
-            {staffInsight.recommendations.length > 0 && (
-              <div className="bg-white/10 rounded-xl p-4">
-                <p className="text-sm font-medium mb-2 opacity-80">Recommendations</p>
-                <ul className="space-y-1">
-                  {staffInsight.recommendations.map((rec, idx) => (
-                    <li key={idx} className="text-sm flex items-start gap-2">
-                      <span className="text-indigo-300">•</span>
-                      {rec}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
-            <button
-              onClick={generateAIInsights}
-              disabled={isAskingAI}
-              className="px-4 py-2 bg-white/20 rounded-lg text-sm hover:bg-white/30 transition-colors"
-            >
-              Refresh Analysis
-            </button>
-          </div>
-        )}
-      </div>
+      <div className="text-2xl font-bold">{value}</div>
+      <div className="text-xs opacity-75">{sublabel}</div>
     </div>
   );
 }
