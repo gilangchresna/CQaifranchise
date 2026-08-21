@@ -113,7 +113,6 @@ async function getOutletName(outletId: number): Promise<string> {
 async function createAgentTask(
   agentId: string,
   taskType: string,
-  description: string,
   context: Record<string, any>
 ): Promise<{ id: string } | null> {
   try {
@@ -122,7 +121,6 @@ async function createAgentTask(
       .insert({
         agent_id: agentId,
         task_type: taskType,
-        description: description,
         status: "pending",
         priority: 2,
         input_data: context,
@@ -132,7 +130,7 @@ async function createAgentTask(
       .single();
 
     if (error) {
-      console.error(`Error creating agent task:`, error);
+      console.error(`Error creating agent task:`, JSON.stringify(error));
       return null;
     }
 
@@ -348,18 +346,13 @@ serve(async (req: Request) => {
     // Create agent tasks for anomalies (Monitor Agent)
     let tasksCreated = 0;
     for (const item of anomalyOutlets) {
-      const task = await createAgentTask(
-        "monitor",
-        "anomaly_check",
-        `Anomaly detected: Z-score ${item.z.toFixed(2)} at outlet ${item.oid}`,
-        {
-          outlet_id: item.oid,
-          z_score: item.z,
-          status: item.status,
-          severity: item.severity,
-          today_amount: item.todayAmt,
-        }
-      );
+      const task = await createAgentTask("monitor", "anomaly_check", {
+        outlet_id: item.oid,
+        z_score: item.z,
+        status: item.status,
+        severity: item.severity,
+        today_amount: item.todayAmt,
+      });
       if (task) {
         tasksCreated++;
         await logAgentActivity("monitor", "warn", `Anomaly task created`, {
@@ -369,10 +362,8 @@ serve(async (req: Request) => {
         });
       }
     }
-    out.agent_tasks_created = tasksCreated;
-    await logAgentActivity("coordinator", "info", `Pipeline completed: ${tasksCreated} tasks created`, {
+    await logAgentActivity("coordinator", "info", `Anomaly tasks created: ${tasksCreated}`, {
       anomalies: anomalyOutlets.length,
-      tasks_created: tasksCreated,
     });
 
     // ── STEP 2: Stockout Risk ────────────────────────────────────────────────
@@ -429,7 +420,30 @@ serve(async (req: Request) => {
       );
       alertResults.push({ outlet_id: oid, ...r });
       if (r.success) alertsCreated++;
+
+      // Create agent task for stockout alert
+      const stockoutTask = await createAgentTask("analyst", "stockout_check", {
+        alert_id: r.alert_id,
+        outlet_id: oid,
+        lowest_stock: lowest,
+        items_at_risk: inv.length,
+      });
+      if (stockoutTask) {
+        tasksCreated++;
+        await logAgentActivity("analyst", "warn", `Stockout task created`, {
+          task_id: stockoutTask.id,
+          outlet_id: oid,
+          lowest_stock: lowest,
+        });
+      }
     }
+
+    out.agent_tasks_created = tasksCreated;
+    await logAgentActivity("coordinator", "info", `Pipeline completed: ${tasksCreated} tasks created`, {
+      anomalies: anomalyOutlets.length,
+      stockout: stockoutOutlets.length,
+      tasks_created: tasksCreated,
+    });
 
     out.alerts = { created: alertsCreated, details: alertResults.slice(0, 10) };
 
