@@ -102,6 +102,60 @@ async function getOutletName(outletId: number): Promise<string> {
   return data?.name || `Outlet ${outletId}`;
 }
 
+// Create agent task
+async function createAgentTask(
+  agentId: string,
+  taskType: string,
+  description: string,
+  context: Record<string, any>
+): Promise<{ id: string } | null> {
+  try {
+    const { data, error } = await sb
+      .from("agent_tasks")
+      .insert({
+        agent_id: agentId,
+        task_type: taskType,
+        description: description,
+        status: "pending",
+        priority: 2,
+        input_data: context,
+        created_at: new Date().toISOString(),
+      })
+      .select("id")
+      .single();
+
+    if (error) {
+      console.error(`Error creating agent task:`, error);
+      return null;
+    }
+
+    return data;
+  } catch (e: any) {
+    console.error(`Exception creating agent task:`, e);
+    return null;
+  }
+}
+
+// Log agent activity
+async function logAgentActivity(
+  agentId: string,
+  level: "info" | "warn" | "error",
+  message: string,
+  metadata: Record<string, any> = {}
+): Promise<void> {
+  try {
+    await sb.from("agent_logs").insert({
+      agent_id: agentId,
+      log_level: level,
+      message: message,
+      metadata: metadata,
+      created_at: new Date().toISOString(),
+    });
+  } catch (e) {
+    console.error(`Error logging agent activity:`, e);
+  }
+}
+
 // ── Workflow helpers ────────────────────────────────────────────────────────────
 
 async function workflowCreate(name: string, payload: any, triggeredBy = "manual"): Promise<string | null> {
@@ -260,6 +314,36 @@ serve(async (req) => {
 
     out.anomaly = { critical: crit, warning: warn, ok: okCnt, scored: scoreRecords.length };
     out.anomaly_outlets = anomalyOutlets;
+
+    // Create agent tasks for anomalies (Monitor Agent)
+    let tasksCreated = 0;
+    for (const item of anomalyOutlets) {
+      const task = await createAgentTask(
+        "monitor",
+        "anomaly_check",
+        `Anomaly detected: Z-score ${item.z.toFixed(2)} at outlet ${item.oid}`,
+        {
+          outlet_id: item.oid,
+          z_score: item.z,
+          status: item.status,
+          severity: item.severity,
+          today_amount: item.todayAmt,
+        }
+      );
+      if (task) {
+        tasksCreated++;
+        await logAgentActivity("monitor", "warn", `Anomaly task created`, {
+          task_id: task.id,
+          outlet_id: item.oid,
+          z_score: item.z,
+        });
+      }
+    }
+    out.agent_tasks_created = tasksCreated;
+    await logAgentActivity("coordinator", "info", `Pipeline completed: ${tasksCreated} tasks created`, {
+      anomalies: anomalyOutlets.length,
+      tasks_created: tasksCreated,
+    });
 
     // ── STEP 2: Stockout Risk ────────────────────────────────────────────────
     await workflowUpdate(instanceId, "running", "stockout", 40);
