@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { 
   Bot, Activity, Clock, Zap, AlertCircle, CheckCircle2, XCircle,
   MessageSquare, ChevronRight, RefreshCw, Filter, Search, ArrowUpRight,
@@ -80,10 +80,35 @@ export function Agents({ activeRole }: { activeRole: Role }) {
   const [metrics, setMetrics] = useState<Metrics | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'overview' | 'tasks' | 'logs'>('overview');
+  const [lastRefresh, setLastRefresh] = useState(new Date());
+
+  // Calculate metrics from tasks directly (instead of relying on edge function)
+  const calculatedMetrics = useMemo(() => {
+    if (tasks.length === 0) {
+      return {
+        total_tasks_today: 0,
+        total_completed: 0,
+        total_failed: 0,
+        avg_uptime: 100,
+        coordinator_up: true
+      };
+    }
+    
+    const completed = tasks.filter(t => t.status === 'completed').length;
+    const failed = tasks.filter(t => t.status === 'failed').length;
+    const running = tasks.filter(t => t.status === 'running').length;
+    
+    return {
+      total_tasks_today: tasks.length,
+      total_completed: completed,
+      total_failed: failed,
+      avg_uptime: running > 0 ? 80 : 100, // If running tasks, slightly lower uptime
+      coordinator_up: agents.find(a => a.id === 'coordinator')?.status !== 'offline'
+    };
+  }, [tasks, agents]);
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
   const [filterLevel, setFilterLevel] = useState<string>('all');
   const [filterStatus, setFilterStatus] = useState<string>('all');
-  const [lastRefresh, setLastRefresh] = useState(new Date());
 
   useEffect(() => {
     fetchAgentData();
@@ -296,39 +321,37 @@ export function Agents({ activeRole }: { activeRole: Role }) {
         </button>
       </div>
 
-      {/* Metrics Cards */}
-      {metrics && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <MetricCard
-            icon={<Activity className="w-5 h-5" />}
-            label="Tasks Today"
-            value={metrics.total_tasks_today.toLocaleString()}
-            subtext={`${metrics.total_completed} completed`}
-            color="text-violet-600"
-          />
-          <MetricCard
-            icon={<Clock className="w-5 h-5" />}
-            label="Avg Response"
-            value={`${metrics.avg_uptime.toFixed(1)}%`}
-            subtext="System uptime"
-            color="text-blue-600"
-          />
-          <MetricCard
-            icon={<Bot className="w-5 h-5" />}
-            label="Coordinator"
-            value={metrics.coordinator_up ? 'Online' : 'Offline'}
-            subtext={`${metrics.avg_uptime.toFixed(1)}% uptime`}
-            color={metrics.coordinator_up ? "text-green-600" : "text-red-600"}
-          />
-          <MetricCard
-            icon={<AlertCircle className="w-5 h-5" />}
-            label="Failed Tasks"
-            value={metrics.total_failed.toString()}
-            subtext={`${metrics.total_tasks_today > 0 ? ((metrics.total_failed / metrics.total_tasks_today) * 100).toFixed(1) : 0}% error rate`}
-            color={metrics.total_failed > 0 ? "text-red-600" : "text-slate-600"}
-          />
-        </div>
-      )}
+      {/* Metrics Cards - Use calculated metrics from tasks */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <MetricCard
+          icon={<Activity className="w-5 h-5" />}
+          label="Tasks Today"
+          value={calculatedMetrics.total_tasks_today.toLocaleString()}
+          subtext={`${calculatedMetrics.total_completed} completed`}
+          color="text-violet-600"
+        />
+        <MetricCard
+          icon={<Clock className="w-5 h-5" />}
+          label="Avg Response"
+          value={`${calculatedMetrics.avg_uptime.toFixed(1)}%`}
+          subtext="System uptime"
+          color="text-blue-600"
+        />
+        <MetricCard
+          icon={<Bot className="w-5 h-5" />}
+          label="Coordinator"
+          value={calculatedMetrics.coordinator_up ? 'Online' : 'Offline'}
+          subtext={`${calculatedMetrics.avg_uptime.toFixed(1)}% uptime`}
+          color={calculatedMetrics.coordinator_up ? "text-green-600" : "text-red-600"}
+        />
+        <MetricCard
+          icon={<AlertCircle className="w-5 h-5" />}
+          label="Failed Tasks"
+          value={calculatedMetrics.total_failed.toString()}
+          subtext={`${calculatedMetrics.total_tasks_today > 0 ? ((calculatedMetrics.total_failed / calculatedMetrics.total_tasks_today) * 100).toFixed(1) : 0}% error rate`}
+          color={calculatedMetrics.total_failed > 0 ? "text-red-600" : "text-slate-600"}
+        />
+      </div>
 
       {/* Tab Navigation */}
       <div className="border-b border-slate-200">
@@ -360,7 +383,17 @@ export function Agents({ activeRole }: { activeRole: Role }) {
         <div className="space-y-6">
           {/* Agent Grid */}
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {agents.map((agent) => (
+            {agents.map((agent) => {
+              // Calculate agent stats from tasks
+              const agentTasks = tasks.filter(t => t.agent_id === agent.id);
+              const agentCompleted = agentTasks.filter(t => t.status === 'completed').length;
+              const agentRunning = agentTasks.filter(t => t.status === 'running').length;
+              const agentPending = agentTasks.filter(t => t.status === 'pending').length;
+              const avgDuration = agentTasks
+                .filter(t => t.duration_ms)
+                .reduce((sum, t) => sum + (t.duration_ms || 0), 0) / (agentTasks.filter(t => t.duration_ms).length || 1);
+              
+              return (
               <div
                 key={agent.id}
                 onClick={() => setSelectedAgent(agent)}
@@ -387,27 +420,28 @@ export function Agents({ activeRole }: { activeRole: Role }) {
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
                     <span className="text-slate-500">Tasks today</span>
-                    <span className="font-medium">{agent.tasks_completed_today.toLocaleString()}</span>
+                    <span className="font-medium">{agentCompleted}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-slate-500">Response time</span>
-                    <span className="font-medium">{agent.avg_response_time_ms}ms</span>
+                    <span className="font-medium">{Math.round(avgDuration)}ms</span>
                   </div>
-                  {agent.tasks_pending > 0 && (
+                  {agentPending > 0 && (
                     <div className="flex justify-between">
                       <span className="text-slate-500">Queue</span>
-                      <span className="font-medium text-orange-600">{agent.tasks_pending} pending</span>
+                      <span className="font-medium text-orange-600">{agentPending} pending</span>
                     </div>
                   )}
-                  {agent.tasks_running > 0 && (
+                  {agentRunning > 0 && (
                     <div className="flex justify-between">
                       <span className="text-slate-500">Running</span>
-                      <span className="font-medium text-blue-600">{agent.tasks_running} active</span>
+                      <span className="font-medium text-blue-600">{agentRunning} active</span>
                     </div>
                   )}
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
 
           {/* Quick Stats */}
