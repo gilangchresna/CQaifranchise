@@ -363,11 +363,13 @@ export function CasesList({ activeRole }: CasesListProps) {
                             Mark Resolved
                           </button>
                         )}
-                        <button
-                          onClick={() => updateStatus(c.id, "CLOSED")}
-                          className="flex items-center gap-1 px-3 py-1.5 text-sm bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors"
-                        >
-                          Close
+                        {c.status === "RESOLVED" && (
+                          <button
+                            onClick={() => updateStatus(c.id, "CLOSED")}
+                            className="flex items-center gap-1 px-3 py-1.5 text-sm bg-slate-600 text-white rounded-lg hover:bg-slate-700 transition-colors"
+                          >
+                            <XCircle className="w-3 h-3" />
+                            Close Case
                         </button>
                       </div>
                     )}
