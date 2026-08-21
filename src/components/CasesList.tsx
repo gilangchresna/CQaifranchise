@@ -78,7 +78,7 @@ function getSlaStatus(slaDeadline: string | undefined, status: string): { label:
 }
 
 export function CasesList({ activeRole }: CasesListProps) {
-  const [cases, setCases] = useState<Case[]>([]);
+  const [allCases, setAllCases] = useState<Case[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<string>("");
@@ -86,6 +86,7 @@ export function CasesList({ activeRole }: CasesListProps) {
   const [expandedCase, setExpandedCase] = useState<number | null>(null);
   const [stats, setStats] = useState<CaseStats>({ NEW: 0, IN_PROGRESS: 0, RESOLVED: 0, CLOSED: 0 });
 
+  // Fetch cases (only once, filter locally)
   async function fetchCases() {
     setLoading(true);
     setError(null);
@@ -93,9 +94,8 @@ export function CasesList({ activeRole }: CasesListProps) {
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token || "";
 
-      const params = new URLSearchParams({ limit: "100" });
-      if (statusFilter) params.set("status", statusFilter);
-      if (priorityFilter) params.set("priority", priorityFilter);
+      // Always fetch all cases, filter locally
+      const params = new URLSearchParams({ limit: "500" });
 
       const res = await fetch(`${EDGE_FUNCTIONS_URL}/cases-list?${params}`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -103,8 +103,14 @@ export function CasesList({ activeRole }: CasesListProps) {
 
       if (!res.ok) throw new Error("Failed to load cases");
       const json = await res.json();
-      setCases(json.data || []);
-      setStats(json.counts || { NEW: 0, IN_PROGRESS: 0, RESOLVED: 0, CLOSED: 0 });
+      setAllCases(json.data || []);
+      
+      // Calculate stats from all data
+      const counts = { NEW: 0, IN_PROGRESS: 0, RESOLVED: 0, CLOSED: 0 };
+      (json.data || []).forEach((c: any) => {
+        if (counts.hasOwnProperty(c.status)) counts[c.status]++;
+      });
+      setStats(counts);
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -112,7 +118,12 @@ export function CasesList({ activeRole }: CasesListProps) {
     }
   }
 
-  useEffect(() => { fetchCases(); }, [statusFilter, priorityFilter]);
+  // Local filtering
+  const filteredCases = allCases.filter(c => {
+    const statusMatch = !statusFilter || c.status === statusFilter;
+    const priorityMatch = !priorityFilter || c.priority === priorityFilter;
+    return statusMatch && priorityMatch;
+  });
 
   async function updateStatus(caseId: number, newStatus: string) {
     const { data: { session } } = await supabase.auth.getSession();
@@ -129,7 +140,14 @@ export function CasesList({ activeRole }: CasesListProps) {
     });
 
     if (res.ok) {
-      setCases(prev => prev.map(c => c.id === caseId ? { ...c, status: newStatus } : c));
+      // Update in allCases state
+      setAllCases(prev => prev.map(c => c.id === caseId ? { ...c, status: newStatus } : c));
+      // Update stats
+      setStats(prev => ({
+        ...prev,
+        [status]: (prev[status] || 0) - 1,
+        [newStatus]: (prev[newStatus] || 0) + 1
+      }));
       setExpandedCase(null);
     }
   }
@@ -160,7 +178,7 @@ export function CasesList({ activeRole }: CasesListProps) {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-lg font-semibold text-slate-900">Case Management</h2>
-          <p className="text-sm text-slate-500">{cases.length} cases</p>
+          <p className="text-sm text-slate-500">{filteredCases.length} cases</p>
         </div>
         <button
           onClick={fetchCases}
@@ -171,7 +189,7 @@ export function CasesList({ activeRole }: CasesListProps) {
         </button>
       </div>
 
-      {/* Status Tabs */}
+      {/* Status Tabs - Show all statuses always */}
       <div className="flex gap-2 flex-wrap">
         <button
           onClick={() => setStatusFilter("")}
@@ -179,9 +197,9 @@ export function CasesList({ activeRole }: CasesListProps) {
             !statusFilter ? "bg-slate-800 text-white border-slate-800" : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
           )}
         >
-          All ({Object.values(stats).reduce((a, b) => a + b, 0)})
+          All ({allCases.length})
         </button>
-        {STATUS_ORDER.map(s => stats[s] > 0 && (
+        {STATUS_ORDER.map(s => (
           <button
             key={s}
             onClick={() => setStatusFilter(statusFilter === s ? "" : s)}
@@ -192,7 +210,8 @@ export function CasesList({ activeRole }: CasesListProps) {
             {s === "NEW" && <span className="w-2 h-2 rounded-full bg-blue-500" />}
             {s === "IN_PROGRESS" && <span className="w-2 h-2 rounded-full bg-purple-500" />}
             {s === "RESOLVED" && <span className="w-2 h-2 rounded-full bg-green-500" />}
-            {s.replace("_", " ")} ({stats[s] || 0})
+            {s === "CLOSED" && <span className="w-2 h-2 rounded-full bg-slate-500" />}
+            {s.replace("_", " ")} ({stats[s as keyof typeof stats] || 0})
           </button>
         ))}
       </div>
@@ -217,14 +236,14 @@ export function CasesList({ activeRole }: CasesListProps) {
       </div>
 
       {/* Cases List */}
-      {cases.length === 0 ? (
+      {filteredCases.length === 0 ? (
         <div className="text-center py-12 text-slate-400">
           <FileText className="w-10 h-10 mx-auto mb-2" />
           <p className="text-sm">No cases found</p>
         </div>
       ) : (
         <div className="space-y-2">
-          {cases.map((c) => {
+          {filteredCases.map((c) => {
             const sla = getSlaStatus(c.sla_deadline, c.status);
             const isExpanded = expandedCase === c.id;
             return (
