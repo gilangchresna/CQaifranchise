@@ -23,6 +23,7 @@ interface Agent {
   avg_response_time_ms: number;
   uptime_percent: number;
   description: string;
+  capabilities?: string[];
 }
 
 interface AgentTask {
@@ -197,6 +198,7 @@ export function Agents({ activeRole }: { activeRole: Role }) {
           avg_response_time_ms: a.avg_response_time_ms || 0,
           uptime_percent: a.uptime_percent || 100,
           description: a.description || '',
+          capabilities: a.capabilities || [],
         }));
         setAgents(transformedAgents);
         setMetrics(data.summary || null);
@@ -221,6 +223,7 @@ export function Agents({ activeRole }: { activeRole: Role }) {
             avg_response_time_ms: a.avg_response_time_ms || 0,
             uptime_percent: a.uptime_percentage || 100,
             description: a.description || '',
+            capabilities: a.capabilities || [],
           }));
           setAgents(fallbackAgents);
         }
@@ -761,9 +764,14 @@ function AgentDetailModal({
   getStatusBadge: (s: string) => React.ReactNode;
   getTaskIcon: (t: string) => React.ReactNode;
   getTaskStatus: (s: string) => React.ReactNode;
-  formatTime: (d: string) => string;
+  formatTime: (d: string | null | undefined) => string;
   formatDuration: (ms: number) => string;
 }) {
+  // Calculate real stats from tasks
+  const pendingCount = tasks.filter(t => t.status === 'pending').length;
+  const runningCount = tasks.filter(t => t.status === 'running').length;
+  const completedCount = tasks.filter(t => t.status === 'completed').length;
+  const failedCount = tasks.filter(t => t.status === 'failed').length;
   const [showSettings, setShowSettings] = useState(false);
 
   return (
@@ -799,16 +807,16 @@ function AgentDetailModal({
           {/* Stats */}
           <div className="grid grid-cols-3 gap-4">
             <div className="bg-slate-50 rounded-lg p-4 text-center">
-              <p className="text-2xl font-bold text-slate-900">{agent.tasks_completed_today.toLocaleString()}</p>
+              <p className="text-2xl font-bold text-slate-900">{tasks.length}</p>
               <p className="text-xs text-slate-500">Tasks Today</p>
             </div>
             <div className="bg-slate-50 rounded-lg p-4 text-center">
-              <p className="text-2xl font-bold text-slate-900">{agent.avg_response_time_ms}ms</p>
-              <p className="text-xs text-slate-500">Avg Response</p>
+              <p className="text-2xl font-bold text-slate-900">{completedCount}</p>
+              <p className="text-xs text-slate-500">Completed</p>
             </div>
             <div className="bg-slate-50 rounded-lg p-4 text-center">
-              <p className="text-2xl font-bold text-slate-900">{agent.tasks_pending + agent.tasks_running}</p>
-              <p className="text-xs text-slate-500">In Queue/Running</p>
+              <p className="text-2xl font-bold text-slate-900">{pendingCount + runningCount}</p>
+              <p className="text-xs text-slate-500">Pending/Running</p>
             </div>
           </div>
 
@@ -827,11 +835,25 @@ function AgentDetailModal({
                 <p className="text-xs text-green-600">Uptime (24h)</p>
               </div>
               <div className="bg-red-50 rounded-lg p-3">
-                <p className="text-lg font-bold text-red-700">{agent.tasks_failed}</p>
+                <p className="text-lg font-bold text-red-700">{failedCount}</p>
                 <p className="text-xs text-red-600">Failed Tasks</p>
               </div>
             </div>
           </div>
+
+          {/* Capabilities */}
+          {agent.capabilities && agent.capabilities.length > 0 && (
+            <div>
+              <h3 className="font-semibold text-slate-900 mb-2">Capabilities</h3>
+              <div className="flex flex-wrap gap-2">
+                {(agent.capabilities as string[]).map((cap: string, idx: number) => (
+                  <span key={idx} className="px-3 py-1 bg-violet-100 text-violet-700 rounded-full text-xs font-medium">
+                    {cap}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Recent Tasks */}
           <div>
