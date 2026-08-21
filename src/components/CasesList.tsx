@@ -3,7 +3,7 @@ import React, { useState, useEffect } from "react";
 import { Role } from "@/src/types";
 import {
   FileText, Clock, CheckCircle2, AlertTriangle, ChevronDown,
-  User, Building2, Filter, RefreshCw, X, MessageSquare, ArrowUp
+  User, Building2, Filter, RefreshCw, X, MessageSquare, ArrowUp, XCircle
 } from "lucide-react";
 import { cn } from "@/src/lib/utils";
 import { supabase, EDGE_FUNCTIONS_URL } from "@/src/lib/supabase";
@@ -370,7 +370,8 @@ export function CasesList({ activeRole }: CasesListProps) {
                           >
                             <XCircle className="w-3 h-3" />
                             Close Case
-                        </button>
+                          </button>
+                        )}
                       </div>
                     )}
                   </div>
