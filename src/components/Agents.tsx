@@ -28,12 +28,17 @@ interface Agent {
 interface AgentTask {
   id: string;
   agent_id: string;
-  agent_name: string;
+  agent_name?: string;
   task_type: string;
-  description: string;
   status: "pending" | "running" | "completed" | "failed";
-  started_at?: string;
-  completed_at?: string;
+  priority?: number;
+  input_data?: any;
+  output_data?: any;
+  error_message?: string;
+  started_at?: string | null;
+  completed_at?: string | null;
+  created_at?: string;
+  updated_at?: string;
   duration_ms?: number;
 }
 
@@ -71,6 +76,20 @@ const agentIcons: Record<string, React.ReactNode> = {
   coordinator: <Network className="w-6 h-6" />,
   triage: <Filter className="w-6 h-6" />,
   executor: <Zap className="w-6 h-6" />,
+};
+
+const agentNames: Record<string, string> = {
+  athena: 'Athena',
+  monitor: 'Monitor',
+  analyst: 'Analyst',
+  coordinator: 'Coordinator',
+  triage: 'Triage',
+  executor: 'Executor',
+};
+
+const getAgentName = (agentId: string | undefined): string => {
+  if (!agentId) return '-';
+  return agentNames[agentId] || agentId.charAt(0).toUpperCase() + agentId.slice(1);
 };
 
 export function Agents({ activeRole }: { activeRole: Role }) {
@@ -305,8 +324,10 @@ export function Agents({ activeRole }: { activeRole: Role }) {
     }
   };
 
-  const formatTime = (dateStr: string) => {
+  const formatTime = (dateStr: string | null | undefined) => {
+    if (!dateStr) return '-';
     const date = new Date(dateStr);
+    if (isNaN(date.getTime())) return '-';
     return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   };
 
@@ -484,8 +505,8 @@ export function Agents({ activeRole }: { activeRole: Role }) {
                   <div key={task.id} className="flex items-center gap-3 text-sm">
                     {getTaskIcon(task.task_type)}
                     <div className="flex-1 min-w-0">
-                      <p className="truncate">{task.description}</p>
-                      <p className="text-xs text-slate-500">{task.agent_name} • {formatTime(task.started_at || '')}</p>
+                      <p className="truncate">{task.task_type} • {getAgentName(task.agent_id)}</p>
+                      <p className="text-xs text-slate-500">{formatTime(task.created_at)}</p>
                     </div>
                     {getTaskStatus(task.status)}
                   </div>
@@ -556,7 +577,7 @@ export function Agents({ activeRole }: { activeRole: Role }) {
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-3">
                           {getTaskIcon(task.task_type)}
-                          <span className="font-medium">{task.description}</span>
+                          <span className="font-medium">{task.task_type}</span>
                         </div>
                       </td>
                       <td className="px-4 py-3">
@@ -566,7 +587,7 @@ export function Agents({ activeRole }: { activeRole: Role }) {
                           task.agent_id === 'monitor' ? "bg-green-100 text-green-700" :
                           "bg-slate-100 text-slate-700"
                         )}>
-                          {task.agent_name}
+                          {getAgentName(task.agent_id)}
                         </span>
                       </td>
                       <td className="px-4 py-3">
@@ -786,9 +807,9 @@ function AgentDetailModal({
                 <div key={task.id} className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg text-sm">
                   {getTaskIcon(task.task_type)}
                   <div className="flex-1 min-w-0">
-                    <p className="truncate font-medium">{task.description}</p>
+                    <p className="truncate font-medium">{task.task_type} • {getAgentName(task.agent_id)}</p>
                     <p className="text-xs text-slate-500">
-                      {formatTime(task.started_at || '')}
+                      {formatTime(task.created_at)}
                       {task.duration_ms && ` • ${formatDuration(task.duration_ms)}`}
                     </p>
                   </div>
