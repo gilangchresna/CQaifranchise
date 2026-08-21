@@ -222,6 +222,7 @@ export function Agents({ activeRole }: { activeRole: Role }) {
           status: t.status,
           started_at: t.started_at,
           completed_at: t.completed_at,
+          created_at: t.created_at,
           duration_ms: t.completed_at && t.started_at
             ? new Date(t.completed_at).getTime() - new Date(t.started_at).getTime()
             : undefined,
