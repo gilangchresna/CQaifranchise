@@ -236,12 +236,12 @@ export function Agents({ activeRole }: { activeRole: Role }) {
 
   async function fetchTasksAndLogs() {
     try {
-      // Fetch recent tasks from agent_tasks table
+      // Fetch recent tasks from agent_tasks table (increased limit to include older tasks)
       const { data: tasksData } = await supabase
         .from('agent_tasks')
         .select('*')
         .order('created_at', { ascending: false })
-        .limit(50);
+        .limit(200); // Increased from 50 to include older agent tasks
 
       if (tasksData) {
         const agentNames: Record<string, string> = {
