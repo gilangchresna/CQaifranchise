@@ -240,6 +240,13 @@ export function Agents({ activeRole }: { activeRole: Role }) {
     }
   }
 
+  // Update last refresh after tasks are fetched
+  useEffect(() => {
+    if (tasks.length > 0 || logs.length > 0) {
+      setLastRefresh(new Date());
+    }
+  }, [tasks, logs]);
+
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'online':
