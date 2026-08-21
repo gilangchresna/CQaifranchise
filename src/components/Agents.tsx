@@ -125,6 +125,25 @@ export function Agents({ activeRole }: { activeRole: Role }) {
       coordinator_up: agents.find(a => a.id === 'coordinator')?.status !== 'offline'
     };
   }, [tasks, agents]);
+
+  // Calculate per-agent task counts from real data
+  const agentTaskCounts = useMemo(() => {
+    const counts: Record<string, { today: number; completed: number; pending: number; running: number; failed: number }> = {};
+    const today = new Date().toISOString().slice(0, 10);
+    
+    for (const task of tasks) {
+      const agentId = task.agent_id;
+      if (!counts[agentId]) {
+        counts[agentId] = { today: 0, completed: 0, pending: 0, running: 0, failed: 0 };
+      }
+      counts[agentId].today++;
+      if (task.status === 'completed') counts[agentId].completed++;
+      if (task.status === 'pending') counts[agentId].pending++;
+      if (task.status === 'running') counts[agentId].running++;
+      if (task.status === 'failed') counts[agentId].failed++;
+    }
+    return counts;
+  }, [tasks]);
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
   const [filterLevel, setFilterLevel] = useState<string>('all');
   const [filterStatus, setFilterStatus] = useState<string>('all');
@@ -138,63 +157,77 @@ export function Agents({ activeRole }: { activeRole: Role }) {
 
   async function fetchAgentData() {
     try {
+      // First fetch tasks to calculate real task counts
+      await fetchTasksAndLogs();
+      setLoading(false);
+    } catch (err) {
+      console.error('Error fetching agent data:', err);
+      setLoading(false);
+    }
+  }
+
+  // Separate function to update agents with real task counts
+  useEffect(() => {
+    if (tasks.length > 0) {
+      updateAgentsWithTaskCounts();
+    }
+  }, [tasks]);
+
+  async function updateAgentsWithTaskCounts() {
+    try {
+      // Try edge function first
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token || '';
-
-      // Fetch agent statuses
       const response = await fetch(`${EDGE_URL}/agent-status`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       const data = await response.json();
 
-      if (data.success) {
-        // Transform agent-status response to our Agent format
-        const transformedAgents: Agent[] = (data.agents || []).map((a: any) => ({
+      if (data.success && data.agents && data.agents.length > 0) {
+        const transformedAgents: Agent[] = data.agents.map((a: any) => ({
           id: a.agent_id,
           name: a.name,
           role: a.role,
           status: a.status,
           last_activity: a.last_activity,
-          tasks_completed_today: a.tasks_completed_today || 0,
-          tasks_pending: a.tasks_pending || 0,
-          tasks_running: a.tasks_running || 0,
-          tasks_failed: a.tasks_failed || 0,
+          tasks_completed_today: agentTaskCounts[a.agent_id]?.today || 0,
+          tasks_pending: agentTaskCounts[a.agent_id]?.pending || 0,
+          tasks_running: agentTaskCounts[a.agent_id]?.running || 0,
+          tasks_failed: agentTaskCounts[a.agent_id]?.failed || 0,
           avg_response_time_ms: a.avg_response_time_ms || 0,
           uptime_percent: a.uptime_percent || 100,
           description: a.description || '',
         }));
-
         setAgents(transformedAgents);
         setMetrics(data.summary || null);
-
-        // Fetch recent tasks and logs (always, regardless of edge function result)
-        await fetchTasksAndLogs();
-        
-        setLastRefresh(new Date());
       } else {
-        // Edge function failed, but still fetch tasks directly
-        console.log('Edge function returned no success, fetching tasks directly');
-        await fetchTasksAndLogs();
-        setLastRefresh(new Date());
+        // Fetch from database
+        const { data: dbAgents } = await supabase
+          .from('agents')
+          .select('*')
+          .in('id', ['athena', 'monitor', 'analyst', 'coordinator', 'triage', 'executor']);
         
-        // Set default agents if not set
-        if (agents.length === 0) {
-          setAgents([
-            { id: 'athena', name: 'Athena', role: 'AI Chat Agent', status: 'online', tasks_completed_today: 0, tasks_pending: 0, tasks_running: 0, tasks_failed: 0, avg_response_time_ms: 0, uptime_percent: 100, last_activity: null, description: 'AI assistant' },
-            { id: 'monitor', name: 'Monitor', role: 'Anomaly Detection', status: 'online', tasks_completed_today: 0, tasks_pending: 0, tasks_running: 0, tasks_failed: 0, avg_response_time_ms: 0, uptime_percent: 100, last_activity: null, description: 'Alert monitoring' },
-            { id: 'analyst', name: 'Analyst', role: 'Stockout Prediction', status: 'online', tasks_completed_today: 0, tasks_pending: 0, tasks_running: 0, tasks_failed: 0, avg_response_time_ms: 0, uptime_percent: 100, last_activity: null, description: 'Data analysis' },
-            { id: 'triage', name: 'Triage', role: 'Alert Routing', status: 'online', tasks_completed_today: 0, tasks_pending: 0, tasks_running: 0, tasks_failed: 0, avg_response_time_ms: 0, uptime_percent: 100, last_activity: null, description: 'Case triage' },
-            { id: 'coordinator', name: 'Coordinator', role: 'Task Orchestrator', status: 'online', tasks_completed_today: 0, tasks_pending: 0, tasks_running: 0, tasks_failed: 0, avg_response_time_ms: 0, uptime_percent: 100, last_activity: null, description: 'Task orchestration' },
-            { id: 'executor', name: 'Executor', role: 'Action Handler', status: 'online', tasks_completed_today: 0, tasks_pending: 0, tasks_running: 0, tasks_failed: 0, avg_response_time_ms: 0, uptime_percent: 100, last_activity: null, description: 'Action execution' },
-          ]);
+        if (dbAgents && dbAgents.length > 0) {
+          const fallbackAgents: Agent[] = dbAgents.map((a: any) => ({
+            id: a.id,
+            name: a.name,
+            role: a.role,
+            status: a.status || 'online',
+            last_activity: a.last_active,
+            tasks_completed_today: agentTaskCounts[a.id]?.today || 0,
+            tasks_pending: agentTaskCounts[a.id]?.pending || 0,
+            tasks_running: agentTaskCounts[a.id]?.running || 0,
+            tasks_failed: agentTaskCounts[a.id]?.failed || 0,
+            avg_response_time_ms: a.avg_response_time_ms || 0,
+            uptime_percent: a.uptime_percentage || 100,
+            description: a.description || '',
+          }));
+          setAgents(fallbackAgents);
         }
       }
+      setLastRefresh(new Date());
     } catch (err) {
-      console.error('Error fetching agent data:', err);
-      // Still try to fetch tasks on error
-      await fetchTasksAndLogs();
-    } finally {
-      setLoading(false);
+      console.error('Error updating agents:', err);
     }
   }
 
