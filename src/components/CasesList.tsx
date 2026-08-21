@@ -86,6 +86,11 @@ export function CasesList({ activeRole }: CasesListProps) {
   const [expandedCase, setExpandedCase] = useState<number | null>(null);
   const [stats, setStats] = useState<CaseStats>({ NEW: 0, IN_PROGRESS: 0, RESOLVED: 0, CLOSED: 0 });
 
+  // Fetch cases on mount
+  useEffect(() => {
+    fetchCases();
+  }, []);
+
   // Fetch cases (only once, filter locally)
   async function fetchCases() {
     setLoading(true);
