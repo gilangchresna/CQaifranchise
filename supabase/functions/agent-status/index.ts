@@ -4,7 +4,7 @@
  * SECURITY: Requires authentication
  */
 
-import { createClient } from "jsr:@supabase/supabase-js@2"
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
 import { verifyAuth, unauthorizedResponse } from "../_shared/auth-helper.ts"
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
@@ -33,10 +33,22 @@ interface AgentStatus {
   description: string
 }
 
+interface AgentTask {
+  agent_id: string
+  status: string
+  created_at: string
+}
+
+interface AgentMetric {
+  agent_id: string
+  metric_type: string
+  metric_value: number
+}
+
 // Calculate agent status from recent tasks
-function calculateStatus(tasks: any[]): 'online' | 'busy' | 'offline' | 'error' {
-  const runningTasks = tasks.filter(t => t.status === 'running')
-  const failedTasks = tasks.filter(t => t.status === 'failed')
+function calculateStatus(tasks: AgentTask[]): 'online' | 'busy' | 'offline' | 'error' {
+  const runningTasks = tasks.filter((t: AgentTask) => t.status === 'running')
+  const failedTasks = tasks.filter((t: AgentTask) => t.status === 'failed')
 
   if (runningTasks.length > 0) return 'busy'
   if (failedTasks.length > 2) return 'error'
@@ -99,18 +111,18 @@ Deno.serve(async (req: Request) => {
 
     // Build agent statuses
     const agentStatuses: AgentStatus[] = agentDefinitions.map(agent => {
-      const agentTasks = (recentTasks || []).filter(t => t.agent_id === agent.id)
-      const agentMetrics = (metrics || []).filter(m => m.agent_id === agent.id)
+      const agentTasks = (recentTasks as AgentTask[] || []).filter((t: AgentTask) => t.agent_id === agent.id)
+      const agentMetrics = (metrics as AgentMetric[] || []).filter((m: AgentMetric) => m.agent_id === agent.id)
 
       // Calculate metrics
-      const uptimeMetric = agentMetrics.find(m => m.metric_type === 'uptime')
-      const avgDurationMetric = agentMetrics.find(m => m.metric_type === 'avg_duration')
+      const uptimeMetric = agentMetrics.find((m: AgentMetric) => m.metric_type === 'uptime')
+      const avgDurationMetric = agentMetrics.find((m: AgentMetric) => m.metric_type === 'avg_duration')
 
-      const tasks_completed_today = agentTasks.filter(t => t.status === 'completed').length
-      const tasks_failed = agentTasks.filter(t => t.status === 'failed').length
+      const tasks_completed_today = agentTasks.filter((t: AgentTask) => t.status === 'completed').length
+      const tasks_failed = agentTasks.filter((t: AgentTask) => t.status === 'failed').length
 
       // Get last activity
-      const lastTask = agentTasks.sort((a, b) =>
+      const lastTask = agentTasks.sort((a: AgentTask, b: AgentTask) =>
         new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
       )[0]
 
@@ -119,8 +131,8 @@ Deno.serve(async (req: Request) => {
         name: agent.name,
         role: agent.role,
         status: calculateStatus(agentTasks),
-        tasks_pending: agentTasks.filter(t => t.status === 'pending').length,
-        tasks_running: agentTasks.filter(t => t.status === 'running').length,
+        tasks_pending: agentTasks.filter((t: AgentTask) => t.status === 'pending').length,
+        tasks_running: agentTasks.filter((t: AgentTask) => t.status === 'running').length,
         tasks_completed: tasks_completed_today,
         tasks_failed,
         tasks_completed_today,
@@ -134,17 +146,17 @@ Deno.serve(async (req: Request) => {
     // Summary stats
     // Note: Use recentTasks count directly, not agentStatuses which might have issues
     const totalTasksInWindow = (recentTasks || []).length;
-    const totalCompleted = (recentTasks || []).filter(t => t.status === 'completed').length;
-    const totalFailed = (recentTasks || []).filter(t => t.status === 'failed').length;
+    const totalCompleted = (recentTasks as AgentTask[] || []).filter((t: AgentTask) => t.status === 'completed').length;
+    const totalFailed = (recentTasks as AgentTask[] || []).filter((t: AgentTask) => t.status === 'failed').length;
     
     const summary = {
       total_tasks_today: totalTasksInWindow,
       total_completed: totalCompleted,
       total_failed: totalFailed,
-      avg_uptime: agentStatuses.length > 0 
-        ? agentStatuses.reduce((sum, a) => sum + a.uptime_percent, 0) / agentStatuses.length 
+      avg_uptime: agentStatuses.length > 0
+        ? agentStatuses.reduce((sum: number, a: AgentStatus) => sum + a.uptime_percent, 0) / agentStatuses.length
         : 100,
-      coordinator_up: agentStatuses.find(a => a.agent_id === 'coordinator')?.status !== 'offline'
+      coordinator_up: agentStatuses.find((a: AgentStatus) => a.agent_id === 'coordinator')?.status !== 'offline'
     };
 
     return new Response(JSON.stringify({

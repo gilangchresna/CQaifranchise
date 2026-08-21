@@ -11,7 +11,7 @@
  */
 
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0";
 
 const HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -21,6 +21,13 @@ const HEADERS = {
 const SB_URL = Deno.env.get("SUPABASE_URL") || "";
 const SB_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 const sb = createClient(SB_URL, SB_KEY);
+
+// Type interfaces for Supabase queries
+interface InventoryItem {
+  id: number;
+  outlet_id: number;
+  current_stock: number;
+}
 
 // FX rates to SGD
 function toSGD(currency: string): number {
@@ -40,7 +47,7 @@ function severityFromZ(z: number): { status: string; severity: string } {
 }
 
 // Call alert-generator edge function
-async function createAlert(
+async function _createAlert(
   outletId: number,
   triggerType: "ANOMALY" | "STOCKOUT" | "MANUAL",
   currentSales?: number
@@ -159,13 +166,18 @@ async function logAgentActivity(
 // ── Workflow helpers ────────────────────────────────────────────────────────────
 
 async function workflowCreate(name: string, payload: any, triggeredBy = "manual"): Promise<string | null> {
+  console.log("workflowCreate called:", name, triggeredBy, payload);
   try {
     const { data, error } = await sb.rpc("workflow_create", {
       p_workflow_name: name,
       p_payload: payload,
       p_triggered_by: triggeredBy,
     });
-    if (error) { console.error("workflow_create error:", error); return null; }
+    if (error) { 
+      console.error("workflow_create error:", JSON.stringify(error)); 
+      return null; 
+    }
+    console.log("workflow_create result:", data);
     return data as string;
   } catch (e) {
     console.error("workflow_create exception:", e);
@@ -197,7 +209,7 @@ async function workflowUpdate(
 
 // ── Main pipeline ────────────────────────────────────────────────────────────────
 
-serve(async (req) => {
+serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: HEADERS });
   }
@@ -207,16 +219,34 @@ serve(async (req) => {
   const t30 = new Date(now.getTime() - 30 * 86400000).toISOString().slice(0, 10);
 
   let instanceId: string | null = null;
-  let triggeredBy = "manual";
+  let triggeredBy = "cron";
 
   try {
-    const body = await req.json().catch(() => ({}));
-    if (body?.triggered_by) triggeredBy = body.triggered_by;
+    // Try to parse body, but continue even if it fails
+    let body: any = {};
+    try {
+      const text = await req.text();
+      if (text) {
+        body = JSON.parse(text);
+        if (body?.triggered_by) triggeredBy = body.triggered_by;
+      }
+    } catch (parseErr) {
+      console.log("Body parse skipped (empty or invalid)");
+    }
+    
+    console.log("Creating workflow instance for date:", t0, "triggeredBy:", triggeredBy);
     instanceId = await workflowCreate("coordinator-pipeline", { date: t0 }, triggeredBy);
+    console.log("Workflow instance created:", instanceId);
     if (instanceId) await workflowUpdate(instanceId, "running", "init", 5);
-  } catch (_) {
-    instanceId = await workflowCreate("coordinator-pipeline", { date: t0 }, triggeredBy);
-    if (instanceId) await workflowUpdate(instanceId, "running", "init", 5);
+  } catch (e: any) {
+    console.error("ERROR creating workflow instance:", e?.message || e);
+    // Try again without body
+    try {
+      instanceId = await workflowCreate("coordinator-pipeline", { date: t0 }, "fallback");
+      if (instanceId) await workflowUpdate(instanceId, "running", "init", 5);
+    } catch (e2: any) {
+      console.error("FALLBACK also failed:", e2?.message || e2);
+    }
   }
 
   const out: any = { errors: [] };
@@ -224,7 +254,7 @@ serve(async (req) => {
 
   try {
     // ── STEP 1: Anomaly Detection ───────────────────────────────────────────
-    await workflowUpdate(instanceId, "running", "anomaly", 10);
+    if (instanceId) await workflowUpdate(instanceId, "running", "anomaly", 10);
 
     // Load regions + outlets
     const [{ data: regions }, { data: outlets }] = await Promise.all([
@@ -346,18 +376,19 @@ serve(async (req) => {
     });
 
     // ── STEP 2: Stockout Risk ────────────────────────────────────────────────
-    await workflowUpdate(instanceId, "running", "stockout", 40);
+    if (instanceId) await workflowUpdate(instanceId, "running", "stockout", 40);
 
-    const { data: inventory, error: invErr } = await sb
+    const { data: inventoryData, error: invErr } = await sb
       .from("inventory")
       .select("id, outlet_id, current_stock")
       .lt("current_stock", 25);
+    const inventory = inventoryData as InventoryItem[] | null;
     out.inventory_low_count = (inventory || []).length;
     out.stockout = { checked: (inventory || []).length };
     if (invErr) throw new Error("inventory: " + invErr.message);
 
     // ── STEP 3: Create Alerts ─────────────────────────────────────────────
-    await workflowUpdate(instanceId, "running", "alerts", 70);
+    if (instanceId) await workflowUpdate(instanceId, "running", "alerts", 70);
 
     let alertsCreated = 0;
     const today = new Date().toISOString().slice(0, 10);
@@ -380,11 +411,11 @@ serve(async (req) => {
     }
 
     // Stockout alerts
-    const stockoutOutlets: number[] = [...new Set((inventory || []).map((i: any) => i.outlet_id))];
+    const stockoutOutlets: number[] = [...new Set((inventory || []).map((i: InventoryItem) => i.outlet_id))];
     for (const oid of stockoutOutlets) {
       const outletName = await getOutletName(Number(oid));
-      const inv = (inventory || []).filter((i: any) => i.outlet_id === oid);
-      const lowest = inv.reduce((min: number, i: any) => Math.min(min, i.current_stock), 999);
+      const inv = (inventory || []).filter((i: InventoryItem) => i.outlet_id === oid);
+      const lowest = inv.reduce((min: number, i: InventoryItem) => Math.min(min, i.current_stock), 999);
       const title = `STOCKOUT RISK: Low Stock Alert at ${outletName}`;
       const description = `Stockout risk detected at ${outletName}.\n\nOutlet: ${outletName}\nLowest Stock: ${lowest} units\nItems Below Threshold: ${inv.length}\n\nTriggered by: Coordinator Pipeline AI Agent\nDate: ${today}`;
 
@@ -402,7 +433,7 @@ serve(async (req) => {
 
     out.alerts = { created: alertsCreated, details: alertResults.slice(0, 10) };
 
-    await workflowUpdate(instanceId, "completed", "done", 100, out);
+    if (instanceId) await workflowUpdate(instanceId, "completed", "done", 100, out);
 
     return new Response(JSON.stringify({
       success: true,
@@ -415,7 +446,7 @@ serve(async (req) => {
     out.fatal = e.message;
     out.errors.push(e.message);
     if (instanceId) {
-      await workflowUpdate(instanceId, "failed", "fatal", null, null, e.message);
+      await workflowUpdate(instanceId, "failed", "fatal", undefined, undefined, e.message);
     }
     return new Response(JSON.stringify({
       success: false,
