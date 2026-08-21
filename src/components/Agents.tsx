@@ -156,6 +156,7 @@ export function Agents({ activeRole }: { activeRole: Role }) {
         // Edge function failed, but still fetch tasks directly
         console.log('Edge function returned no success, fetching tasks directly');
         await fetchTasksAndLogs();
+        setLastRefresh(new Date());
         
         // Set default agents if not set
         if (agents.length === 0) {
