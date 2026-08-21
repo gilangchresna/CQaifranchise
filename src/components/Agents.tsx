@@ -130,14 +130,20 @@ export function Agents({ activeRole }: { activeRole: Role }) {
   // Calculate per-agent task counts from real data
   const agentTaskCounts = useMemo(() => {
     const counts: Record<string, { today: number; completed: number; pending: number; running: number; failed: number }> = {};
-    const today = new Date().toISOString().slice(0, 10);
+    const todayStr = new Date().toISOString().slice(0, 10); // "2026-08-21"
     
     for (const task of tasks) {
       const agentId = task.agent_id;
       if (!counts[agentId]) {
         counts[agentId] = { today: 0, completed: 0, pending: 0, running: 0, failed: 0 };
       }
-      counts[agentId].today++;
+      
+      // Only count tasks created today for "today" metric
+      const taskDate = task.created_at?.slice(0, 10);
+      if (taskDate === todayStr) {
+        counts[agentId].today++;
+      }
+      
       if (task.status === 'completed') counts[agentId].completed++;
       if (task.status === 'pending') counts[agentId].pending++;
       if (task.status === 'running') counts[agentId].running++;
