@@ -1,6 +1,6 @@
 "use client";
 import React, { useState, useEffect, useMemo } from "react";
-import { Users, AlertTriangle, TrendingUp, Building2, RefreshCw, ChevronDown, Search } from "lucide-react";
+import { Users, AlertTriangle, TrendingUp, Building2, RefreshCw, ChevronDown, Search, Trophy, TrendingDown } from "lucide-react";
 import { supabase } from "@/src/lib/supabase";
 
 interface OutletStaffing {
@@ -18,6 +18,17 @@ interface OutletStaffing {
   anomaly_score: number;
 }
 
+interface StaffPerformance {
+  staff_id: string;
+  staff_name: string;
+  outlet_id: number;
+  outlet_name: string;
+  transactions: number;
+  total_sales: number;
+  avg_ticket: number;
+  rank: number;
+}
+
 interface RegionalStats {
   total_outlets: number;
   total_staff: number;
@@ -25,24 +36,28 @@ interface RegionalStats {
   total_weekly_revenue: number;
   avg_revenue_per_staff: number;
   understaffed_outlets: number;
+  total_transactions: number;
+  avg_ticket_size: number;
 }
 
 const STAFFING_THRESHOLD = 5; // Alert if < 5 staff
 
 export function Workforce({ activeRole }: { activeRole: any }) {
   const [outletStaffing, setOutletStaffing] = useState<OutletStaffing[]>([]);
+  const [staffPerformance, setStaffPerformance] = useState<StaffPerformance[]>([]);
   const [regionalStats, setRegionalStats] = useState<RegionalStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [sortBy, setSortBy] = useState<"name" | "staff" | "revenue">("revenue");
   const [expandedOutlet, setExpandedOutlet] = useState<number | null>(null);
+  const [activeTab, setActiveTab] = useState<"outlets" | "staff">("outlets");
 
   useEffect(() => {
-    fetchOutletStaffing();
+    fetchAllData();
   }, []);
 
-  async function fetchOutletStaffing() {
+  async function fetchAllData() {
     setLoading(true);
     setError(null);
     try {
@@ -133,7 +148,64 @@ export function Workforce({ activeRole }: { activeRole: any }) {
         total_weekly_revenue: totalRevenue,
         avg_revenue_per_staff: totalStaff > 0 ? totalRevenue / totalStaff : 0,
         understaffed_outlets: understaffed,
+        total_transactions: 0,
+        avg_ticket_size: 0,
       });
+
+      // Fetch staff performance from POS
+      const { data: posData, error: posError } = await supabase
+        .from('sales_transactions')
+        .select(`
+          staff_id,
+          amount,
+          outlet_id,
+          outlets(name)
+        `)
+        .eq('outlets.region_id', 114)
+        .gte('created_at', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString());
+
+      if (!posError && posData) {
+        // Process staff performance
+        const staffMap = new Map<string, any>();
+        
+        posData.forEach((tx: any) => {
+          const staffId = tx.staff_id || 'UNASSIGNED';
+          if (!staffMap.has(staffId)) {
+            staffMap.set(staffId, {
+              staff_id: staffId,
+              staff_name: staffId === 'UNASSIGNED' ? 'Unassigned' : staffId,
+              outlet_id: tx.outlet_id,
+              outlet_name: tx.outlets?.name || 'Unknown',
+              transactions: 0,
+              total_sales: 0,
+            });
+          }
+          const staff = staffMap.get(staffId);
+          staff.transactions++;
+          staff.total_sales += parseFloat(tx.amount) || 0;
+        });
+
+        // Convert to array and calculate metrics
+        const staffList: StaffPerformance[] = Array.from(staffMap.values())
+          .map(s => ({
+            ...s,
+            avg_ticket: s.transactions > 0 ? s.total_sales / s.transactions : 0,
+          }))
+          .sort((a, b) => b.total_sales - a.total_sales)
+          .map((s, i) => ({ ...s, rank: i + 1 }));
+
+        setStaffPerformance(staffList);
+
+        // Update regional stats with POS data
+        const totalTx = staffList.reduce((sum, s) => sum + s.transactions, 0);
+        const totalSales = staffList.reduce((sum, s) => sum + s.total_sales, 0);
+        
+        setRegionalStats(prev => prev ? {
+          ...prev,
+          total_transactions: totalTx,
+          avg_ticket_size: totalTx > 0 ? totalSales / totalTx : 0,
+        } : null);
+      }
     } catch (err: any) {
       console.error('Error fetching staffing:', err);
       setError(err.message);
@@ -200,7 +272,7 @@ export function Workforce({ activeRole }: { activeRole: any }) {
     return (
       <div className="text-center py-8 text-red-500">
         <p className="text-sm">{error}</p>
-        <button onClick={fetchOutletStaffing} className="mt-2 text-sm text-blue-600 hover:underline">
+        <button onClick={fetchAllData} className="mt-2 text-sm text-blue-600 hover:underline">
           Retry
         </button>
       </div>
@@ -216,11 +288,42 @@ export function Workforce({ activeRole }: { activeRole: any }) {
           <p className="text-sm text-slate-500">Real-time staffing & performance metrics</p>
         </div>
         <button
-          onClick={fetchOutletStaffing}
+          onClick={fetchAllData}
           className="flex items-center gap-2 px-3 py-2 text-sm bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
         >
           <RefreshCw className="w-4 h-4" />
           Refresh
+        </button>
+      </div>
+
+      {/* Tab Switcher */}
+      <div className="flex gap-2 border-b">
+        <button
+          onClick={() => setActiveTab("outlets")}
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+            activeTab === "outlets"
+              ? "border-blue-600 text-blue-600"
+              : "border-transparent text-slate-500 hover:text-slate-700"
+          }`}
+        >
+          <Building2 className="w-4 h-4 inline mr-2" />
+          Outlet Staffing
+        </button>
+        <button
+          onClick={() => setActiveTab("staff")}
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+            activeTab === "staff"
+              ? "border-blue-600 text-blue-600"
+              : "border-transparent text-slate-500 hover:text-slate-700"
+          }`}
+        >
+          <Users className="w-4 h-4 inline mr-2" />
+          Staff Performance
+          {staffPerformance.length > 0 && (
+            <span className="ml-2 px-2 py-0.5 text-xs bg-blue-100 text-blue-600 rounded-full">
+              {staffPerformance.length}
+            </span>
+          )}
         </button>
       </div>
 
@@ -448,6 +551,87 @@ export function Workforce({ activeRole }: { activeRole: any }) {
           </div>
         )}
       </div>
+
+      {/* Staff Performance Table - only show when tab is "staff" */}
+      {activeTab === "staff" && (
+        <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
+          <div className="px-6 py-4 border-b">
+            <h3 className="font-semibold text-slate-900">Staff Performance (Last 7 Days)</h3>
+            <p className="text-sm text-slate-500">Ranked by total sales from POS transactions</p>
+          </div>
+          <table className="w-full">
+            <thead className="bg-slate-50">
+              <tr className="text-left text-xs font-semibold text-slate-500">
+                <th className="px-6 py-4">Rank</th>
+                <th className="px-6 py-4">Staff ID</th>
+                <th className="px-6 py-4">Outlet</th>
+                <th className="px-6 py-4 text-right">Transactions</th>
+                <th className="px-6 py-4 text-right">Total Sales</th>
+                <th className="px-6 py-4 text-right">Avg Ticket</th>
+                <th className="px-6 py-4 text-right">Performance</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y">
+              {staffPerformance.length > 0 ? (
+                staffPerformance.slice(0, 50).map((staff, index) => {
+                  const avgTicket = regionalStats?.avg_ticket_size || 1;
+                  const perfPercent = ((staff.avg_ticket / avgTicket - 1) * 100).toFixed(1);
+                  const isAboveAvg = staff.avg_ticket > avgTicket;
+                  
+                  return (
+                    <tr key={staff.staff_id} className="hover:bg-slate-50">
+                      <td className="px-6 py-4">
+                        {index < 3 ? (
+                          <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold ${
+                            index === 0 ? "bg-yellow-100 text-yellow-700" :
+                            index === 1 ? "bg-slate-200 text-slate-600" :
+                            index === 2 ? "bg-orange-100 text-orange-700" : "bg-slate-100 text-slate-600"
+                          }`}>
+                            {index + 1}
+                          </span>
+                        ) : (
+                          <span className="text-sm text-slate-500">{index + 1}</span>
+                        )}
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="font-medium text-slate-900">{staff.staff_name}</div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="text-slate-700">{staff.outlet_name}</div>
+                      </td>
+                      <td className="px-6 py-4 text-right">
+                        <div className="font-medium text-slate-900">{staff.transactions}</div>
+                      </td>
+                      <td className="px-6 py-4 text-right">
+                        <div className="font-semibold text-slate-900">${staff.total_sales.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                      </td>
+                      <td className="px-6 py-4 text-right">
+                        <div className="font-medium text-slate-700">${staff.avg_ticket.toFixed(2)}</div>
+                      </td>
+                      <td className="px-6 py-4 text-right">
+                        <span className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium ${
+                          isAboveAvg ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
+                        }`}>
+                          {isAboveAvg ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
+                          {isAboveAvg ? "+" : ""}{perfPercent}%
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })
+              ) : (
+                <tr>
+                  <td colSpan={7} className="px-6 py-12 text-center text-slate-400">
+                    <Users className="w-10 h-10 mx-auto mb-2" />
+                    <p>No POS transaction data available</p>
+                    <p className="text-sm">Run POS simulator to generate data</p>
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }
