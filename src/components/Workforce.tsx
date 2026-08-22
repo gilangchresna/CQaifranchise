@@ -594,35 +594,128 @@ export function Workforce({ activeRole, userRegionId }: { activeRole: Role; user
 }
 
 // Staff Detail View Component
+interface StaffPerformanceDetail {
+  total_sales: number;
+  transactions: number;
+  avg_ticket: number;
+  rank: number;
+  percentile: number;
+  badge: 'top' | 'good' | 'average' | 'needs_training';
+}
+
 function StaffDetailView({ 
   staff, 
   onBack, 
   isAskingAI, 
   setIsAskingAI,
-  staffInsight,
-  setStaffInsight
+  staffInsight, 
+  setStaffInsight 
 }: { 
   staff: Staff; 
-  onBack: () => void;
+  onBack: () => void; 
   isAskingAI: boolean;
   setIsAskingAI: (v: boolean) => void;
   staffInsight: StaffInsight | null;
   setStaffInsight: (v: StaffInsight | null) => void;
 }) {
-  const getStatusColor = (status: string) => {
+  const [posPerformance, setPosPerformance] = useState<StaffPerformanceDetail | null>(null);
+  const [loadingPos, setLoadingPos] = useState(true);
+  const [totalStaffAtOutlet, setTotalStaffAtOutlet] = useState(0);
+
+  useEffect(() => {
+    fetchPosPerformance();
+  }, [staff.id, staff.outlet_id]);
+
+  async function fetchPosPerformance() {
+    setLoadingPos(true);
+    try {
+      const staffIdStr = String(staff.id);
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+      
+      const { data: allTx } = await supabase
+        .from('sales_transactions')
+        .select('staff_id, amount')
+        .eq('outlet_id', staff.outlet_id)
+        .gte('created_at', sevenDaysAgo.toISOString());
+
+      const staffTx = allTx?.filter(tx => {
+        if (!tx.staff_id) return false;
+        return tx.staff_id.includes(staffIdStr) || tx.staff_id === `STF${staffIdStr.padStart(3, '0')}`;
+      }) || [];
+
+      const total_sales = staffTx.reduce((sum, tx) => sum + (parseFloat(tx.amount) || 0), 0);
+      const transactions = staffTx.length;
+      const avg_ticket = transactions > 0 ? total_sales / transactions : 0;
+
+      const staffSalesMap = new Map<string, number>();
+      allTx?.forEach(tx => {
+        const sid = tx.staff_id || 'UNKNOWN';
+        staffSalesMap.set(sid, (staffSalesMap.get(sid) || 0) + (parseFloat(tx.amount) || 0));
+      });
+
+      const sortedStaff = Array.from(staffSalesMap.entries())
+        .sort((a, b) => b[1] - a[1]);
+      
+      const rank = sortedStaff.findIndex(([sid]) => 
+        sid.includes(staffIdStr) || sid === `STF${staffIdStr.padStart(3, '0')}`
+      ) + 1;
+      
+      const percentile = sortedStaff.length > 0 
+        ? Math.round((1 - (rank - 1) / sortedStaff.length) * 100) 
+        : 0;
+
+      let badge: StaffPerformanceDetail['badge'] = 'average';
+      if (percentile >= 90) badge = 'top';
+      else if (percentile >= 75) badge = 'good';
+      else if (percentile >= 50) badge = 'average';
+      else badge = 'needs_training';
+
+      setPosPerformance({ total_sales, transactions, avg_ticket, rank, percentile, badge });
+      setTotalStaffAtOutlet(sortedStaff.length);
+    } catch (err) {
+      console.error('Error fetching POS performance:', err);
+    } finally {
+      setLoadingPos(false);
+    }
+  }
+
+  function calculateTenure(hireDate: string | undefined): string {
+    if (!hireDate) return 'N/A';
+    const hire = new Date(hireDate);
+    const now = new Date();
+    const years = now.getFullYear() - hire.getFullYear();
+    const months = now.getMonth() - hire.getMonth();
+    if (years > 0) return `${years}y ${months > 0 ? `${months}m` : ''}`;
+    if (months > 0) return `${months} month${months > 1 ? 's' : ''}`;
+    return 'Just joined';
+  }
+
+  function getBadgeInfo(badge: StaffPerformanceDetail['badge']) {
+    switch (badge) {
+      case 'top': return { label: '⭐ Top Performer', color: 'bg-yellow-100 text-yellow-700' };
+      case 'good': return { label: '✓ Good', color: 'bg-green-100 text-green-700' };
+      case 'average': return { label: '○ Average', color: 'bg-slate-100 text-slate-700' };
+      case 'needs_training': return { label: '⚠️ Needs Training', color: 'bg-red-100 text-red-700' };
+    }
+  }
+
+  function getStatusColor(status: string) {
     switch (status) {
       case 'present': return 'bg-green-100 text-green-700';
       case 'absent': return 'bg-red-100 text-red-700';
       case 'late': return 'bg-orange-100 text-orange-700';
+      case 'off_duty': return 'bg-slate-100 text-slate-700';
+      case 'active': return 'bg-blue-100 text-blue-700';
       default: return 'bg-slate-100 text-slate-700';
     }
-  };
+  }
 
-  const getPerformanceColor = (score: number) => {
+  function getPerformanceColor(score: number) {
     if (score >= 85) return 'text-green-600';
     if (score >= 70) return 'text-yellow-600';
     return 'text-red-600';
-  };
+  }
 
   async function generateAIInsights() {
     setIsAskingAI(true);
@@ -744,65 +837,97 @@ function StaffDetailView({
         </div>
       </div>
 
-      {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="bg-white border rounded-2xl p-5">
-          <p className="text-xs text-slate-500 mb-2">Performance Score</p>
-          <p className={`text-3xl font-bold ${getPerformanceColor(staff.performance_score || 0)}`}>
-            {staff.performance_score || 0}%
-          </p>
-          <div className="w-full h-2 bg-slate-200 rounded-full mt-2">
-            <div 
-              className={`h-full rounded-full ${(staff.performance_score || 0) >= 85 ? 'bg-green-500' : (staff.performance_score || 0) >= 70 ? 'bg-yellow-500' : 'bg-red-500'}`}
-              style={{ width: `${staff.performance_score || 0}%` }}
-            />
+      {/* Two Column Layout: Basic Info | Performance */}
+      <div className="grid md:grid-cols-2 gap-6">
+        {/* Basic Info Card */}
+        <div className="bg-white border rounded-2xl p-6">
+          <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+            📋 Basic Information
+          </h3>
+          <div className="space-y-4">
+            <div className="flex justify-between items-center">
+              <span className="text-slate-500">Role</span>
+              <span className="font-medium">{staff.role}</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-slate-500">Outlet</span>
+              <span className="font-medium">{staff.outlet?.name || 'N/A'}</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-slate-500">Region</span>
+              <span className="font-medium">{staff.outlet?.region?.name || 'N/A'}</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-slate-500">Hire Date</span>
+              <span className="font-medium">
+                {staff.hire_date ? new Date(staff.hire_date).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : 'N/A'}
+              </span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-slate-500">Tenure</span>
+              <span className="font-medium">{calculateTenure(staff.hire_date)}</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-slate-500">Shift</span>
+              <span className="font-medium">
+                {staff.shift_start ? `${staff.shift_start.slice(0, 5)} - ${staff.shift_end?.slice(0, 5) || 'N/A'}` : 'Not set'}
+              </span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-slate-500">Phone</span>
+              <span className="font-medium">{staff.contact || 'N/A'}</span>
+            </div>
           </div>
         </div>
 
-        <div className="bg-white border rounded-2xl p-5">
-          <p className="text-xs text-slate-500 mb-2">Attendance Rate</p>
-          <p className={`text-3xl font-bold ${(staff.attendance_rate || 0) >= 90 ? 'text-green-600' : 'text-orange-600'}`}>
-            {staff.attendance_rate || 0}%
-          </p>
-          <p className="text-xs text-slate-400 mt-2">Last 30 days</p>
-        </div>
-
-        <div className="bg-white border rounded-2xl p-5">
-          <p className="text-xs text-slate-500 mb-2">Sales Handled</p>
-          <p className="text-3xl font-bold text-slate-900">
-            S${(staff.sales_handled || 0).toLocaleString()}
-          </p>
-          <p className="text-xs text-slate-400 mt-2">This month</p>
-        </div>
-
-        <div className="bg-white border rounded-2xl p-5">
-          <p className="text-xs text-slate-500 mb-2">Shift Hours</p>
-          <p className="text-3xl font-bold text-slate-900">
-            {staff.shift_start}
-          </p>
-          <p className="text-xs text-slate-400 mt-2">to {staff.shift_end}</p>
-        </div>
-      </div>
-
-      {/* Outlet Info */}
-      <div className="bg-white border rounded-2xl p-6">
-        <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-          <Building2 className="w-5 h-5 text-slate-500" />
-          Assigned Outlet
-        </h3>
-        <div className="grid md:grid-cols-3 gap-4">
-          <div>
-            <p className="text-xs text-slate-500">Outlet Name</p>
-            <p className="font-medium">{staff.outlet?.name || 'N/A'}</p>
-          </div>
-          <div>
-            <p className="text-xs text-slate-500">Outlet Code</p>
-            <p className="font-medium">{staff.outlet?.code || 'N/A'}</p>
-          </div>
-          <div>
-            <p className="text-xs text-slate-500">Region</p>
-            <p className="font-medium">{staff.outlet?.region?.name || 'N/A'}</p>
-          </div>
+        {/* POS Performance Card */}
+        <div className="bg-white border rounded-2xl p-6">
+          <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+            📊 POS Performance (7 Days)
+          </h3>
+          
+          {loadingPos ? (
+            <div className="flex items-center justify-center py-8">
+              <div className="animate-spin rounded-full h-8 w-8 border-2 border-blue-600 border-t-transparent"></div>
+            </div>
+          ) : posPerformance && posPerformance.transactions > 0 ? (
+            <div className="space-y-4">
+              {/* Performance Badge */}
+              <div className="flex items-center justify-between">
+                <span className="text-slate-500">Status</span>
+                <span className={`px-3 py-1 rounded-full text-xs font-medium ${getBadgeInfo(posPerformance.badge).color}`}>
+                  {getBadgeInfo(posPerformance.badge).label}
+                </span>
+              </div>
+              
+              <div className="flex justify-between items-center">
+                <span className="text-slate-500">Total Sales</span>
+                <span className="font-bold text-green-600">${posPerformance.total_sales.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-slate-500">Transactions</span>
+                <span className="font-medium">{posPerformance.transactions}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-slate-500">Avg Ticket</span>
+                <span className="font-medium">${posPerformance.avg_ticket.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-slate-500">Rank</span>
+                <span className="font-medium">#{posPerformance.rank} / {totalStaffAtOutlet}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-slate-500">Percentile</span>
+                <span className="font-medium">{posPerformance.percentile}th percentile</span>
+              </div>
+            </div>
+          ) : (
+            <div className="text-center py-8 text-slate-400">
+              <BarChart3 className="w-12 h-12 mx-auto mb-2 opacity-50" />
+              <p>No POS transaction data</p>
+              <p className="text-sm">Run POS simulator to generate data</p>
+            </div>
+          )}
         </div>
       </div>
 
