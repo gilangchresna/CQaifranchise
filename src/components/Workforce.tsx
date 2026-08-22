@@ -42,7 +42,7 @@ interface RegionalStats {
 
 const STAFFING_THRESHOLD = 5; // Alert if < 5 staff
 
-export function Workforce({ activeRole }: { activeRole: any }) {
+export function Workforce({ activeRole, userRegionId }: { activeRole: any; userRegionId: number | null }) {
   const [outletStaffing, setOutletStaffing] = useState<OutletStaffing[]>([]);
   const [staffPerformance, setStaffPerformance] = useState<StaffPerformance[]>([]);
   const [regionalStats, setRegionalStats] = useState<RegionalStats | null>(null);
@@ -62,17 +62,26 @@ export function Workforce({ activeRole }: { activeRole: any }) {
     setError(null);
     try {
       // Fetch staffing per outlet
-      const { data: staffingData, error: staffingError } = await supabase
+      // Fetch outlets based on user role
+      // HQ = all outlets, Regional = only their region_id, Franchisee = only their outlets
+      let outletQuery = supabase
         .from('outlets')
         .select(`
           id,
           name,
+          region_id,
           staff:staff(
             id,
             role
           )
-        `)
-        .eq('region_id', 114);
+        `);
+      
+      // Filter by region if user is not HQ
+      if (userRegionId !== null) {
+        outletQuery = outletQuery.eq('region_id', userRegionId);
+      }
+      
+      const { data: staffingData, error: staffingError } = await outletQuery;
 
       if (staffingError) throw staffingError;
 

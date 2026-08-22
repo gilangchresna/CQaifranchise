@@ -29,17 +29,18 @@ export default function App() {
   const [activeRole, setActiveRole] = useState<Role | null>(null);
   const [activeTab, setActiveTab] = useState<Tab>("Dashboard");
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
+  const [userRegionId, setUserRegionId] = useState<number | null>(null);
 
-  // Fetch user role from user_profiles on auth change
+  // Fetch user role AND region_id from user_profiles on auth change
   useEffect(() => {
     async function fetchUserRole() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.user?.id) return;
 
-      // Map DB role to UI role
+      // Map DB role to UI role + get region_id
       const { data: profile } = await supabase
         .from('user_profiles')
-        .select('role')
+        .select('role, region_id')
         .eq('id', session.user.id)
         .single();
 
@@ -52,6 +53,7 @@ export default function App() {
         };
         const uiRole = roleMap[profile.role] || 'Regional';
         setActiveRole(uiRole);
+        setUserRegionId(profile.region_id ?? null);
       }
     }
 
@@ -92,7 +94,7 @@ export default function App() {
       case "outlets":
         return <Outlets activeRole={activeRole} />;
       case "workforce":
-        return <Workforce activeRole={activeRole} />;
+        return <Workforce activeRole={activeRole} userRegionId={userRegionId} />;
       case "workflows":
         return <Workflows activeRole={activeRole} />;
       case "agents":
