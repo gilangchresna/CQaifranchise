@@ -1,21 +1,32 @@
 "use client";
-import React, { useState, useEffect, useMemo } from "react";
-import { Users, AlertTriangle, TrendingUp, Building2, RefreshCw, ChevronDown, Search, Trophy, TrendingDown } from "lucide-react";
+import React, { useState, useEffect } from "react";
+import { Users, UserCheck, UserMinus, Clock, ArrowLeft, Sparkles, RefreshCw, MessageSquare, Phone, Building2, Calendar, TrendingUp, AlertTriangle, BarChart3, TrendingDown } from "lucide-react";
+import { Role } from "@/src/types";
 import { supabase } from "@/src/lib/supabase";
 
-interface OutletStaffing {
+const EDGE_FUNCTIONS_URL = 'https://ploqeifazcgzwjzmukgp.supabase.co/functions/v1';
+
+interface Staff {
+  id: number;
+  name: string;
+  role: string;
   outlet_id: number;
-  outlet_name: string;
-  total_staff: number;
-  managers: number;
-  cashiers: number;
-  cooks: number;
-  other: number;
-  revenue_7d: number;
-  revenue_30d: number;
-  revenue_per_staff: number;
-  risk_score: number;
-  anomaly_score: number;
+  status: 'present' | 'absent' | 'late';
+  shift_start: string;
+  shift_end: string;
+  contact: string;
+  hire_date?: string;
+  performance_score?: number;
+  sales_handled?: number;
+  attendance_rate?: number;
+  outlet?: {
+    id: number;
+    name: string;
+    code: string;
+    region?: {
+      name: string;
+    };
+  };
 }
 
 interface StaffPerformance {
@@ -29,29 +40,23 @@ interface StaffPerformance {
   rank: number;
 }
 
-interface RegionalStats {
-  total_outlets: number;
-  total_staff: number;
-  avg_staff_per_outlet: number;
-  total_weekly_revenue: number;
-  avg_revenue_per_staff: number;
-  understaffed_outlets: number;
-  total_transactions: number;
-  avg_ticket_size: number;
+interface StaffInsight {
+  summary: string;
+  performance_analysis: string;
+  recommendations: string[];
+  alerts: string[];
 }
 
-const STAFFING_THRESHOLD = 5; // Alert if < 5 staff
-
-export function Workforce({ activeRole, userRegionId }: { activeRole: any; userRegionId: number | null }) {
-  const [outletStaffing, setOutletStaffing] = useState<OutletStaffing[]>([]);
+export function Workforce({ activeRole, userRegionId }: { activeRole: Role; userRegionId: number | null }) {
+  const [staff, setStaff] = useState<Staff[]>([]);
   const [staffPerformance, setStaffPerformance] = useState<StaffPerformance[]>([]);
-  const [regionalStats, setRegionalStats] = useState<RegionalStats | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [sortBy, setSortBy] = useState<"name" | "staff" | "revenue">("revenue");
-  const [expandedOutlet, setExpandedOutlet] = useState<number | null>(null);
-  const [activeTab, setActiveTab] = useState<"outlets" | "staff">("outlets");
+  const [selectedStaff, setSelectedStaff] = useState<Staff | null>(null);
+  const [isAskingAI, setIsAskingAI] = useState(false);
+  const [staffInsight, setStaffInsight] = useState<StaffInsight | null>(null);
+  const [filterStatus, setFilterStatus] = useState<string>('all');
+  const [filterRole, setFilterRole] = useState<string>('all');
+  const [activeTab, setActiveTab] = useState<'attendance' | 'performance'>('attendance');
 
   useEffect(() => {
     fetchAllData();
@@ -59,299 +64,221 @@ export function Workforce({ activeRole, userRegionId }: { activeRole: any; userR
 
   async function fetchAllData() {
     setLoading(true);
-    setError(null);
     try {
-      // Fetch staffing per outlet
-      // Fetch outlets based on user role
-      // HQ = all outlets, Regional = only their region_id, Franchisee = only their outlets
-      let outletQuery = supabase
-        .from('outlets')
+      // Build query based on user role
+      let query = supabase
+        .from('staff')
         .select(`
-          id,
-          name,
-          region_id,
-          staff:staff(
-            id,
-            role
-          )
-        `);
-      
-      // Filter by region if user is not HQ
-      if (userRegionId !== null) {
-        outletQuery = outletQuery.eq('region_id', userRegionId);
-      }
-      
-      const { data: staffingData, error: staffingError } = await outletQuery;
-
-      if (staffingError) throw staffingError;
-
-      // Fetch outlet features (sales data)
-      const { data: featuresData, error: featuresError } = await supabase
-        .from('outlet_features')
-        .select(`
-          outlet_id,
-          revenue_7d_avg,
-          revenue_30d_avg,
-          staff_productivity,
-          risk_score,
-          anomaly_score
+          *,
+          outlet:outlets(id, name, code, region_id, region:regions(name))
         `)
-        .gt('revenue_7d_avg', 0);
+        .order('name');
 
-      if (featuresError) console.warn('Features error:', featuresError);
+      // Filter by region if not HQ
+      if (userRegionId !== null) {
+        query = query.eq('outlets.region_id', userRegionId);
+      }
 
-      // Process and combine data
-      const featuresMap = new Map(
-        (featuresData || []).map(f => [f.outlet_id, f])
-      );
+      const { data, error } = await query;
 
-      const processedData: OutletStaffing[] = (staffingData || [])
-        .map((outlet: any) => {
-          const staff = outlet.staff || [];
-          const features = featuresMap.get(outlet.id) || {};
-          
-          const managers = staff.filter((s: any) => 
-            s.role?.toLowerCase().includes('manager')
-          ).length;
-          const cashiers = staff.filter((s: any) => 
-            s.role?.toLowerCase().includes('cashier')
-          ).length;
-          const cooks = staff.filter((s: any) => 
-            s.role?.toLowerCase().includes('cook')
-          ).length;
-          const other = staff.length - managers - cashiers - cooks;
+      if (error) throw error;
+      setStaff(data || []);
 
-          const totalStaff = staff.length;
-          const revenue7d = parseFloat(features.revenue_7d_avg) || 0;
-          const revenuePerStaff = totalStaff > 0 ? revenue7d / totalStaff : 0;
+      // Fetch POS performance data
+      if (data && data.length > 0) {
+        await fetchStaffPerformance(data);
+      }
+    } catch (err) {
+      console.error('Error fetching staff:', err);
+      setStaff([]);
+    } finally {
+      setLoading(false);
+    }
+  }
 
-          return {
-            outlet_id: outlet.id,
-            outlet_name: outlet.name,
-            total_staff: totalStaff,
-            managers,
-            cashiers,
-            cooks,
-            other,
-            revenue_7d: revenue7d,
-            revenue_30d: parseFloat(features.revenue_30d_avg) || 0,
-            revenue_per_staff: revenuePerStaff,
-            risk_score: parseFloat(features.risk_score) || 0,
-            anomaly_score: parseFloat(features.anomaly_score) || 0,
-          };
-        })
-        .filter((o: OutletStaffing) => o.total_staff > 0 || o.revenue_7d > 0)
-        .sort((a: OutletStaffing, b: OutletStaffing) => b.revenue_7d - a.revenue_7d);
-
-      setOutletStaffing(processedData);
-
-      // Calculate regional stats
-      const totalStaff = processedData.reduce((sum, o) => sum + o.total_staff, 0);
-      const totalRevenue = processedData.reduce((sum, o) => sum + o.revenue_7d, 0);
-      const understaffed = processedData.filter(o => o.total_staff < STAFFING_THRESHOLD).length;
-
-      setRegionalStats({
-        total_outlets: processedData.length,
-        total_staff: totalStaff,
-        avg_staff_per_outlet: processedData.length > 0 ? totalStaff / processedData.length : 0,
-        total_weekly_revenue: totalRevenue,
-        avg_revenue_per_staff: totalStaff > 0 ? totalRevenue / totalStaff : 0,
-        understaffed_outlets: understaffed,
-        total_transactions: 0,
-        avg_ticket_size: 0,
+  async function fetchStaffPerformance(staffData: Staff[]) {
+    try {
+      // Create staff name lookup
+      const staffNameMap = new Map<number, string>();
+      const staffOutletMap = new Map<number, number>();
+      staffData.forEach((s: any) => {
+        staffNameMap.set(s.id, s.name);
+        staffOutletMap.set(s.id, s.outlet_id);
       });
 
-      // Fetch staff names for mapping
-      const { data: staffData } = await supabase
-        .from('staff')
-        .select('id, name, role, outlet_id');
+      // Get outlet IDs
+      const outletIds = [...new Set(staffData.map(s => s.outlet_id))];
 
-      // Create staff name lookup map
-      const staffNameMap = new Map<string, string>();
-      const staffOutletMap = new Map<string, number>();
-      if (staffData) {
-        staffData.forEach((s: any) => {
-          // Map staff.id (number) to staff.name (string)
-          const staffId = `STF${String(s.id).padStart(3, '0')}`;
-          staffNameMap.set(staffId, s.name);
-          staffOutletMap.set(staffId, s.outlet_id);
-        });
-      }
-
-      // Fetch staff performance from POS - use simpler query
-      const { data: posData, error: posError } = await supabase
+      // Fetch POS data
+      const { data: posData } = await supabase
         .from('sales_transactions')
-        .select(`
-          staff_id,
-          amount,
-          outlet_id
-        `)
-        .in('outlet_id', [164, 165, 167, 168, 169, 170, 171, 200, 201, 202])
+        .select('staff_id, amount, outlet_id')
+        .in('outlet_id', outletIds)
         .order('created_at', { ascending: false })
         .limit(5000);
 
-      if (!posError && posData) {
-        // Process staff performance
+      if (posData) {
         const staffMap = new Map<string, any>();
-        
-        // Create outlet name lookup
         const outletNameMap = new Map<number, string>();
-        processedData.forEach(o => outletNameMap.set(o.outlet_id, o.outlet_name));
-        
+        staffData.forEach((s: any) => {
+          if (s.outlet) outletNameMap.set(s.outlet_id, s.outlet.name);
+        });
+
         posData.forEach((tx: any) => {
           const staffId = tx.staff_id || 'UNASSIGNED';
           if (!staffMap.has(staffId)) {
-            // Get real staff name from lookup
-            const realName = staffNameMap.get(staffId);
-            const outletId = staffOutletMap.get(staffId) || tx.outlet_id;
-            
+            let realName = 'Unassigned';
+            let outletName = 'Unknown';
+            let outletId = tx.outlet_id;
+
+            const staffIdMatch = staffId.match(/^STF(\d+)$/);
+            if (staffIdMatch) {
+              const staffNum = parseInt(staffIdMatch[1]);
+              if (staffNameMap.has(staffNum)) {
+                realName = staffNameMap.get(staffNum)!;
+                outletId = staffOutletMap.get(staffNum) || tx.outlet_id;
+              }
+            }
+
             staffMap.set(staffId, {
               staff_id: staffId,
-              staff_name: realName || staffId.replace('STF', 'Staff #'),
+              staff_name: realName,
               outlet_id: outletId,
               outlet_name: outletNameMap.get(outletId) || 'Unknown',
               transactions: 0,
               total_sales: 0,
             });
           }
-          const staff = staffMap.get(staffId);
-          staff.transactions++;
-          staff.total_sales += parseFloat(tx.amount) || 0;
+          const staffMember = staffMap.get(staffId);
+          staffMember.transactions++;
+          staffMember.total_sales += parseFloat(tx.amount) || 0;
         });
 
-        // Convert to array and calculate metrics
         const staffList: StaffPerformance[] = Array.from(staffMap.values())
-          .map(s => ({
+          .map((s, index) => ({
             ...s,
             avg_ticket: s.transactions > 0 ? s.total_sales / s.transactions : 0,
+            rank: index + 1,
           }))
           .sort((a, b) => b.total_sales - a.total_sales)
-          .map((s, i) => ({ ...s, rank: i + 1 }));
+          .map((s, index) => ({ ...s, rank: index + 1 }));
 
         setStaffPerformance(staffList);
-
-        // Update regional stats with POS data
-        const totalTx = staffList.reduce((sum, s) => sum + s.transactions, 0);
-        const totalSales = staffList.reduce((sum, s) => sum + s.total_sales, 0);
-        
-        setRegionalStats(prev => prev ? {
-          ...prev,
-          total_transactions: totalTx,
-          avg_ticket_size: totalTx > 0 ? totalSales / totalTx : 0,
-        } : null);
       }
-    } catch (err: any) {
-      console.error('Error fetching staffing:', err);
-      setError(err.message);
-    } finally {
-      setLoading(false);
+    } catch (err) {
+      console.error('Error fetching performance:', err);
     }
   }
 
-  // Filter and sort
-  const filteredOutlets = useMemo(() => {
-    let filtered = outletStaffing.filter(o =>
-      o.outlet_name.toLowerCase().includes(searchTerm.toLowerCase())
-    );
+  // Get unique roles for filter
+  const uniqueRoles = [...new Set(staff.map(s => s.role))];
 
-    switch (sortBy) {
-      case "name":
-        filtered.sort((a, b) => a.outlet_name.localeCompare(b.outlet_name));
-        break;
-      case "staff":
-        filtered.sort((a, b) => b.total_staff - a.total_staff);
-        break;
-      case "revenue":
-      default:
-        filtered.sort((a, b) => b.revenue_7d - a.revenue_7d);
+  // Filter staff
+  const filteredStaff = staff.filter((s) => {
+    const matchesStatus = filterStatus === 'all' || s.status === filterStatus;
+    const matchesRole = filterRole === 'all' || s.role === filterRole;
+    return matchesStatus && matchesRole;
+  });
+
+  // Calculate stats
+  const totalStaff = filteredStaff.length;
+  const presentCount = filteredStaff.filter(s => s.status === 'present').length;
+  const absentCount = filteredStaff.filter(s => s.status === 'absent').length;
+  const lateCount = filteredStaff.filter(s => s.status === 'late').length;
+  const coverageRate = totalStaff > 0 ? Math.round((presentCount / totalStaff) * 100) : 0;
+  const avgPerformance = totalStaff > 0 ? Math.round(filteredStaff.reduce((acc, s) => acc + (s.performance_score || 0), 0) / totalStaff) : 0;
+
+  // Calculate performance stats
+  const avgTicket = staffPerformance.length > 0 
+    ? staffPerformance.reduce((sum, s) => sum + s.avg_ticket, 0) / staffPerformance.length 
+    : 0;
+  const totalSales = staffPerformance.reduce((sum, s) => sum + s.total_sales, 0);
+  const totalTransactions = staffPerformance.reduce((sum, s) => sum + s.transactions, 0);
+
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case 'present': return <UserCheck className="w-3 h-3" />;
+      case 'absent': return <UserMinus className="w-3 h-3" />;
+      case 'late': return <Clock className="w-3 h-3" />;
+      default: return null;
     }
+  };
 
-    return filtered;
-  }, [outletStaffing, searchTerm, sortBy]);
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'present': return 'bg-green-50 border-green-200 text-green-700';
+      case 'absent': return 'bg-red-50 border-red-200 text-red-700';
+      case 'late': return 'bg-orange-50 border-orange-200 text-orange-700';
+      default: return 'bg-slate-50 border-slate-200 text-slate-700';
+    }
+  };
 
-  // Get understaffed outlets
-  const understaffedOutlets = useMemo(() => 
-    outletStaffing.filter(o => o.total_staff < STAFFING_THRESHOLD),
-    [outletStaffing]
-  );
+  const getPerformanceColor = (score: number) => {
+    if (score >= 85) return 'text-green-600';
+    if (score >= 70) return 'text-yellow-600';
+    return 'text-red-600';
+  };
 
-  // Get top/bottom performers
-  const topPerformer = useMemo(() => 
-    outletStaffing.length > 0 
-      ? outletStaffing.reduce((best, o) => 
-          o.revenue_per_staff > best.revenue_per_staff ? o : best
-        )
-      : null,
-    [outletStaffing]
-  );
+  // Staff Detail View
+  if (selectedStaff) {
+    return (
+      <StaffDetailView 
+        staff={selectedStaff} 
+        onBack={() => { setSelectedStaff(null); setStaffInsight(null); }}
+        isAskingAI={isAskingAI}
+        setIsAskingAI={setIsAskingAI}
+        staffInsight={staffInsight}
+        setStaffInsight={setStaffInsight}
+      />
+    );
+  }
 
-  const lowestPerformer = useMemo(() => 
-    outletStaffing.length > 0 
-      ? outletStaffing.reduce((worst, o) => 
-          o.revenue_per_staff < worst.revenue_per_staff ? o : worst
-        )
-      : null,
-    [outletStaffing]
-  );
-
+  // Main Staff List View
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <RefreshCw className="w-6 h-6 animate-spin text-slate-400" />
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="text-center py-8 text-red-500">
-        <p className="text-sm">{error}</p>
-        <button onClick={fetchAllData} className="mt-2 text-sm text-blue-600 hover:underline">
-          Retry
-        </button>
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-10 w-10 border-3 border-blue-600 border-t-transparent"></div>
       </div>
     );
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">Workforce Management</h1>
-          <p className="text-sm text-slate-500">Real-time staffing & performance metrics</p>
-        </div>
-        <button
-          onClick={fetchAllData}
-          className="flex items-center gap-2 px-3 py-2 text-sm bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
-        >
-          <RefreshCw className="w-4 h-4" />
-          Refresh
-        </button>
+        <h2 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
+          <Users className="w-5 h-5" /> Workforce Management
+        </h2>
+        <span className="text-sm text-slate-500">{totalStaff} employees</span>
       </div>
 
       {/* Tab Switcher */}
       <div className="flex gap-2 border-b">
         <button
-          onClick={() => setActiveTab("outlets")}
+          onClick={() => setActiveTab("attendance")}
           className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-            activeTab === "outlets"
+            activeTab === "attendance"
               ? "border-blue-600 text-blue-600"
               : "border-transparent text-slate-500 hover:text-slate-700"
           }`}
         >
-          <Building2 className="w-4 h-4 inline mr-2" />
-          Outlet Staffing
+          <UserCheck className="w-4 h-4 inline mr-2" />
+          Attendance
+          {totalStaff > 0 && (
+            <span className="ml-2 px-2 py-0.5 text-xs bg-green-100 text-green-600 rounded-full">
+              {presentCount} present
+            </span>
+          )}
         </button>
         <button
-          onClick={() => setActiveTab("staff")}
+          onClick={() => setActiveTab("performance")}
           className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-            activeTab === "staff"
+            activeTab === "performance"
               ? "border-blue-600 text-blue-600"
               : "border-transparent text-slate-500 hover:text-slate-700"
           }`}
         >
-          <Users className="w-4 h-4 inline mr-2" />
+          <BarChart3 className="w-4 h-4 inline mr-2" />
           Staff Performance
           {staffPerformance.length > 0 && (
             <span className="ml-2 px-2 py-0.5 text-xs bg-blue-100 text-blue-600 rounded-full">
@@ -361,425 +288,429 @@ export function Workforce({ activeRole, userRegionId }: { activeRole: any; userR
         </button>
       </div>
 
-      {/* Regional Stats Cards */}
-      {regionalStats && (
-        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
-          <StatCard
-            icon={<Users className="w-5 h-5" />}
-            label="Total Staff"
-            value={regionalStats.total_staff.toString()}
-            sublabel={`${regionalStats.total_outlets} outlets`}
-            color="blue"
-          />
-          <StatCard
-            icon={<Building2 className="w-5 h-5" />}
-            label="Avg Staff/Outlet"
-            value={regionalStats.avg_staff_per_outlet.toFixed(1)}
-            sublabel="per outlet"
-            color="purple"
-          />
-          <StatCard
-            icon={<TrendingUp className="w-5 h-5" />}
-            label="Weekly Revenue"
-            value={`$${(regionalStats.total_weekly_revenue / 1000).toFixed(1)}K`}
-            sublabel="total"
-            color="green"
-          />
-          <StatCard
-            icon={<TrendingUp className="w-5 h-5" />}
-            label="Revenue/Staff"
-            value={`$${regionalStats.avg_revenue_per_staff.toFixed(0)}`}
-            sublabel="per week"
-            color="emerald"
-          />
-          <StatCard
-            icon={<AlertTriangle className="w-5 h-5" />}
-            label="Understaffed"
-            value={regionalStats.understaffed_outlets.toString()}
-            sublabel="< 5 staff"
-            color={regionalStats.understaffed_outlets > 0 ? "red" : "gray"}
-          />
-        </div>
-      )}
-
-      {/* Performance Highlights */}
-      {topPerformer && lowestPerformer && topPerformer.outlet_id !== lowestPerformer.outlet_id && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="p-4 bg-green-50 border border-green-200 rounded-xl">
-            <div className="flex items-center gap-2 mb-1">
-              <span className="text-green-600">🏆</span>
-              <span className="text-sm font-medium text-green-800">Top Performer</span>
-            </div>
-            <p className="text-lg font-semibold text-green-900">{topPerformer.outlet_name}</p>
-            <p className="text-2xl font-bold text-green-700">
-              ${topPerformer.revenue_per_staff.toFixed(0)}/staff
-            </p>
-          </div>
-          <div className="p-4 bg-orange-50 border border-orange-200 rounded-xl">
-            <div className="flex items-center gap-2 mb-1">
-              <span className="text-orange-600">📉</span>
-              <span className="text-sm font-medium text-orange-800">Needs Improvement</span>
-            </div>
-            <p className="text-lg font-semibold text-orange-900">{lowestPerformer.outlet_name}</p>
-            <p className="text-2xl font-bold text-orange-700">
-              ${lowestPerformer.revenue_per_staff.toFixed(0)}/staff
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* Understaffing Alerts */}
-      {understaffedOutlets.length > 0 && (
-        <div className="p-4 bg-red-50 border border-red-200 rounded-xl">
-          <div className="flex items-center gap-2 mb-3">
-            <AlertTriangle className="w-5 h-5 text-red-600" />
-            <h3 className="font-semibold text-red-800">Staffing Alerts</h3>
-          </div>
-          <div className="space-y-2">
-            {understaffedOutlets.map(outlet => (
-              <div key={outlet.outlet_id} className="flex items-center justify-between p-2 bg-white rounded-lg">
-                <div>
-                  <span className="font-medium text-red-900">{outlet.outlet_name}</span>
-                  <span className="text-sm text-red-600 ml-2">
-                    ({outlet.total_staff} staff - need {STAFFING_THRESHOLD - outlet.total_staff} more)
-                  </span>
+      {/* Attendance Tab */}
+      {activeTab === "attendance" && (
+        <>
+          {/* Stats Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-lg bg-blue-50 flex items-center justify-center">
+                  <Users className="h-5 w-5 text-blue-600" />
                 </div>
-                <button className="px-3 py-1 text-sm bg-red-100 text-red-700 rounded-lg hover:bg-red-200">
-                  Create Case
-                </button>
+                <div>
+                  <p className="text-xs text-slate-500">Total Staff</p>
+                  <p className="text-xl font-semibold">{totalStaff}</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-lg bg-green-50 flex items-center justify-center">
+                  <UserCheck className="h-5 w-5 text-green-600" />
+                </div>
+                <div>
+                  <p className="text-xs text-slate-500">Present</p>
+                  <p className="text-xl font-semibold text-green-600">{presentCount}</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-lg bg-red-50 flex items-center justify-center">
+                  <UserMinus className="h-5 w-5 text-red-500" />
+                </div>
+                <div>
+                  <p className="text-xs text-slate-500">Absent</p>
+                  <p className="text-xl font-semibold text-red-600">{absentCount}</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-lg bg-orange-50 flex items-center justify-center">
+                  <Clock className="h-5 w-5 text-orange-500" />
+                </div>
+                <div>
+                  <p className="text-xs text-slate-500">Late</p>
+                  <p className="text-xl font-semibold text-orange-600">{lateCount}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Filters */}
+          <div className="flex flex-wrap gap-3">
+            <select
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value)}
+              className="px-3 py-2 border rounded-lg text-sm"
+            >
+              <option value="all">All Status</option>
+              <option value="present">Present</option>
+              <option value="absent">Absent</option>
+              <option value="late">Late</option>
+            </select>
+
+            <select
+              value={filterRole}
+              onChange={(e) => setFilterRole(e.target.value)}
+              className="px-3 py-2 border rounded-lg text-sm"
+            >
+              <option value="all">All Roles</option>
+              {uniqueRoles.map(role => (
+                <option key={role} value={role}>{role}</option>
+              ))}
+            </select>
+
+            <button
+              onClick={() => { setFilterStatus('all'); setFilterRole('all'); }}
+              className="px-3 py-2 text-sm text-slate-500 hover:text-slate-700"
+            >
+              Clear Filters
+            </button>
+          </div>
+
+          {/* Staff List */}
+          <div className="grid gap-4">
+            {filteredStaff.map((s) => (
+              <div
+                key={s.id}
+                className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm hover:shadow-md transition-shadow cursor-pointer"
+                onClick={() => setSelectedStaff(s)}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <div className="h-12 w-12 rounded-full bg-blue-50 flex items-center justify-center text-blue-600 font-semibold">
+                      {s.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
+                    </div>
+                    <div>
+                      <p className="font-medium text-slate-900">{s.name}</p>
+                      <p className="text-sm text-slate-500">{s.role}</p>
+                      <div className="flex items-center gap-2 mt-1">
+                        <Building2 className="w-3 h-3 text-slate-400" />
+                        <span className="text-xs text-slate-400">{s.outlet?.name || 'No outlet'}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    {s.performance_score && (
+                      <div className="text-right">
+                        <p className="text-xs text-slate-500">Performance</p>
+                        <p className={`text-sm font-semibold ${getPerformanceColor(s.performance_score)}`}>
+                          {s.performance_score}%
+                        </p>
+                      </div>
+                    )}
+
+                    <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-medium ${getStatusColor(s.status)}`}>
+                      {getStatusIcon(s.status)}
+                      <span className="capitalize">{s.status}</span>
+                    </div>
+
+                    <div className="text-right">
+                      <p className="text-xs text-slate-500">Shift</p>
+                      <p className="text-sm text-slate-700">
+                        {s.shift_start ? `${s.shift_start.slice(0, 5)} - ${s.shift_end?.slice(0, 5) || 'N/A'}` : 'N/A'}
+                      </p>
+                    </div>
+
+                    <Sparkles className="w-5 h-5 text-slate-400" />
+                  </div>
+                </div>
               </div>
             ))}
-          </div>
-        </div>
-      )}
 
-      {/* Outlet Staffing Tab Content */}
-      {activeTab === "outlets" && (
-        <>
-          {/* Search & Sort */}
-          <div className="flex flex-col sm:flex-row gap-4">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-              <input
-                type="text"
-                placeholder="Search outlets..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border rounded-lg"
-              />
-            </div>
-            <select
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value as any)}
-              className="px-4 py-2 border rounded-lg"
-            >
-              <option value="revenue">Sort by Revenue</option>
-              <option value="staff">Sort by Staff Count</option>
-              <option value="name">Sort by Name</option>
-            </select>
-          </div>
-
-          {/* Outlet Staffing Table */}
-          <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
-        <table className="w-full">
-          <thead className="bg-slate-50">
-            <tr className="text-left text-xs font-semibold text-slate-500">
-              <th className="px-6 py-4">Outlet</th>
-              <th className="px-6 py-4 text-center">Staff Count</th>
-              <th className="px-6 py-4 text-center">Role Mix</th>
-              <th className="px-6 py-4 text-right">Weekly Revenue</th>
-              <th className="px-6 py-4 text-right">Rev/Staff</th>
-              <th className="px-6 py-4 text-center">Risk</th>
-              <th className="px-6 py-4"></th>
-            </tr>
-          </thead>
-          <tbody className="divide-y">
-            {filteredOutlets.map((outlet) => (
-              <React.Fragment key={outlet.outlet_id}>
-                <tr className="hover:bg-slate-50">
-                  <td className="px-6 py-4">
-                    <div className="font-medium text-slate-900">{outlet.outlet_name}</div>
-                    <div className="text-xs text-slate-500">ID: {outlet.outlet_id}</div>
-                  </td>
-                  <td className="px-6 py-4 text-center">
-                    <div className={`text-lg font-bold ${outlet.total_staff < STAFFING_THRESHOLD ? 'text-red-600' : 'text-slate-900'}`}>
-                      {outlet.total_staff}
-                    </div>
-                    {outlet.total_staff < STAFFING_THRESHOLD && (
-                      <div className="text-xs text-red-500">Understaffed</div>
-                    )}
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="flex items-center justify-center gap-2 text-xs">
-                      <span className="px-2 py-1 bg-purple-100 text-purple-700 rounded">
-                        {outlet.managers} Mgr
-                      </span>
-                      <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded">
-                        {outlet.cashiers} Cash
-                      </span>
-                      <span className="px-2 py-1 bg-orange-100 text-orange-700 rounded">
-                        {outlet.cooks} Cook
-                      </span>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 text-right">
-                    <div className="font-semibold text-slate-900">
-                      ${outlet.revenue_7d.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-                    </div>
-                    <div className="text-xs text-slate-500">7-day avg</div>
-                  </td>
-                  <td className="px-6 py-4 text-right">
-                    <div className={`font-bold ${outlet.revenue_per_staff > 1000 ? 'text-green-600' : outlet.revenue_per_staff > 500 ? 'text-yellow-600' : 'text-red-600'}`}>
-                      ${outlet.revenue_per_staff.toFixed(0)}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 text-center">
-                    <span className={`px-2 py-1 text-xs font-medium rounded ${
-                      outlet.risk_score > 0.5 ? 'bg-red-100 text-red-700' :
-                      outlet.risk_score > 0.3 ? 'bg-yellow-100 text-yellow-700' :
-                      'bg-green-100 text-green-700'
-                    }`}>
-                      {(outlet.risk_score * 100).toFixed(0)}%
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 text-center">
-                    <button
-                      onClick={() => setExpandedOutlet(expandedOutlet === outlet.outlet_id ? null : outlet.outlet_id)}
-                      className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
-                    >
-                      <ChevronDown className={`w-4 h-4 transition-transform ${expandedOutlet === outlet.outlet_id ? 'rotate-180' : ''}`} />
-                    </button>
-                  </td>
-                </tr>
-                {expandedOutlet === outlet.outlet_id && (
-                  <tr>
-                    <td colSpan={7} className="px-6 py-4 bg-slate-50">
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        <div>
-                          <div className="text-xs text-slate-500">Monthly Revenue</div>
-                          <div className="font-semibold">${outlet.revenue_30d.toLocaleString()}</div>
-                        </div>
-                        <div>
-                          <div className="text-xs text-slate-500">Anomaly Score</div>
-                          <div className="font-semibold">{(outlet.anomaly_score * 100).toFixed(1)}%</div>
-                        </div>
-                        <div>
-                          <div className="text-xs text-slate-500">Other Staff</div>
-                          <div className="font-semibold">{outlet.other}</div>
-                        </div>
-                        <div>
-                          <div className="text-xs text-slate-500">Benchmark</div>
-                          <div className="font-semibold">
-                            {outlet.revenue_per_staff > (regionalStats?.avg_revenue_per_staff || 0) ? '↑ Above Avg' : '↓ Below Avg'}
-                          </div>
-                        </div>
-                      </div>
-                    </td>
-                  </tr>
-                )}
-              </React.Fragment>
-            ))}
-          </tbody>
-        </table>
-        {filteredOutlets.length === 0 && (
-          <div className="text-center py-12 text-slate-400">
-            <Users className="w-10 h-10 mx-auto mb-2" />
-            <p>No outlets found</p>
-          </div>
-        )}
+            {filteredStaff.length === 0 && (
+              <div className="text-center py-12 text-slate-400">
+                <Users className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                <p>No staff found</p>
+                <p className="text-sm">Try adjusting your filters</p>
+              </div>
+            )}
           </div>
         </>
       )}
 
-      {/* Staff Performance Table - only show when tab is "staff" */}
-      {activeTab === "staff" && (
-        <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
-          <div className="px-6 py-4 border-b">
-            <h3 className="font-semibold text-slate-900">Staff Performance (Last 7 Days)</h3>
-            <p className="text-sm text-slate-500">Ranked by total sales from POS transactions</p>
-          </div>
-          <table className="w-full">
-            <thead className="bg-slate-50">
-              <tr className="text-left text-xs font-semibold text-slate-500">
-                <th className="px-6 py-4">Rank</th>
-                <th className="px-6 py-4">Staff ID</th>
-                <th className="px-6 py-4">Outlet</th>
-                <th className="px-6 py-4 text-right">Transactions</th>
-                <th className="px-6 py-4 text-right">Total Sales</th>
-                <th className="px-6 py-4 text-right">Avg Ticket</th>
-                <th className="px-6 py-4 text-right">Performance</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y">
-              {staffPerformance.length > 0 ? (
-                staffPerformance.slice(0, 50).map((staff, index) => {
-                  const avgTicket = regionalStats?.avg_ticket_size || 1;
-                  const perfPercent = ((staff.avg_ticket / avgTicket - 1) * 100).toFixed(1);
-                  const isAboveAvg = staff.avg_ticket > avgTicket;
-                  
-                  return (
-                    <tr key={staff.staff_id} className="hover:bg-slate-50">
-                      <td className="px-6 py-4">
-                        {index < 3 ? (
-                          <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold ${
-                            index === 0 ? "bg-yellow-100 text-yellow-700" :
-                            index === 1 ? "bg-slate-200 text-slate-600" :
-                            index === 2 ? "bg-orange-100 text-orange-700" : "bg-slate-100 text-slate-600"
-                          }`}>
-                            {index + 1}
-                          </span>
-                        ) : (
-                          <span className="text-sm text-slate-500">{index + 1}</span>
-                        )}
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="font-medium text-slate-900">{staff.staff_name}</div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="text-slate-700">{staff.outlet_name}</div>
-                      </td>
-                      <td className="px-6 py-4 text-right">
-                        <div className="font-medium text-slate-900">{staff.transactions}</div>
-                      </td>
-                      <td className="px-6 py-4 text-right">
-                        <div className="font-semibold text-slate-900">${staff.total_sales.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
-                      </td>
-                      <td className="px-6 py-4 text-right">
-                        <div className="font-medium text-slate-700">${staff.avg_ticket.toFixed(2)}</div>
-                      </td>
-                      <td className="px-6 py-4 text-right">
-                        <span className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium ${
-                          isAboveAvg ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
-                        }`}>
-                          {isAboveAvg ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-                          {isAboveAvg ? "+" : ""}{perfPercent}%
-                        </span>
-                      </td>
-                    </tr>
-                  );
-                })
-              ) : (
-                <tr>
-                  <td colSpan={7} className="px-6 py-12 text-center text-slate-400">
-                    <Users className="w-10 h-10 mx-auto mb-2" />
-                    <p>No POS transaction data available</p>
-                    <p className="text-sm">Run POS simulator to generate data</p>
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      )}
+      {/* Performance Tab */}
+      {activeTab === "performance" && (
+        <>
+          {/* Stats Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-lg bg-blue-50 flex items-center justify-center">
+                  <Users className="h-5 w-5 text-blue-600" />
+                </div>
+                <div>
+                  <p className="text-xs text-slate-500">Total Staff</p>
+                  <p className="text-xl font-semibold">{staffPerformance.length}</p>
+                </div>
+              </div>
+            </div>
 
-      {/* Staff Performance Table - only show when tab is "staff" */}
-      {activeTab === "staff" && (
-        <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
-          <div className="px-6 py-4 border-b">
-            <h3 className="font-semibold text-slate-900">Staff Performance (Last 7 Days)</h3>
-            <p className="text-sm text-slate-500">Ranked by total sales from POS transactions</p>
+            <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-lg bg-green-50 flex items-center justify-center">
+                  <TrendingUp className="h-5 w-5 text-green-600" />
+                </div>
+                <div>
+                  <p className="text-xs text-slate-500">Total Sales</p>
+                  <p className="text-xl font-semibold text-green-600">${totalSales.toFixed(0)}</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-lg bg-purple-50 flex items-center justify-center">
+                  <BarChart3 className="h-5 w-5 text-purple-600" />
+                </div>
+                <div>
+                  <p className="text-xs text-slate-500">Transactions</p>
+                  <p className="text-xl font-semibold text-purple-600">{totalTransactions}</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-lg bg-orange-50 flex items-center justify-center">
+                  <TrendingUp className="h-5 w-5 text-orange-600" />
+                </div>
+                <div>
+                  <p className="text-xs text-slate-500">Avg Ticket</p>
+                  <p className="text-xl font-semibold text-orange-600">${avgTicket.toFixed(2)}</p>
+                </div>
+              </div>
+            </div>
           </div>
-          <table className="w-full">
-            <thead className="bg-slate-50">
-              <tr className="text-left text-xs font-semibold text-slate-500">
-                <th className="px-6 py-4">Rank</th>
-                <th className="px-6 py-4">Staff ID</th>
-                <th className="px-6 py-4">Outlet</th>
-                <th className="px-6 py-4 text-right">Transactions</th>
-                <th className="px-6 py-4 text-right">Total Sales</th>
-                <th className="px-6 py-4 text-right">Avg Ticket</th>
-                <th className="px-6 py-4 text-right">Performance</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y">
-              {staffPerformance.length > 0 ? (
-                staffPerformance.slice(0, 50).map((staff, index) => {
-                  const avgTicket = regionalStats?.avg_ticket_size || 1;
-                  const perfPercent = ((staff.avg_ticket / avgTicket - 1) * 100).toFixed(1);
-                  const isAboveAvg = staff.avg_ticket > avgTicket;
-                  
-                  return (
-                    <tr key={staff.staff_id} className="hover:bg-slate-50">
-                      <td className="px-6 py-4">
-                        {index < 3 ? (
-                          <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold ${
-                            index === 0 ? "bg-yellow-100 text-yellow-700" :
-                            index === 1 ? "bg-slate-200 text-slate-600" :
-                            index === 2 ? "bg-orange-100 text-orange-700" : "bg-slate-100 text-slate-600"
-                          }`}>
-                            {index + 1}
-                          </span>
-                        ) : (
-                          <span className="text-sm text-slate-500">{index + 1}</span>
-                        )}
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="font-medium text-slate-900">{staff.staff_name}</div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="text-slate-700">{staff.outlet_name}</div>
-                      </td>
-                      <td className="px-6 py-4 text-right">
-                        <div className="font-medium text-slate-900">{staff.transactions}</div>
-                      </td>
-                      <td className="px-6 py-4 text-right">
-                        <div className="font-semibold text-slate-900">${staff.total_sales.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
-                      </td>
-                      <td className="px-6 py-4 text-right">
-                        <div className="font-medium text-slate-700">${staff.avg_ticket.toFixed(2)}</div>
-                      </td>
-                      <td className="px-6 py-4 text-right">
-                        <span className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium ${
-                          isAboveAvg ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
-                        }`}>
-                          {isAboveAvg ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-                          {isAboveAvg ? "+" : ""}{perfPercent}%
-                        </span>
+
+          {/* Performance Table */}
+          <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+            <div className="px-6 py-4 border-b">
+              <h3 className="font-semibold text-slate-900">Staff Performance</h3>
+              <p className="text-sm text-slate-500">Ranked by total sales from POS transactions</p>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-slate-50">
+                  <tr className="text-left text-xs font-semibold text-slate-500 uppercase">
+                    <th className="px-6 py-3">Rank</th>
+                    <th className="px-6 py-3">Staff</th>
+                    <th className="px-6 py-3">Outlet</th>
+                    <th className="px-6 py-3 text-right">Transactions</th>
+                    <th className="px-6 py-3 text-right">Total Sales</th>
+                    <th className="px-6 py-3 text-right">Avg Ticket</th>
+                    <th className="px-6 py-3 text-right">Performance</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {staffPerformance.length > 0 ? (
+                    staffPerformance.map((s, index) => {
+                      const perfPercent = avgTicket > 0 ? ((s.avg_ticket / avgTicket - 1) * 100).toFixed(1) : "0";
+                      const isAboveAvg = s.avg_ticket > avgTicket;
+                      
+                      return (
+                        <tr key={s.staff_id} className="hover:bg-slate-50">
+                          <td className="px-6 py-4">
+                            {index < 3 ? (
+                              <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold ${
+                                index === 0 ? "bg-yellow-100 text-yellow-700" :
+                                index === 1 ? "bg-slate-200 text-slate-600" :
+                                "bg-orange-100 text-orange-700"
+                              }`}>
+                                {index + 1}
+                              </span>
+                            ) : (
+                              <span className="text-sm text-slate-500">{index + 1}</span>
+                            )}
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="font-medium text-slate-900">{s.staff_name}</div>
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="text-slate-700">{s.outlet_name}</div>
+                          </td>
+                          <td className="px-6 py-4 text-right">
+                            <div className="font-medium text-slate-900">{s.transactions}</div>
+                          </td>
+                          <td className="px-6 py-4 text-right">
+                            <div className="font-semibold text-slate-900">${s.total_sales.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                          </td>
+                          <td className="px-6 py-4 text-right">
+                            <div className="font-medium text-slate-700">${s.avg_ticket.toFixed(2)}</div>
+                          </td>
+                          <td className="px-6 py-4 text-right">
+                            <span className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium ${
+                              isAboveAvg ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
+                            }`}>
+                              {isAboveAvg ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
+                              {isAboveAvg ? "+" : ""}{perfPercent}%
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  ) : (
+                    <tr>
+                      <td colSpan={7} className="px-6 py-12 text-center text-slate-400">
+                        <BarChart3 className="w-10 h-10 mx-auto mb-2" />
+                        <p>No POS transaction data available</p>
+                        <p className="text-sm">Run POS simulator to generate data</p>
                       </td>
                     </tr>
-                  );
-                })
-              ) : (
-                <tr>
-                  <td colSpan={7} className="px-6 py-12 text-center text-slate-400">
-                    <Users className="w-10 h-10 mx-auto mb-2" />
-                    <p>No POS transaction data available</p>
-                    <p className="text-sm">Run POS simulator to generate data</p>
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
       )}
     </div>
   );
 }
 
-function StatCard({ icon, label, value, sublabel, color }: {
-  icon: React.ReactNode;
-  label: string;
-  value: string;
-  sublabel: string;
-  color: "blue" | "purple" | "green" | "emerald" | "red" | "gray";
+// Staff Detail View Component
+function StaffDetailView({ 
+  staff, 
+  onBack, 
+  isAskingAI, 
+  setIsAskingAI, 
+  staffInsight, 
+  setStaffInsight 
+}: { 
+  staff: Staff; 
+  onBack: () => void; 
+  isAskingAI: boolean;
+  setIsAskingAI: (v: boolean) => void;
+  staffInsight: StaffInsight | null;
+  setStaffInsight: (v: StaffInsight | null) => void;
 }) {
-  const colors = {
-    blue: "bg-blue-50 text-blue-600 border-blue-200",
-    purple: "bg-purple-50 text-purple-600 border-purple-200",
-    green: "bg-green-50 text-green-600 border-green-200",
-    emerald: "bg-emerald-50 text-emerald-600 border-emerald-200",
-    red: "bg-red-50 text-red-600 border-red-200",
-    gray: "bg-slate-50 text-slate-600 border-slate-200",
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'present': return 'bg-green-100 text-green-700';
+      case 'absent': return 'bg-red-100 text-red-700';
+      case 'late': return 'bg-orange-100 text-orange-700';
+      default: return 'bg-slate-100 text-slate-700';
+    }
+  };
+
+  const askAI = async () => {
+    setIsAskingAI(true);
+    try {
+      const response = await fetch(`${EDGE_FUNCTIONS_URL}/athena-chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query: `Analyze this staff member: ${staff.name}, Role: ${staff.role}, Status: ${staff.status}, Performance Score: ${staff.performance_score || 'N/A'}, Sales Handled: ${staff.sales_handled || 'N/A'}, Attendance Rate: ${staff.attendance_rate || 'N/A'}%. Provide summary, performance analysis, recommendations, and any alerts.`,
+          context: 'staff_performance'
+        })
+      });
+      const data = await response.json();
+      setStaffInsight(data);
+    } catch (err) {
+      console.error('AI Error:', err);
+    } finally {
+      setIsAskingAI(false);
+    }
   };
 
   return (
-    <div className={`p-4 rounded-xl border ${colors[color]}`}>
-      <div className="flex items-center gap-2 mb-2">
-        {icon}
-        <span className="text-xs font-medium opacity-75">{label}</span>
+    <div className="space-y-6">
+      <button 
+        onClick={onBack}
+        className="flex items-center gap-2 text-slate-600 hover:text-slate-900"
+      >
+        <ArrowLeft className="w-4 h-4" />
+        Back to Staff List
+      </button>
+
+      <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="flex items-start gap-6">
+          <div className="h-20 w-20 rounded-full bg-blue-50 flex items-center justify-center text-blue-600 text-2xl font-semibold">
+            {staff.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
+          </div>
+          <div className="flex-1">
+            <div className="flex items-center gap-3 mb-2">
+              <h2 className="text-xl font-semibold text-slate-900">{staff.name}</h2>
+              <span className={`px-3 py-1 rounded-full text-xs font-medium capitalize ${getStatusColor(staff.status)}`}>
+                {staff.status}
+              </span>
+            </div>
+            <p className="text-slate-500">{staff.role}</p>
+            <div className="flex items-center gap-4 mt-3 text-sm text-slate-500">
+              <div className="flex items-center gap-1">
+                <Building2 className="w-4 h-4" />
+                {staff.outlet?.name || 'No outlet'}
+              </div>
+              {staff.contact && (
+                <div className="flex items-center gap-1">
+                  <Phone className="w-4 h-4" />
+                  {staff.contact}
+                </div>
+              )}
+            </div>
+          </div>
+          <button
+            onClick={askAI}
+            disabled={isAskingAI}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+          >
+            <Sparkles className="w-4 h-4" />
+            {isAskingAI ? 'Analyzing...' : 'Ask AI'}
+          </button>
+        </div>
+
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6 pt-6 border-t">
+          <div>
+            <p className="text-xs text-slate-500 mb-1">Shift</p>
+            <p className="font-medium">
+              {staff.shift_start ? `${staff.shift_start.slice(0, 5)} - ${staff.shift_end?.slice(0, 5) || 'N/A'}` : 'Not set'}
+            </p>
+          </div>
+          <div>
+            <p className="text-xs text-slate-500 mb-1">Performance Score</p>
+            <p className="font-medium">{staff.performance_score || 'N/A'}%</p>
+          </div>
+          <div>
+            <p className="text-xs text-slate-500 mb-1">Sales Handled</p>
+            <p className="font-medium">{staff.sales_handled || 'N/A'}</p>
+          </div>
+          <div>
+            <p className="text-xs text-slate-500 mb-1">Attendance Rate</p>
+            <p className="font-medium">{staff.attendance_rate || 'N/A'}%</p>
+          </div>
+        </div>
+
+        {staffInsight && (
+          <div className="mt-6 p-4 bg-blue-50 rounded-lg">
+            <h3 className="font-semibold text-blue-900 mb-2 flex items-center gap-2">
+              <Sparkles className="w-4 h-4" />
+              AI Analysis
+            </h3>
+            <p className="text-blue-800 text-sm mb-3">{staffInsight.summary}</p>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <p className="text-xs font-medium text-blue-700 mb-1">Analysis</p>
+                <p className="text-sm text-blue-800">{staffInsight.performance_analysis}</p>
+              </div>
+              <div>
+                <p className="text-xs font-medium text-blue-700 mb-1">Recommendations</p>
+                <ul className="text-sm text-blue-800 list-disc list-inside">
+                  {staffInsight.recommendations?.slice(0, 3).map((rec, i) => (
+                    <li key={i}>{rec}</li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
-      <div className="text-2xl font-bold">{value}</div>
-      <div className="text-xs opacity-75">{sublabel}</div>
     </div>
   );
 }
