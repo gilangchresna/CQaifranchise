@@ -152,21 +152,25 @@ export function Workforce({ activeRole }: { activeRole: any }) {
         avg_ticket_size: 0,
       });
 
-      // Fetch staff performance from POS
+      // Fetch staff performance from POS - use simpler query
       const { data: posData, error: posError } = await supabase
         .from('sales_transactions')
         .select(`
           staff_id,
           amount,
-          outlet_id,
-          outlets(name)
+          outlet_id
         `)
-        .eq('outlets.region_id', 114)
-        .gte('created_at', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString());
+        .in('outlet_id', [164, 165, 167, 168, 169, 170, 171, 200, 201, 202])
+        .order('created_at', { ascending: false })
+        .limit(5000);
 
       if (!posError && posData) {
         // Process staff performance
         const staffMap = new Map<string, any>();
+        
+        // Create outlet name lookup
+        const outletNameMap = new Map<number, string>();
+        processedData.forEach(o => outletNameMap.set(o.outlet_id, o.outlet_name));
         
         posData.forEach((tx: any) => {
           const staffId = tx.staff_id || 'UNASSIGNED';
@@ -175,7 +179,7 @@ export function Workforce({ activeRole }: { activeRole: any }) {
               staff_id: staffId,
               staff_name: staffId === 'UNASSIGNED' ? 'Unassigned' : staffId,
               outlet_id: tx.outlet_id,
-              outlet_name: tx.outlets?.name || 'Unknown',
+              outlet_name: outletNameMap.get(tx.outlet_id) || 'Unknown',
               transactions: 0,
               total_sales: 0,
             });
