@@ -432,31 +432,34 @@ export function Workforce({ activeRole, userRegionId }: { activeRole: any; userR
         </div>
       )}
 
-      {/* Search & Sort */}
-      <div className="flex flex-col sm:flex-row gap-4">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-          <input
-            type="text"
-            placeholder="Search outlets..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 border rounded-lg"
-          />
-        </div>
-        <select
-          value={sortBy}
-          onChange={(e) => setSortBy(e.target.value as any)}
-          className="px-4 py-2 border rounded-lg"
-        >
-          <option value="revenue">Sort by Revenue</option>
-          <option value="staff">Sort by Staff Count</option>
-          <option value="name">Sort by Name</option>
-        </select>
-      </div>
+      {/* Outlet Staffing Tab Content */}
+      {activeTab === "outlets" && (
+        <>
+          {/* Search & Sort */}
+          <div className="flex flex-col sm:flex-row gap-4">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Search outlets..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-10 pr-4 py-2 border rounded-lg"
+              />
+            </div>
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as any)}
+              className="px-4 py-2 border rounded-lg"
+            >
+              <option value="revenue">Sort by Revenue</option>
+              <option value="staff">Sort by Staff Count</option>
+              <option value="name">Sort by Name</option>
+            </select>
+          </div>
 
-      {/* Outlet Staffing Table */}
-      <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
+          {/* Outlet Staffing Table */}
+          <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
         <table className="w-full">
           <thead className="bg-slate-50">
             <tr className="text-left text-xs font-semibold text-slate-500">
@@ -563,7 +566,90 @@ export function Workforce({ activeRole, userRegionId }: { activeRole: any; userR
             <p>No outlets found</p>
           </div>
         )}
-      </div>
+          </div>
+        </>
+      )}
+
+      {/* Staff Performance Table - only show when tab is "staff" */}
+      {activeTab === "staff" && (
+        <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
+          <div className="px-6 py-4 border-b">
+            <h3 className="font-semibold text-slate-900">Staff Performance (Last 7 Days)</h3>
+            <p className="text-sm text-slate-500">Ranked by total sales from POS transactions</p>
+          </div>
+          <table className="w-full">
+            <thead className="bg-slate-50">
+              <tr className="text-left text-xs font-semibold text-slate-500">
+                <th className="px-6 py-4">Rank</th>
+                <th className="px-6 py-4">Staff ID</th>
+                <th className="px-6 py-4">Outlet</th>
+                <th className="px-6 py-4 text-right">Transactions</th>
+                <th className="px-6 py-4 text-right">Total Sales</th>
+                <th className="px-6 py-4 text-right">Avg Ticket</th>
+                <th className="px-6 py-4 text-right">Performance</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y">
+              {staffPerformance.length > 0 ? (
+                staffPerformance.slice(0, 50).map((staff, index) => {
+                  const avgTicket = regionalStats?.avg_ticket_size || 1;
+                  const perfPercent = ((staff.avg_ticket / avgTicket - 1) * 100).toFixed(1);
+                  const isAboveAvg = staff.avg_ticket > avgTicket;
+                  
+                  return (
+                    <tr key={staff.staff_id} className="hover:bg-slate-50">
+                      <td className="px-6 py-4">
+                        {index < 3 ? (
+                          <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold ${
+                            index === 0 ? "bg-yellow-100 text-yellow-700" :
+                            index === 1 ? "bg-slate-200 text-slate-600" :
+                            index === 2 ? "bg-orange-100 text-orange-700" : "bg-slate-100 text-slate-600"
+                          }`}>
+                            {index + 1}
+                          </span>
+                        ) : (
+                          <span className="text-sm text-slate-500">{index + 1}</span>
+                        )}
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="font-medium text-slate-900">{staff.staff_name}</div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="text-slate-700">{staff.outlet_name}</div>
+                      </td>
+                      <td className="px-6 py-4 text-right">
+                        <div className="font-medium text-slate-900">{staff.transactions}</div>
+                      </td>
+                      <td className="px-6 py-4 text-right">
+                        <div className="font-semibold text-slate-900">${staff.total_sales.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                      </td>
+                      <td className="px-6 py-4 text-right">
+                        <div className="font-medium text-slate-700">${staff.avg_ticket.toFixed(2)}</div>
+                      </td>
+                      <td className="px-6 py-4 text-right">
+                        <span className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium ${
+                          isAboveAvg ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
+                        }`}>
+                          {isAboveAvg ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
+                          {isAboveAvg ? "+" : ""}{perfPercent}%
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })
+              ) : (
+                <tr>
+                  <td colSpan={7} className="px-6 py-12 text-center text-slate-400">
+                    <Users className="w-10 h-10 mx-auto mb-2" />
+                    <p>No POS transaction data available</p>
+                    <p className="text-sm">Run POS simulator to generate data</p>
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {/* Staff Performance Table - only show when tab is "staff" */}
       {activeTab === "staff" && (
