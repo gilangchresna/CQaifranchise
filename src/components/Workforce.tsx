@@ -161,6 +161,23 @@ export function Workforce({ activeRole, userRegionId }: { activeRole: any; userR
         avg_ticket_size: 0,
       });
 
+      // Fetch staff names for mapping
+      const { data: staffData } = await supabase
+        .from('staff')
+        .select('id, name, role, outlet_id');
+
+      // Create staff name lookup map
+      const staffNameMap = new Map<string, string>();
+      const staffOutletMap = new Map<string, number>();
+      if (staffData) {
+        staffData.forEach((s: any) => {
+          // Map staff.id (number) to staff.name (string)
+          const staffId = `STF${String(s.id).padStart(3, '0')}`;
+          staffNameMap.set(staffId, s.name);
+          staffOutletMap.set(staffId, s.outlet_id);
+        });
+      }
+
       // Fetch staff performance from POS - use simpler query
       const { data: posData, error: posError } = await supabase
         .from('sales_transactions')
@@ -184,11 +201,15 @@ export function Workforce({ activeRole, userRegionId }: { activeRole: any; userR
         posData.forEach((tx: any) => {
           const staffId = tx.staff_id || 'UNASSIGNED';
           if (!staffMap.has(staffId)) {
+            // Get real staff name from lookup
+            const realName = staffNameMap.get(staffId);
+            const outletId = staffOutletMap.get(staffId) || tx.outlet_id;
+            
             staffMap.set(staffId, {
               staff_id: staffId,
-              staff_name: staffId === 'UNASSIGNED' ? 'Unassigned' : staffId,
-              outlet_id: tx.outlet_id,
-              outlet_name: outletNameMap.get(tx.outlet_id) || 'Unknown',
+              staff_name: realName || staffId.replace('STF', 'Staff #'),
+              outlet_id: outletId,
+              outlet_name: outletNameMap.get(outletId) || 'Unknown',
               transactions: 0,
               total_sales: 0,
             });
