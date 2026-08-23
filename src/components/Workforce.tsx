@@ -109,13 +109,13 @@ export function Workforce({ activeRole, userRegionId }: { activeRole: Role; user
       // Get outlet IDs
       const outletIds = [...new Set(staffData.map(s => s.outlet_id))];
 
-      // Fetch POS data
+      // Fetch POS data - get more records
       const { data: posData } = await supabase
         .from('sales_transactions')
         .select('staff_id, amount, outlet_id')
         .in('outlet_id', outletIds)
         .order('created_at', { ascending: false })
-        .limit(5000);
+        .limit(100000);  // Increased from 5000
 
       if (posData) {
         const staffMap = new Map<string, any>();
@@ -125,18 +125,29 @@ export function Workforce({ activeRole, userRegionId }: { activeRole: Role; user
         });
 
         posData.forEach((tx: any) => {
-          const staffId = tx.staff_id || 'UNASSIGNED';
+          const staffId = String(tx.staff_id || 'UNASSIGNED');
           if (!staffMap.has(staffId)) {
             let realName = 'Unassigned';
             let outletName = 'Unknown';
             let outletId = tx.outlet_id;
 
+            // Try multiple matching formats:
+            // 1. Match "STF001" format
             const staffIdMatch = staffId.match(/^STF(\d+)$/);
+            // 2. Check if it's a numeric ID
+            const numericId = parseInt(staffId);
+            
             if (staffIdMatch) {
               const staffNum = parseInt(staffIdMatch[1]);
               if (staffNameMap.has(staffNum)) {
                 realName = staffNameMap.get(staffNum)!;
                 outletId = staffOutletMap.get(staffNum) || tx.outlet_id;
+              }
+            } else if (!isNaN(numericId) && numericId > 0) {
+              // Match numeric staff_id like "1", "35"
+              if (staffNameMap.has(numericId)) {
+                realName = staffNameMap.get(numericId)!;
+                outletId = staffOutletMap.get(numericId) || tx.outlet_id;
               }
             }
 
