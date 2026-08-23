@@ -641,7 +641,13 @@ function StaffDetailView({
 
       const staffTx = allTx?.filter(tx => {
         if (!tx.staff_id) return false;
-        return tx.staff_id.includes(staffIdStr) || tx.staff_id === `STF${staffIdStr.padStart(3, '0')}`;
+        const sid = String(tx.staff_id);
+        // Match both formats: "STF001", "1", "EMP-001"
+        return (
+          sid === String(staff.id) ||  // Match "35" to id=35
+          sid === `STF${String(staff.id).padStart(3, '0')}` ||  // Match "STF035" to id=35
+          sid.includes(String(staff.id))  // Partial match
+        );
       }) || [];
 
       const total_sales = staffTx.reduce((sum, tx) => sum + (parseFloat(tx.amount) || 0), 0);
@@ -657,9 +663,14 @@ function StaffDetailView({
       const sortedStaff = Array.from(staffSalesMap.entries())
         .sort((a, b) => b[1] - a[1]);
       
-      const rank = sortedStaff.findIndex(([sid]) => 
-        sid.includes(staffIdStr) || sid === `STF${staffIdStr.padStart(3, '0')}`
-      ) + 1;
+      const rank = sortedStaff.findIndex(([sid]) => {
+        const sidStr = String(sid);
+        return (
+          sidStr === String(staff.id) ||
+          sidStr === `STF${String(staff.id).padStart(3, '0')}` ||
+          sidStr.includes(String(staff.id))
+        );
+      }) + 1;
       
       const percentile = sortedStaff.length > 0 
         ? Math.round((1 - (rank - 1) / sortedStaff.length) * 100) 
