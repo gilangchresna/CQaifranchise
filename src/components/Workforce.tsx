@@ -132,22 +132,27 @@ export function Workforce({ activeRole, userRegionId }: { activeRole: Role; user
             let outletId = tx.outlet_id;
 
             // Try multiple matching formats:
-            // 1. Match "STF001" format
-            const staffIdMatch = staffId.match(/^STF(\d+)$/);
-            // 2. Check if it's a numeric ID
+            // 1. Match numeric staff_id like "664", "665"
             const numericId = parseInt(staffId);
+            // 2. Match "STF001" format
+            const staffIdMatch = staffId.match(/^STF(\d+)$/);
             
-            if (staffIdMatch) {
-              const staffNum = parseInt(staffIdMatch[1]);
-              if (staffNameMap.has(staffNum)) {
-                realName = staffNameMap.get(staffNum)!;
-                outletId = staffOutletMap.get(staffNum) || tx.outlet_id;
+            if (!isNaN(numericId) && numericId > 0 && numericId < 10000) {
+              // Match by staff.id (numeric)
+              const staffMember = staffData.find(s => s.id === numericId);
+              if (staffMember) {
+                realName = staffMember.name;
+                outletId = staffMember.outlet_id;
+                outletName = staffMember.outlet?.name || 'Unknown';
               }
-            } else if (!isNaN(numericId) && numericId > 0) {
-              // Match numeric staff_id like "1", "35"
-              if (staffNameMap.has(numericId)) {
-                realName = staffNameMap.get(numericId)!;
-                outletId = staffOutletMap.get(numericId) || tx.outlet_id;
+            } else if (staffIdMatch) {
+              // Match STF### format
+              const staffNum = parseInt(staffIdMatch[1]);
+              const staffMember = staffData.find(s => s.id === staffNum);
+              if (staffMember) {
+                realName = staffMember.name;
+                outletId = staffMember.outlet_id;
+                outletName = staffMember.outlet?.name || 'Unknown';
               }
             }
 
@@ -155,7 +160,7 @@ export function Workforce({ activeRole, userRegionId }: { activeRole: Role; user
               staff_id: staffId,
               staff_name: realName,
               outlet_id: outletId,
-              outlet_name: outletNameMap.get(outletId) || 'Unknown',
+              outlet_name: outletName,
               transactions: 0,
               total_sales: 0,
             });

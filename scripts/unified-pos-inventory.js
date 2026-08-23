@@ -305,7 +305,31 @@ async function sendWebhook(payload) {
 }
 
 // ── Sale Generator ────────────────────────────────────────────────────────────
-function generateSale(outletId) {
+// Staff cache for performance
+let staffCache = new Map();
+
+async function fetchStaffForOutlet(outletId) {
+  if (!supabase) return [];
+  
+  if (staffCache.has(outletId)) {
+    return staffCache.get(outletId);
+  }
+  
+  const { data, error } = await supabase
+    .from('staff')
+    .select('id, name')
+    .eq('outlet_id', outletId);
+  
+  if (error) {
+    console.log(`⚠️ Error fetching staff for outlet ${outletId}: ${error.message}`);
+    return [];
+  }
+  
+  staffCache.set(outletId, data || []);
+  return data || [];
+}
+
+function generateSale(outletId, staffMember = null) {
   const transactionId = `TXN-${Date.now()}-${outletId}-${randomInt(100000, 999999)}`;
   const now = new Date();
   const hour = now.getHours();
@@ -378,6 +402,8 @@ function generateSale(outletId) {
     serviceCharge: serviceCharge,
     platform_fee: platformFee,
     settlement_amount: settlementAmount,
+    // Staff ID - use real staff.id from staff table
+    staff_id: staffMember ? String(staffMember.id) : null,
     items: items, // For inventory deduction
     timestamp: now.toISOString()
   };
@@ -396,13 +422,20 @@ async function seedAllSGOutlets() {
 }
 
 async function runSingleSale(outletId, dryRun = false) {
-  const sale = generateSale(outletId);
+  // Fetch a random staff member for this outlet
+  const staffMembers = await fetchStaffForOutlet(outletId);
+  const randomStaff = staffMembers.length > 0 
+    ? staffMembers[Math.floor(Math.random() * staffMembers.length)]
+    : null;
+  
+  const sale = generateSale(outletId, randomStaff);
   
   console.log('\n💰 SALE TRANSACTION');
   console.log('─'.repeat(50));
   console.log(`Outlet: ${sale.outlet_id}`);
   console.log(`TXN: ${sale.transaction_id}`);
   console.log(`Date: ${sale.date} ${sale.hour}:00`);
+  console.log(`Staff: ${randomStaff ? `${randomStaff.name} (ID: ${randomStaff.id})` : 'None'}`);
   console.log('\nItems:');
   
   for (const item of sale.items) {
@@ -479,7 +512,13 @@ async function runSimulation(intervalSeconds = 10, count = 0) {
     // Random outlet
     const outletId = randomChoice(SG_OUTLETS);
     
-    const sale = generateSale(outletId);
+    // Fetch random staff for this outlet
+    const staffMembers = await fetchStaffForOutlet(outletId);
+    const randomStaff = staffMembers.length > 0
+      ? staffMembers[Math.floor(Math.random() * staffMembers.length)]
+      : null;
+    
+    const sale = generateSale(outletId, randomStaff);
     totalSales++;
     totalRevenue += sale.amount;
     
@@ -487,7 +526,7 @@ async function runSimulation(intervalSeconds = 10, count = 0) {
     const time = new Date().toLocaleTimeString();
     const icon = sale.items.length > 2 ? '🛒' : '💰';
     console.log(`${icon} [${time}] ${sale.transaction_id}`);
-    console.log(`   Outlet ${outletId} | ${sale.items.length} items | S$${sale.amount.toFixed(2)} | ${sale.payment_method}`);
+    console.log(`   Outlet ${outletId} | Staff: ${randomStaff?.name || 'None'} | ${sale.items.length} items | S$${sale.amount.toFixed(2)}`);
     
     // Send to webhook
     const result = await sendWebhook(sale);
