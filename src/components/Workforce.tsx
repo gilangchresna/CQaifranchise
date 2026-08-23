@@ -64,21 +64,26 @@ export function Workforce({ activeRole, userRegionId }: { activeRole: Role; user
   async function fetchAllData() {
     setLoading(true);
     try {
-      // Build query with region filter
-      let query = supabase
-        .from('staff')
-        .select(`
-          *,
-          outlet:outlets(id, name, code, region_id, region:regions(name))
-        `)
-        .order('name');
-
-      // Filter by region if not HQ
+      // First, get outlet IDs for the region
+      let outletQuery = supabase.from('outlets').select('id, name, code, region:regions(name)');
+      
       if (userRegionId !== null) {
-        query = query.eq('outlets.region_id', userRegionId);
+        outletQuery = outletQuery.eq('region_id', userRegionId);
       }
-
-      const { data, error } = await query;
+      
+      const { data: outlets } = await outletQuery;
+      const outletIds = outlets?.map(o => o.id) || [];
+      
+      console.log('Outlets:', outlets?.length, outletIds);
+      
+      // Then fetch staff for these outlets
+      const { data, error } = await supabase
+        .from('staff')
+        .select(`*, outlet:outlets(id, name, code, region:regions(name))`)
+        .in('outlet_id', outletIds)
+        .order('name');
+      
+      console.log('Staff fetched:', data?.length, error);
       
       if (error) throw error;
       setStaff(data || []);
@@ -89,7 +94,6 @@ export function Workforce({ activeRole, userRegionId }: { activeRole: Role; user
       }
     } catch (err) {
       console.error('Error fetching staff:', err);
-      // Show empty state - staff table may be empty
       setStaff([]);
     } finally {
       setLoading(false);
