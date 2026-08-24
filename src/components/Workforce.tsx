@@ -64,19 +64,45 @@ export function Workforce({ activeRole, userRegionId }: { activeRole: Role; user
   async function fetchAllData() {
     setLoading(true);
     try {
-      // First, get outlet IDs for the region
-      let outletQuery = supabase.from('outlets').select('id, name, code, region:regions(name)');
+      let outletIds: number[] = [];
       
-      if (userRegionId !== null) {
-        outletQuery = outletQuery.eq('region_id', userRegionId);
+      // Get outlet IDs based on user role
+      if (activeRole === 'Franchisee') {
+        // Get outlets from user_outlets table (Franchisee specific)
+        const { data: userOutlets } = await supabase
+          .from('user_outlets')
+          .select('outlet_id')
+          .eq('user_id', (await supabase.auth.getUser()).data.user?.id);
+        
+        outletIds = userOutlets?.map(uo => uo.outlet_id) || [];
+        console.log('FRANCHISEE - Outlets from user_outlets:', outletIds);
+        
+      } else if (activeRole === 'Regional' && userRegionId !== null) {
+        // Get outlets by region
+        const { data: outlets } = await supabase
+          .from('outlets')
+          .select('id')
+          .eq('region_id', userRegionId);
+        
+        outletIds = outlets?.map(o => o.id) || [];
+        console.log('REGIONAL - Outlets by region:', outletIds);
+        
+      } else {
+        // HQ: Get all outlets
+        const { data: outlets } = await supabase.from('outlets').select('id');
+        outletIds = outlets?.map(o => o.id) || [];
+        console.log('HQ - All outlets:', outletIds);
       }
       
-      const { data: outlets } = await outletQuery;
-      const outletIds = outlets?.map(o => o.id) || [];
+      // Get outlet details for display
+      const { data: outlets } = await supabase
+        .from('outlets')
+        .select('id, name, code, region:regions(name)')
+        .in('id', outletIds);
       
-      console.log('Outlets:', outlets?.length, outletIds);
+      console.log('Outlet details:', outlets?.length);
       
-      // Then fetch staff for these outlets
+      // Fetch staff for these outlets
       const { data, error } = await supabase
         .from('staff')
         .select(`*, outlet:outlets(id, name, code, region:regions(name))`)
