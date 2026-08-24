@@ -459,28 +459,28 @@ export function Agents({ activeRole }: { activeRole: Role }) {
         <MetricCard
           icon={<Activity className="w-5 h-5" />}
           label="Tasks Today"
-          value={stats.total_tasks_today.toLocaleString()}
-          subtext={`${stats.total_completed} completed`}
+          value={(stats.total_tasks_today || 0).toLocaleString()}
+          subtext={`${stats.total_completed || 0} completed`}
           color="text-violet-600"
         />
         <MetricCard
           icon={<Clock className="w-5 h-5" />}
           label="Avg Response"
-          value={`${calculatedMetrics.avg_uptime.toFixed(1)}%`}
+          value={`${(calculatedMetrics?.avg_uptime || 100).toFixed(1)}%`}
           subtext="System uptime"
           color="text-blue-600"
         />
         <MetricCard
           icon={<Bot className="w-5 h-5" />}
           label="Coordinator"
-          value={calculatedMetrics.coordinator_up ? 'Online' : 'Offline'}
-          subtext={`${calculatedMetrics.avg_uptime.toFixed(1)}% uptime`}
-          color={calculatedMetrics.coordinator_up ? "text-green-600" : "text-red-600"}
+          value={calculatedMetrics?.coordinator_up ? 'Online' : 'Offline'}
+          subtext={`${(calculatedMetrics?.avg_uptime || 100).toFixed(1)}% uptime`}
+          color={calculatedMetrics?.coordinator_up ? "text-green-600" : "text-red-600"}
         />
         <MetricCard
           icon={<AlertCircle className="w-5 h-5" />}
           label="Failed Tasks"
-          value={stats.total_failed.toString()}
+          value={(stats.total_failed || 0).toString()}
           subtext={`${stats.total_tasks_today > 0 ? ((stats.total_failed / stats.total_tasks_today) * 100).toFixed(1) : 0}% error rate`}
           color={stats.total_failed > 0 ? "text-red-600" : "text-slate-600"}
         />
