@@ -125,6 +125,7 @@ async function createAgentTask(
         priority: 2,
         input_data: context,
         created_at: new Date().toISOString(),
+        started_at: new Date().toISOString(),
       })
       .select("id")
       .single();
