@@ -242,20 +242,36 @@ export function Agents({ activeRole }: { activeRole: Role }) {
 
   async function fetchTasksAndLogs() {
     try {
-      // Fetch recent tasks from agent_tasks table (increased limit to include older tasks)
-      const { data: tasksData } = await supabase
+      const todayStr = new Date().toISOString().slice(0, 10);
+      
+      // Fetch PENDING tasks (all of them)
+      const { data: pendingData } = await supabase
         .from('agent_tasks')
         .select('*')
+        .eq('status', 'pending')
+        .order('created_at', { ascending: false });
+      
+      // Fetch COMPLETED tasks from today
+      const { data: completedData } = await supabase
+        .from('agent_tasks')
+        .select('*')
+        .eq('status', 'completed')
+        .gte('created_at', todayStr + 'T00:00:00')
         .order('created_at', { ascending: false })
-        .limit(200); // Increased from 50 to include older agent tasks
+        .limit(100);
+      
+      // Combine and sort
+      const allTasks = [...(completedData || []), ...(pendingData || [])]
+        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+        .slice(0, 200);
 
-      if (tasksData) {
+      if (allTasks.length > 0) {
         const agentNames: Record<string, string> = {
           athena: 'Athena', monitor: 'Monitor', analyst: 'Analyst',
           triage: 'Triage', coordinator: 'Coordinator', executor: 'Executor'
         };
 
-        const transformedTasks: AgentTask[] = tasksData.map((t: any) => ({
+        const transformedTasks: AgentTask[] = allTasks.map((t: any) => ({
           id: t.id,
           agent_id: t.agent_id,
           agent_name: agentNames[t.agent_id] || t.agent_id,
