@@ -93,7 +93,7 @@ const getAgentName = (agentId: string | undefined): string => {
   return agentNames[agentId] || agentId.charAt(0).toUpperCase() + agentId.slice(1);
 };
 
-export function Agents({ activeRole }: { activeRole: Role }) {
+export function Agents({ activeRole, userRegionId }: { activeRole: Role; userRegionId: number | null }) {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [tasks, setTasks] = useState<AgentTask[]>([]);
   const [logs, setLogs] = useState<AgentLog[]>([]);
@@ -102,6 +102,7 @@ export function Agents({ activeRole }: { activeRole: Role }) {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'overview' | 'tasks' | 'logs'>('overview');
   const [lastRefresh, setLastRefresh] = useState(new Date());
+  const [userOutlets, setUserOutlets] = useState<number[]>([]);
 
   // Calculate metrics from tasks directly (instead of relying on edge function)
   const calculatedMetrics = useMemo(() => {
@@ -156,12 +157,40 @@ export function Agents({ activeRole }: { activeRole: Role }) {
   const [filterLevel, setFilterLevel] = useState<string>('all');
   const [filterStatus, setFilterStatus] = useState<string>('all');
 
+  // Fetch user outlets for filtering
+  useEffect(() => {
+    async function fetchUserOutlets() {
+      if (activeRole === 'Regional' && userRegionId !== null) {
+        // Get outlets for this region
+        const { data } = await supabase
+          .from('outlets')
+          .select('id')
+          .eq('region_id', userRegionId);
+        setUserOutlets(data?.map(o => o.id) || []);
+      } else if (activeRole === 'Franchisee') {
+        // Get outlets from user_outlets table
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          const { data } = await supabase
+            .from('user_outlets')
+            .select('outlet_id')
+            .eq('user_id', user.id);
+          setUserOutlets(data?.map(uo => uo.outlet_id) || []);
+        }
+      } else {
+        // HQ sees all
+        setUserOutlets([]);
+      }
+    }
+    fetchUserOutlets();
+  }, [activeRole, userRegionId]);
+
   useEffect(() => {
     fetchAgentData();
     // Auto-refresh every 30 seconds
     const interval = setInterval(fetchAgentData, 30000);
     return () => clearInterval(interval);
-  }, []);
+  }, [userOutlets.length]);
 
   async function fetchAgentData() {
     try {
@@ -245,13 +274,12 @@ export function Agents({ activeRole }: { activeRole: Role }) {
     try {
       const todayStr = new Date().toISOString().slice(0, 10);
       
-      // Fetch PENDING tasks (all of them for display)
+      // Fetch PENDING tasks (all)
       const { data: pendingData } = await supabase
         .from('agent_tasks')
         .select('*')
         .eq('status', 'pending')
-        .order('created_at', { ascending: false })
-        .limit(100); // Limit for display only
+        .order('created_at', { ascending: false });
       
       // Fetch COMPLETED tasks from today
       const { data: completedData } = await supabase
@@ -274,34 +302,46 @@ export function Agents({ activeRole }: { activeRole: Role }) {
         .eq('status', 'completed')
         .gte('created_at', todayStr + 'T00:00:00');
       
-      const { count: pendingToday } = await supabase
-        .from('agent_tasks')
-        .select('*', { count: 'exact', head: true })
-        .eq('status', 'pending');
-      
-      // Get per-agent pending counts
+      // Get per-agent pending counts (filter by outlet if needed)
       const { data: pendingByAgent } = await supabase
         .from('agent_tasks')
-        .select('agent_id')
+        .select('agent_id, input_data')
         .eq('status', 'pending');
       
       // Calculate per-agent pending counts
       const agentPendingCounts: Record<string, number> = {};
       for (const task of (pendingByAgent || [])) {
+        // Filter by outlet if userOutlets is set
+        if (userOutlets.length > 0) {
+          const taskOutletId = task.input_data?.outlet_id;
+          if (!userOutlets.includes(Number(taskOutletId))) continue;
+        }
         const agentId = task.agent_id;
         agentPendingCounts[agentId] = (agentPendingCounts[agentId] || 0) + 1;
       }
       
-      // Combine for display (show recent first)
-      const allTasks = [...(completedData || []), ...(pendingData || [])]
+      // Filter and combine tasks for display
+      let allPending = (pendingData || []).filter((task: any) => {
+        if (userOutlets.length === 0) return true;
+        const taskOutletId = task.input_data?.outlet_id;
+        return userOutlets.includes(Number(taskOutletId));
+      });
+      
+      let allCompleted = (completedData || []).filter((task: any) => {
+        if (userOutlets.length === 0) return true;
+        const taskOutletId = task.input_data?.outlet_id;
+        return userOutlets.includes(Number(taskOutletId));
+      });
+      
+      const allTasks = [...allCompleted, ...allPending]
         .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
         .slice(0, 200);
 
       // Update stats with accurate counts
       setStats({
-        total_tasks_today: totalToday || 0,
-        total_completed: completedToday || 0,
-        total_pending: pendingToday || 0,
+        total_tasks_today: (totalToday || 0),
+        total_completed: (completedToday || 0),
+        total_pending: Object.values(agentPendingCounts).reduce((a, b) => a + b, 0),
         total_failed: 0,
         agentPendingCounts,
       });

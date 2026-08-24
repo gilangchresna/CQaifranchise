@@ -98,7 +98,7 @@ export default function App() {
       case "workflows":
         return <Workflows activeRole={activeRole} />;
       case "agents":
-        return <Agents activeRole={activeRole} />;
+        return <Agents activeRole={activeRole} userRegionId={userRegionId} />;
       case "risk":
         return <RiskDashboard activeRole={activeRole} />;
       case "knowledge":
