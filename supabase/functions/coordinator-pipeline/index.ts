@@ -141,6 +141,22 @@ async function createAgentTask(
   }
 }
 
+// Mark task as completed
+async function completeAgentTask(taskId: string, outputData?: Record<string, any>) {
+  try {
+    await sb
+      .from("agent_tasks")
+      .update({
+        status: "completed",
+        completed_at: new Date().toISOString(),
+        output_data: outputData || { result: "success" }
+      })
+      .eq("id", taskId);
+  } catch (e) {
+    console.error(`Error completing task ${taskId}:`, e);
+  }
+}
+
 // Log agent activity
 async function logAgentActivity(
   agentId: string,
@@ -345,6 +361,8 @@ serve(async (req: Request) => {
 
     // Create agent tasks for anomalies (Monitor Agent)
     let tasksCreated = 0;
+    const createdTaskIds: string[] = [];  // Track task IDs
+    
     for (const item of anomalyOutlets) {
       const task = await createAgentTask("monitor", "anomaly_check", {
         outlet_id: item.oid,
@@ -355,6 +373,7 @@ serve(async (req: Request) => {
       });
       if (task) {
         tasksCreated++;
+        createdTaskIds.push(task.id);  // Store ID
         await logAgentActivity("monitor", "warn", `Anomaly task created`, {
           task_id: task.id,
           outlet_id: item.oid,
@@ -411,25 +430,25 @@ serve(async (req: Request) => {
       const description = `Stockout risk detected at ${outletName}.\n\nOutlet: ${outletName}\nLowest Stock: ${lowest} units\nItems Below Threshold: ${inv.length}\n\nTriggered by: Coordinator Pipeline AI Agent\nDate: ${today}`;
 
       const r = await insertAlertDirect(
-        Number(oid),
+        oid,
         "STOCKOUT_RISK",
         "P1_HIGH",
-        0.7,
+        0.8,
         title,
         description
       );
       alertResults.push({ outlet_id: oid, ...r });
       if (r.success) alertsCreated++;
 
-      // Create agent task for stockout alert
+      // Create stockout task (Analyst Agent)
       const stockoutTask = await createAgentTask("analyst", "stockout_check", {
-        alert_id: r.alert_id,
         outlet_id: oid,
-        lowest_stock: lowest,
         items_at_risk: inv.length,
+        lowest_stock: lowest,
       });
       if (stockoutTask) {
         tasksCreated++;
+        createdTaskIds.push(stockoutTask.id);  // Store ID
         await logAgentActivity("analyst", "warn", `Stockout task created`, {
           task_id: stockoutTask.id,
           outlet_id: oid,
@@ -437,7 +456,12 @@ serve(async (req: Request) => {
         });
       }
     }
-
+    
+    // Mark all created tasks as completed
+    for (const taskId of createdTaskIds) {
+      await completeAgentTask(taskId, { alerts_created: alertsCreated });
+    }
+    
     out.agent_tasks_created = tasksCreated;
     await logAgentActivity("coordinator", "info", `Pipeline completed: ${tasksCreated} tasks created`, {
       anomalies: anomalyOutlets.length,

@@ -20,6 +20,7 @@ import {
   FileText,
   Wallet,
   FileSpreadsheet,
+  Crown,
 } from 'lucide-react';
 import { Role } from '@/src/types';
 import { supabase, EDGE_FUNCTIONS_URL } from '@/src/lib/supabase';
@@ -79,6 +80,23 @@ interface RepaymentScheduleEntry {
   days_overdue: number;
 }
 
+interface RoyaltyPayment {
+  id: string;
+  franchisee_id: string;
+  outlet_id: number;
+  payment_date: string;
+  due_date: string;
+  amount: number;
+  currency: string;
+  status: 'PENDING' | 'ON_TIME' | 'LATE' | 'MISSED' | 'PARTIAL';
+  days_past_due: number;
+  payment_method: string | null;
+  reference_number: string | null;
+  period: string;
+  created_at: string;
+  updated_at: string;
+}
+
 interface RiskScore {
   id: string;
   application_id: string;
@@ -104,11 +122,12 @@ const STATUS_STYLE: Record<FinancingStatus, { label: string; className: string; 
 };
 
 export function Financing({ activeRole }: { activeRole: Role }) {
-  const [activeTab, setActiveTab] = useState<'applications' | 'repayments' | 'risk' | 'documents' | 'cashflow'>('applications');
+  const [activeTab, setActiveTab] = useState<'applications' | 'repayments' | 'risk' | 'documents' | 'cashflow' | 'franchise_fees'>('applications');
   const [applications, setApplications] = useState<FinancingApplication[]>([]);
   const [repaymentEvents, setRepaymentEvents] = useState<RepaymentEvent[]>([]);
   const [repaymentSchedule, setRepaymentSchedule] = useState<RepaymentScheduleEntry[]>([]);
   const [riskScores, setRiskScores] = useState<RiskScore[]>([]);
+  const [royaltyPayments, setRoyaltyPayments] = useState<RoyaltyPayment[]>([]);
   const [loading, setLoading] = useState(true);
   const [showApplyModal, setShowApplyModal] = useState(false);
   const [uploadMode, setUploadMode] = useState<'csv' | 'pdf'>('csv');
@@ -287,6 +306,7 @@ export function Financing({ activeRole }: { activeRole: Role }) {
       fetchApplications(),
       fetchRepaymentEvents(),
       fetchRiskScores(),
+      fetchRoyaltyPayments(),
     ]);
     setLoading(false);
   }
@@ -306,6 +326,15 @@ export function Financing({ activeRole }: { activeRole: Role }) {
       .order('received_at', { ascending: false })
       .limit(50);
     setRepaymentEvents(data || []);
+  }
+
+  async function fetchRoyaltyPayments() {
+    const { data } = await supabase
+      .from('royalty_payments')
+      .select('*')
+      .order('period', { ascending: false })
+      .order('payment_date', { ascending: false });
+    setRoyaltyPayments(data || []);
   }
 
   async function fetchRiskScores() {
@@ -386,7 +415,8 @@ export function Financing({ activeRole }: { activeRole: Role }) {
   // Tab navigation
   const tabs = [
     { id: 'applications' as const, label: 'Applications', icon: Landmark },
-    { id: 'repayments' as const, label: 'Repayments', icon: RefreshCw },
+    { id: 'repayments' as const, label: 'EMI / Loan', icon: RefreshCw },
+    { id: 'franchise_fees' as const, label: 'Franchise Fees', icon: Crown },
     { id: 'risk' as const, label: 'Risk Scores', icon: Shield },
     { id: 'documents' as const, label: 'Document Vault', icon: FileText },
     { id: 'cashflow' as const, label: 'Cash Flow', icon: Wallet },
@@ -604,6 +634,101 @@ export function Financing({ activeRole }: { activeRole: Role }) {
                       </td>
                       <td className="px-6 py-4 text-slate-500 text-xs">
                         {new Date(event.received_at).toLocaleString()}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Franchise Fees Tab */}
+      {activeTab === 'franchise_fees' && (
+        <div>
+          {/* Summary Cards */}
+          <div className="grid sm:grid-cols-4 gap-4 mb-6">
+            <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+              <p className="text-xs font-medium text-slate-500">Total Payments</p>
+              <p className="text-2xl font-semibold text-slate-900 mt-2">{royaltyPayments.length}</p>
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+              <p className="text-xs font-medium text-slate-500">On Time</p>
+              <p className="text-2xl font-semibold text-green-600 mt-2">
+                {royaltyPayments.length > 0
+                  ? Math.round((royaltyPayments.filter(p => p.status === 'ON_TIME').length / royaltyPayments.length) * 100)
+                  : 0}%
+              </p>
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+              <p className="text-xs font-medium text-slate-500">Late / Missed</p>
+              <p className="text-2xl font-semibold text-red-600 mt-2">
+                {royaltyPayments.filter(p => p.status === 'LATE' || p.status === 'MISSED').length}
+              </p>
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+              <p className="text-xs font-medium text-slate-500">Pending Amount</p>
+              <p className="text-2xl font-semibold text-slate-900 mt-2">
+                S${royaltyPayments.filter(p => p.status === 'PENDING').reduce((sum, p) => sum + Number(p.amount), 0).toLocaleString()}
+              </p>
+            </div>
+          </div>
+
+          {/* Payment History Table */}
+          <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+            <div className="px-6 py-4 border-b border-slate-200 flex items-center gap-2">
+              <Crown className="w-4 h-4 text-amber-600" />
+              <h3 className="text-sm font-semibold text-slate-900">Franchise Fee Payment History</h3>
+            </div>
+            {royaltyPayments.length === 0 ? (
+              <div className="text-center py-12 text-slate-500">
+                <Crown className="w-8 h-8 mx-auto mb-2 text-slate-300" />
+                <p className="text-sm">No franchise fee payment records found.</p>
+              </div>
+            ) : (
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider border-b border-slate-200">
+                    <th className="px-6 py-3">Period</th>
+                    <th className="px-6 py-3">Outlet</th>
+                    <th className="px-6 py-3">Due Date</th>
+                    <th className="px-6 py-3">Payment Date</th>
+                    <th className="px-6 py-3 text-right">Amount</th>
+                    <th className="px-6 py-3 text-center">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {royaltyPayments.map((payment) => (
+                    <tr key={payment.id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50">
+                      <td className="px-6 py-4 text-slate-700 font-medium">{payment.period}</td>
+                      <td className="px-6 py-4 text-slate-600">Outlet {payment.outlet_id}</td>
+                      <td className="px-6 py-4 text-slate-500">
+                        {new Date(payment.due_date).toLocaleDateString()}
+                      </td>
+                      <td className="px-6 py-4 text-slate-500">
+                        {payment.payment_date ? new Date(payment.payment_date).toLocaleDateString() : '-'}
+                      </td>
+                      <td className="px-6 py-4 text-right font-medium text-slate-700">
+                        S${Number(payment.amount).toLocaleString()}
+                      </td>
+                      <td className="px-6 py-4 text-center">
+                        <span className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-medium uppercase tracking-wider ${
+                          payment.status === 'ON_TIME'
+                            ? 'bg-green-50 text-green-700 border-green-200'
+                            : payment.status === 'LATE'
+                            ? 'bg-yellow-50 text-yellow-700 border-yellow-200'
+                            : payment.status === 'MISSED'
+                            ? 'bg-red-50 text-red-700 border-red-200'
+                            : payment.status === 'PENDING'
+                            ? 'bg-blue-50 text-blue-700 border-blue-200'
+                            : 'bg-gray-50 text-gray-700 border-gray-200'
+                        }`}>
+                          {payment.status === 'ON_TIME' && <CheckCircle2 className="w-3 h-3" />}
+                          {payment.status === 'LATE' && <AlertTriangle className="w-3 h-3" />}
+                          {payment.status === 'MISSED' && <XCircle className="w-3 h-3" />}
+                          {payment.status}
+                        </span>
                       </td>
                     </tr>
                   ))}
