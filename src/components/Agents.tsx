@@ -98,6 +98,7 @@ export function Agents({ activeRole }: { activeRole: Role }) {
   const [tasks, setTasks] = useState<AgentTask[]>([]);
   const [logs, setLogs] = useState<AgentLog[]>([]);
   const [metrics, setMetrics] = useState<Metrics | null>(null);
+  const [stats, setStats] = useState({ total_tasks_today: 0, total_completed: 0, total_pending: 0, total_failed: 0 });
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'overview' | 'tasks' | 'logs'>('overview');
   const [lastRefresh, setLastRefresh] = useState(new Date());
@@ -244,12 +245,13 @@ export function Agents({ activeRole }: { activeRole: Role }) {
     try {
       const todayStr = new Date().toISOString().slice(0, 10);
       
-      // Fetch PENDING tasks (all of them)
+      // Fetch PENDING tasks (all of them for display)
       const { data: pendingData } = await supabase
         .from('agent_tasks')
         .select('*')
         .eq('status', 'pending')
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        .limit(100); // Limit for display only
       
       // Fetch COMPLETED tasks from today
       const { data: completedData } = await supabase
@@ -260,10 +262,34 @@ export function Agents({ activeRole }: { activeRole: Role }) {
         .order('created_at', { ascending: false })
         .limit(100);
       
-      // Combine and sort
+      // Get accurate counts from DB
+      const { count: totalToday } = await supabase
+        .from('agent_tasks')
+        .select('*', { count: 'exact', head: true })
+        .gte('created_at', todayStr + 'T00:00:00');
+      
+      const { count: completedToday } = await supabase
+        .from('agent_tasks')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'completed')
+        .gte('created_at', todayStr + 'T00:00:00');
+      
+      const { count: pendingToday } = await supabase
+        .from('agent_tasks')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'pending');
+      
+      // Combine for display (show recent first)
       const allTasks = [...(completedData || []), ...(pendingData || [])]
         .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
         .slice(0, 200);
+
+      // Update stats with accurate counts
+      setStats({
+        total_tasks_today: totalToday || 0,
+        total_completed: completedToday || 0,
+        total_pending: pendingToday || 0,
+      });
 
       if (allTasks.length > 0) {
         const agentNames: Record<string, string> = {
@@ -428,13 +454,13 @@ export function Agents({ activeRole }: { activeRole: Role }) {
         </button>
       </div>
 
-      {/* Metrics Cards - Use calculated metrics from tasks */}
+      {/* Metrics Cards - Use stats from DB */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <MetricCard
           icon={<Activity className="w-5 h-5" />}
           label="Tasks Today"
-          value={calculatedMetrics.total_tasks_today.toLocaleString()}
-          subtext={`${calculatedMetrics.total_completed} completed`}
+          value={stats.total_tasks_today.toLocaleString()}
+          subtext={`${stats.total_completed} completed`}
           color="text-violet-600"
         />
         <MetricCard
@@ -454,9 +480,9 @@ export function Agents({ activeRole }: { activeRole: Role }) {
         <MetricCard
           icon={<AlertCircle className="w-5 h-5" />}
           label="Failed Tasks"
-          value={calculatedMetrics.total_failed.toString()}
-          subtext={`${calculatedMetrics.total_tasks_today > 0 ? ((calculatedMetrics.total_failed / calculatedMetrics.total_tasks_today) * 100).toFixed(1) : 0}% error rate`}
-          color={calculatedMetrics.total_failed > 0 ? "text-red-600" : "text-slate-600"}
+          value={stats.total_failed.toString()}
+          subtext={`${stats.total_tasks_today > 0 ? ((stats.total_failed / stats.total_tasks_today) * 100).toFixed(1) : 0}% error rate`}
+          color={stats.total_failed > 0 ? "text-red-600" : "text-slate-600"}
         />
       </div>
 
