@@ -98,7 +98,7 @@ export function Agents({ activeRole }: { activeRole: Role }) {
   const [tasks, setTasks] = useState<AgentTask[]>([]);
   const [logs, setLogs] = useState<AgentLog[]>([]);
   const [metrics, setMetrics] = useState<Metrics | null>(null);
-  const [stats, setStats] = useState({ total_tasks_today: 0, total_completed: 0, total_pending: 0, total_failed: 0 });
+  const [stats, setStats] = useState<{ total_tasks_today: number; total_completed: number; total_pending: number; total_failed: number; agentPendingCounts: Record<string, number> }>({ total_tasks_today: 0, total_completed: 0, total_pending: 0, total_failed: 0, agentPendingCounts: {} });
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'overview' | 'tasks' | 'logs'>('overview');
   const [lastRefresh, setLastRefresh] = useState(new Date());
@@ -279,6 +279,19 @@ export function Agents({ activeRole }: { activeRole: Role }) {
         .select('*', { count: 'exact', head: true })
         .eq('status', 'pending');
       
+      // Get per-agent pending counts
+      const { data: pendingByAgent } = await supabase
+        .from('agent_tasks')
+        .select('agent_id')
+        .eq('status', 'pending');
+      
+      // Calculate per-agent pending counts
+      const agentPendingCounts: Record<string, number> = {};
+      for (const task of (pendingByAgent || [])) {
+        const agentId = task.agent_id;
+        agentPendingCounts[agentId] = (agentPendingCounts[agentId] || 0) + 1;
+      }
+      
       // Combine for display (show recent first)
       const allTasks = [...(completedData || []), ...(pendingData || [])]
         .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
@@ -289,6 +302,8 @@ export function Agents({ activeRole }: { activeRole: Role }) {
         total_tasks_today: totalToday || 0,
         total_completed: completedToday || 0,
         total_pending: pendingToday || 0,
+        total_failed: 0,
+        agentPendingCounts,
       });
 
       if (allTasks.length > 0) {
@@ -517,11 +532,11 @@ export function Agents({ activeRole }: { activeRole: Role }) {
           {/* Agent Grid */}
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
             {agents.map((agent) => {
-              // Calculate agent stats from tasks
+              // Calculate agent stats from DB
               const agentTasks = tasks.filter(t => t.agent_id === agent.id);
               const agentCompleted = agentTasks.filter(t => t.status === 'completed').length;
               const agentRunning = agentTasks.filter(t => t.status === 'running').length;
-              const agentPending = agentTasks.filter(t => t.status === 'pending').length;
+              const agentPending = stats.agentPendingCounts[agent.id] || 0;
               const avgDuration = agentTasks
                 .filter(t => t.duration_ms)
                 .reduce((sum, t) => sum + (t.duration_ms || 0), 0) / (agentTasks.filter(t => t.duration_ms).length || 1);
