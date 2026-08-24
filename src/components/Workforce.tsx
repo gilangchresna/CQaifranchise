@@ -57,6 +57,8 @@ export function Workforce({ activeRole, userRegionId }: { activeRole: Role; user
   const [filterRole, setFilterRole] = useState<string>('all');
   const [activeTab, setActiveTab] = useState<'attendance' | 'performance'>('attendance');
   const [dateRange, setDateRange] = useState<'7d' | '30d' | '90d' | 'all'>('7d');
+  const [attendanceDate, setAttendanceDate] = useState<Date>(new Date());
+  const [attendanceRecords, setAttendanceRecords] = useState<Record<string, string>>({});
 
   // Helper function to get start date based on range
   function getStartDate(): string | null {
@@ -68,9 +70,43 @@ export function Workforce({ activeRole, userRegionId }: { activeRole: Role; user
     return date.toISOString();
   }
 
+  // Attendance date helpers
+  function isToday(date: Date): boolean {
+    const today = new Date();
+    return date.toDateString() === today.toDateString();
+  }
+
+  function formatAttendanceDate(date: Date): string {
+    if (isToday(date)) return 'Today';
+    return date.toLocaleDateString('en-SG', { 
+      weekday: 'short', 
+      day: 'numeric', 
+      month: 'short' 
+    });
+  }
+
+  // Fetch attendance records for selected date
+  async function fetchAttendanceRecords(date: Date) {
+    const dateStr = date.toISOString().split('T')[0];
+    
+    const { data: records } = await supabase
+      .from('staff_attendance')
+      .select('staff_id, status')
+      .eq('date', dateStr);
+    
+    if (records) {
+      const recordMap: Record<string, string> = {};
+      records.forEach(r => {
+        recordMap[r.staff_id] = r.status;
+      });
+      setAttendanceRecords(recordMap);
+    }
+  }
+
   useEffect(() => {
     fetchAllData();
-  }, [dateRange]);
+    fetchAttendanceRecords(attendanceDate);
+  }, [dateRange, attendanceDate]);
 
   async function fetchAllData() {
     setLoading(true);
@@ -245,11 +281,26 @@ export function Workforce({ activeRole, userRegionId }: { activeRole: Role; user
     return matchesStatus && matchesRole;
   });
 
-  // Calculate stats
+  // Calculate stats - use attendance records from DB
   const totalStaff = filteredStaff.length;
-  const presentCount = filteredStaff.filter(s => s.status === 'present').length;
-  const absentCount = filteredStaff.filter(s => s.status === 'absent').length;
-  const lateCount = filteredStaff.filter(s => s.status === 'late').length;
+  
+  // Get attendance status from records (fallback to staff.status)
+  const getAttendanceStatus = (staffId: number): string => {
+    return attendanceRecords[staffId] || filteredStaff.find(s => s.id === staffId)?.status || 'present';
+  };
+  
+  const presentCount = filteredStaff.filter(s => {
+    const status = getAttendanceStatus(s.id);
+    return status === 'present';
+  }).length;
+  const absentCount = filteredStaff.filter(s => {
+    const status = getAttendanceStatus(s.id);
+    return status === 'absent' || status === 'off_duty';
+  }).length;
+  const lateCount = filteredStaff.filter(s => {
+    const status = getAttendanceStatus(s.id);
+    return status === 'late' || status === 'on_leave';
+  }).length;
   const coverageRate = totalStaff > 0 ? Math.round((presentCount / totalStaff) * 100) : 0;
   const avgPerformance = totalStaff > 0 ? Math.round(filteredStaff.reduce((acc, s) => acc + (s.performance_score || 0), 0) / totalStaff) : 0;
 
@@ -349,6 +400,44 @@ export function Workforce({ activeRole, userRegionId }: { activeRole: Role; user
       {/* Attendance Tab */}
       {activeTab === "attendance" && (
         <>
+
+      {/* Date Picker Header */}
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <Calendar className="h-5 w-5 text-gray-400" />
+          <span className="text-sm font-medium text-gray-700">
+            {formatAttendanceDate(attendanceDate)}
+          </span>
+        </div>
+        <div className="flex gap-2">
+          <input
+            type="date"
+            value={attendanceDate.toISOString().split('T')[0]}
+            onChange={(e) => setAttendanceDate(new Date(e.target.value + 'T00:00:00'))}
+            className="border border-gray-200 rounded px-3 py-1.5 text-sm"
+          />
+          <button
+            onClick={() => setAttendanceDate(new Date())}
+            className={`px-3 py-1.5 text-xs rounded font-medium transition-colors ${
+              isToday(attendanceDate) 
+                ? 'bg-blue-600 text-white' 
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            }`}
+          >
+            Today
+          </button>
+          <button
+            onClick={() => {
+              const d = new Date();
+              d.setDate(d.getDate() - 1);
+              setAttendanceDate(d);
+            }}
+            className="px-3 py-1.5 text-xs rounded bg-gray-100 text-gray-600 hover:bg-gray-200 font-medium"
+          >
+            Yesterday
+          </button>
+        </div>
+      </div>
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -495,9 +584,9 @@ export function Workforce({ activeRole, userRegionId }: { activeRole: Role; user
                     </div>
                   </td>
                   <td className="px-6 py-4">
-                    <span className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs font-medium capitalize ${getStatusColor(emp.status)}`}>
-                      {getStatusIcon(emp.status)}
-                      {emp.status}
+                    <span className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs font-medium capitalize ${getStatusColor(getAttendanceStatus(emp.id))}`}>
+                      {getStatusIcon(getAttendanceStatus(emp.id))}
+                      {getAttendanceStatus(emp.id)}
                     </span>
                   </td>
                 </tr>
