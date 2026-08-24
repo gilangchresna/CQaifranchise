@@ -56,10 +56,21 @@ export function Workforce({ activeRole, userRegionId }: { activeRole: Role; user
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [filterRole, setFilterRole] = useState<string>('all');
   const [activeTab, setActiveTab] = useState<'attendance' | 'performance'>('attendance');
+  const [dateRange, setDateRange] = useState<'7d' | '30d' | '90d' | 'all'>('7d');
+
+  // Helper function to get start date based on range
+  function getStartDate(): string | null {
+    if (dateRange === 'all') return null;
+    
+    const days = dateRange === '7d' ? 7 : dateRange === '30d' ? 30 : 90;
+    const date = new Date();
+    date.setDate(date.getDate() - days);
+    return date.toISOString();
+  }
 
   useEffect(() => {
     fetchAllData();
-  }, []);
+  }, [dateRange]);
 
   async function fetchAllData() {
     setLoading(true);
@@ -139,13 +150,21 @@ export function Workforce({ activeRole, userRegionId }: { activeRole: Role; user
       // Get outlet IDs
       const outletIds = [...new Set(staffData.map(s => s.outlet_id))];
 
-      // Fetch POS data - get more records
-      const { data: posData } = await supabase
+      // Build query with date filter
+      const startDate = getStartDate();
+      let query = supabase
         .from('sales_transactions')
         .select('staff_id, amount, outlet_id')
         .in('outlet_id', outletIds)
         .order('created_at', { ascending: false })
-        .limit(100000);  // Increased from 5000
+        .limit(100000);
+
+      // Add date filter if not "all"
+      if (startDate) {
+        query = query.gte('created_at', startDate);
+      }
+
+      const { data: posData } = await query;
 
       if (posData) {
         const staffMap = new Map<string, any>();
@@ -552,8 +571,33 @@ export function Workforce({ activeRole, userRegionId }: { activeRole: Role; user
           {/* Performance Table */}
           <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
             <div className="px-6 py-4 border-b">
-              <h3 className="font-semibold text-slate-900">Staff Performance</h3>
-              <p className="text-sm text-slate-500">Ranked by total sales from POS transactions</p>
+              <div className="flex justify-between items-center mb-2">
+                <div>
+                  <h3 className="font-semibold text-slate-900">Staff Performance</h3>
+                  <p className="text-sm text-slate-500">Ranked by total sales from POS transactions</p>
+                </div>
+                {/* Date Range Filter */}
+                <div className="flex gap-1">
+                  {[
+                    { label: '7D', value: '7d' as const },
+                    { label: '30D', value: '30d' as const },
+                    { label: '90D', value: '90d' as const },
+                    { label: 'All', value: 'all' as const },
+                  ].map(opt => (
+                    <button
+                      key={opt.value}
+                      onClick={() => setDateRange(opt.value)}
+                      className={`px-3 py-1 text-xs rounded ${
+                        dateRange === opt.value 
+                          ? 'bg-blue-600 text-white' 
+                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full">
