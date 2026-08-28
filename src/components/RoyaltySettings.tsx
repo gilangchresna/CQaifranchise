@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { supabase } from "@/src/lib/supabase";
 import { 
   DollarSign, TrendingUp, TrendingDown, Target, CheckCircle, 
@@ -105,7 +105,6 @@ interface SettingsState {
 }
 
 export default function RoyaltySettings() {
-  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [activePreset, setActivePreset] = useState<string>('performance');
@@ -186,14 +185,6 @@ export default function RoyaltySettings() {
     setMessage({ type: 'success', text: 'Formula saved successfully!' });
     setSaving(false);
     setTimeout(() => setMessage(null), 3000);
-  }
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-      </div>
-    );
   }
 
   return (
