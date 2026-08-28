@@ -24,6 +24,7 @@ import {
   PanelLeftClose,
   PanelLeft,
   FileText,
+  DollarSign,
 } from "lucide-react";
 import { cn } from "@/src/lib/utils";
 
@@ -95,6 +96,7 @@ export function Layout({ children, activeRole, onRoleChange, activeTab, onTabCha
           { icon: Store, label: t.nav.networkDirectory, id: "Outlets" },
           { icon: Users, label: t.nav.globalWorkforce, id: "Workforce" },
           { icon: FileText, label: t.nav.caseManagement, id: "Cases" },
+          { icon: DollarSign, label: "Royalty", id: "Royalty" },
           { icon: Bot, label: t.nav.agentOrchestration, id: "Agents" },
           { icon: AlertTriangle, label: t.nav.stockoutRisk, id: "Risk" },
           { icon: BookOpen, label: t.nav.knowledgeBase, id: "Knowledge" },
@@ -110,6 +112,7 @@ export function Layout({ children, activeRole, onRoleChange, activeTab, onTabCha
           { icon: Store, label: t.nav.areaOutlets, id: "Outlets" },
           { icon: Users, label: t.nav.areaStaff, id: "Workforce" },
           { icon: FileText, label: t.nav.caseManagement, id: "Cases" },
+          { icon: DollarSign, label: "Royalty", id: "Royalty" },
           { icon: Bot, label: t.nav.agentOrchestration, id: "Agents" },
           { icon: AlertTriangle, label: t.nav.stockoutRisk, id: "Risk" },
           { icon: BookOpen, label: t.nav.knowledgeBase, id: "Knowledge" },
@@ -126,6 +129,7 @@ export function Layout({ children, activeRole, onRoleChange, activeTab, onTabCha
           { icon: LayoutDashboard, label: t.nav.myStore, id: "Dashboard" },
           { icon: Users, label: t.nav.myTeam, id: "Workforce" },
           { icon: ActivitySquare, label: t.nav.myTasks, id: "Workflows" },
+          { icon: DollarSign, label: "My Royalty", id: "Royalty" },
           { icon: Landmark, label: t.nav.bridgeFinancing, id: "Financing" },
           { icon: Settings, label: t.nav.storePreferences, id: "Settings" },
         ];
