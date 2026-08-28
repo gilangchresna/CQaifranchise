@@ -13,16 +13,16 @@ interface RoyaltySettings {
 }
 
 interface RoyaltyAgreement {
-  id: string;
-  franchisee_id: string;
-  franchisee_name: string;
-  franchisee_email: string;
-  formula_type: string;
-  settings_id: string | null;
-  effective_from: string;
-  effective_to: string;
-  notes: string | null;
-  created_at: string;
+id: string;
+franchisee_id: string;
+franchisee_name: string;
+franchisee_email: string;
+formula_type: string;
+settings_id: string | null;
+effective_from: string;
+effective_to: string;
+is_active: boolean;
+created_at: string;
 }
 
 interface Franchisee {
@@ -54,7 +54,6 @@ export default function RoyaltyAgreements() {
     formula_type: 'PERFORMANCE',
     effective_from: new Date().toISOString().split('T')[0],
     effective_to: new Date(new Date().setMonth(new Date().getMonth() + 12)).toISOString().split('T')[0],
-    notes: '',
   });
 
   // Filter state
@@ -94,7 +93,7 @@ export default function RoyaltyAgreements() {
         settings_id: a.settings_id,
         effective_from: a.effective_from,
         effective_to: a.effective_to,
-        notes: a.notes,
+        is_active: a.is_active ?? true,
         created_at: a.created_at,
       }));
 
@@ -172,7 +171,6 @@ export default function RoyaltyAgreements() {
         formula_type: agreement.formula_type,
         effective_from: agreement.effective_from,
         effective_to: agreement.effective_to,
-        notes: agreement.notes || '',
       });
     } else {
       setEditingId(null);
@@ -181,7 +179,6 @@ export default function RoyaltyAgreements() {
         formula_type: 'PERFORMANCE',
         effective_from: new Date().toISOString().split('T')[0],
         effective_to: new Date(new Date().setMonth(new Date().getMonth() + 12)).toISOString().split('T')[0],
-        notes: '',
       });
     }
     setShowModal(true);
@@ -208,7 +205,7 @@ export default function RoyaltyAgreements() {
             formula_type: formData.formula_type,
             effective_from: formData.effective_from,
             effective_to: formData.effective_to,
-            notes: formData.notes || null,
+            is_active: true,
           })
           .eq('id', editingId);
 
@@ -223,7 +220,8 @@ export default function RoyaltyAgreements() {
             formula_type: formData.formula_type,
             effective_from: formData.effective_from,
             effective_to: formData.effective_to,
-            notes: formData.notes || null,
+            is_active: true,
+            base_rate: 0.06, // Default 6%
           });
 
         if (error) throw error;
@@ -463,9 +461,6 @@ export default function RoyaltyAgreements() {
                           {statusInfo.label}
                         </span>
                       </td>
-                      <td className="px-6 py-4 text-sm text-gray-500 max-w-xs truncate">
-                        {agreement.notes || '-'}
-                      </td>
                       <td className="px-6 py-4 text-right">
                         <div className="flex justify-end gap-2">
                           <button
@@ -588,20 +583,6 @@ export default function RoyaltyAgreements() {
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   />
                 </div>
-              </div>
-
-              {/* Notes */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Notes (optional)
-                </label>
-                <textarea
-                  value={formData.notes}
-                  onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                  rows={3}
-                  placeholder="Add notes about this agreement..."
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                />
               </div>
             </div>
 
