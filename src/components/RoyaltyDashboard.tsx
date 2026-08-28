@@ -1,11 +1,8 @@
 import { useState, useEffect } from 'react';
 import { supabase } from "@/src/lib/supabase";
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
-import { Button } from '@/components/ui/Button';
-import { Badge } from '@/components/ui/Badge';
 import { 
   TrendingUp, TrendingDown, DollarSign, AlertTriangle, 
-  CheckCircle, Clock, Users, BarChart3, ArrowUpRight, ArrowDownRight
+  CheckCircle, Clock, BarChart3, ArrowUpRight, ArrowDownRight
 } from 'lucide-react';
 
 interface RoyaltyCalculation {
@@ -49,7 +46,6 @@ export default function RoyaltyDashboard() {
   async function fetchData() {
     setLoading(true);
     
-    // Fetch calculations for the selected period
     const periodStart = `${selectedPeriod}-01`;
     const periodEnd = `${selectedPeriod}-${new Date(
       parseInt(selectedPeriod.split('-')[0]),
@@ -66,15 +62,9 @@ export default function RoyaltyDashboard() {
 
     setCalculations(calcs || []);
 
-    // Fetch portfolio summary
     const { data: summaryData } = await supabase
       .from('royalty_calculations')
-      .select(`
-        status,
-        royalty_amount,
-        effective_rate,
-        franchisee_id
-      `)
+      .select('status, royalty_amount, effective_rate, franchisee_id')
       .gte('period_month', periodStart)
       .lte('period_month', periodEnd);
 
@@ -101,7 +91,6 @@ export default function RoyaltyDashboard() {
       ? Math.round((summary.total_paid / summary.total_royalty_expected) * 100)
       : 0;
 
-    // Group by status
     data.forEach(d => {
       if (!summary.by_status[d.status]) {
         summary.by_status[d.status] = { count: 0, amount: 0 };
@@ -110,7 +99,6 @@ export default function RoyaltyDashboard() {
       summary.by_status[d.status].amount += d.royalty_amount || 0;
     });
 
-    // Group by rate band
     data.forEach(d => {
       const band = getRateBand(d.effective_rate);
       if (!summary.by_rate_band[band]) {
@@ -182,234 +170,186 @@ export default function RoyaltyDashboard() {
               return <option key={value} value={value}>{label}</option>;
             })}
           </select>
-          <Button onClick={fetchData}>
-            Refresh
-          </Button>
         </div>
       </div>
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card>
-          <CardContent className="pt-4">
-            <div className="flex justify-between">
-              <div>
-                <p className="text-sm text-gray-500">Total Royalty</p>
-                <p className="text-2xl font-bold">{formatCurrency(summary?.total_royalty_expected || 0)}</p>
-              </div>
-              <div className="p-2 bg-blue-100 rounded-lg">
-                <DollarSign className="h-6 w-6 text-blue-600" />
-              </div>
+        <div className="rounded-xl border bg-white p-6">
+          <div className="flex justify-between">
+            <div>
+              <p className="text-sm text-gray-500">Total Royalty</p>
+              <p className="text-2xl font-bold">{formatCurrency(summary?.total_royalty_expected || 0)}</p>
             </div>
-            <p className="text-xs text-gray-500 mt-2">{summary?.total_franchisees || 0} franchisees</p>
-          </CardContent>
-        </Card>
+            <div className="p-2 bg-blue-100 rounded-lg">
+              <DollarSign className="h-6 w-6 text-blue-600" />
+            </div>
+          </div>
+          <p className="text-xs text-gray-500 mt-2">{summary?.total_franchisees || 0} franchisees</p>
+        </div>
 
-        <Card>
-          <CardContent className="pt-4">
-            <div className="flex justify-between">
-              <div>
-                <p className="text-sm text-gray-500">Collection Rate</p>
-                <p className="text-2xl font-bold">{summary?.collection_rate || 0}%</p>
-              </div>
-              <div className="p-2 bg-green-100 rounded-lg">
-                <TrendingUp className="h-6 w-6 text-green-600" />
-              </div>
+        <div className="rounded-xl border bg-white p-6">
+          <div className="flex justify-between">
+            <div>
+              <p className="text-sm text-gray-500">Collection Rate</p>
+              <p className="text-2xl font-bold">{summary?.collection_rate || 0}%</p>
             </div>
-            <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
-              <div 
-                className="bg-green-600 h-2 rounded-full" 
-                style={{ width: `${summary?.collection_rate || 0}%` }}
-              ></div>
+            <div className="p-2 bg-green-100 rounded-lg">
+              <TrendingUp className="h-6 w-6 text-green-600" />
             </div>
-          </CardContent>
-        </Card>
+          </div>
+          <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
+            <div className="bg-green-600 h-2 rounded-full" style={{ width: `${summary?.collection_rate || 0}%` }}></div>
+          </div>
+        </div>
 
-        <Card>
-          <CardContent className="pt-4">
-            <div className="flex justify-between">
-              <div>
-                <p className="text-sm text-gray-500">Collected</p>
-                <p className="text-2xl font-bold text-green-600">
-                  {formatCurrency(summary?.total_paid || 0)}
-                </p>
-              </div>
-              <div className="p-2 bg-green-100 rounded-lg">
-                <CheckCircle className="h-6 w-6 text-green-600" />
-              </div>
+        <div className="rounded-xl border bg-white p-6">
+          <div className="flex justify-between">
+            <div>
+              <p className="text-sm text-gray-500">Collected</p>
+              <p className="text-2xl font-bold text-green-600">{formatCurrency(summary?.total_paid || 0)}</p>
             </div>
-          </CardContent>
-        </Card>
+            <div className="p-2 bg-green-100 rounded-lg">
+              <CheckCircle className="h-6 w-6 text-green-600" />
+            </div>
+          </div>
+        </div>
 
-        <Card>
-          <CardContent className="pt-4">
-            <div className="flex justify-between">
-              <div>
-                <p className="text-sm text-gray-500">Overdue</p>
-                <p className="text-2xl font-bold text-red-600">
-                  {formatCurrency(summary?.total_overdue || 0)}
-                </p>
-              </div>
-              <div className="p-2 bg-red-100 rounded-lg">
-                <AlertTriangle className="h-6 w-6 text-red-600" />
-              </div>
+        <div className="rounded-xl border bg-white p-6">
+          <div className="flex justify-between">
+            <div>
+              <p className="text-sm text-gray-500">Overdue</p>
+              <p className="text-2xl font-bold text-red-600">{formatCurrency(summary?.total_overdue || 0)}</p>
             </div>
-            <p className="text-xs text-gray-500 mt-2">
-              {summary?.by_status['OVERDUE']?.count || 0} overdue
-            </p>
-          </CardContent>
-        </Card>
+            <div className="p-2 bg-red-100 rounded-lg">
+              <AlertTriangle className="h-6 w-6 text-red-600" />
+            </div>
+          </div>
+          <p className="text-xs text-gray-500 mt-2">{summary?.by_status?.['OVERDUE']?.count || 0} overdue</p>
+        </div>
       </div>
 
-      {/* Rate Band Distribution */}
+      {/* Rate Band Distribution & Top Performers */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>Royalty Rate Distribution</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {Object.entries(summary?.by_rate_band || {}).map(([band, data]) => (
-                <div key={band} className="flex items-center justify-between">
-                  <div className="flex-1">
-                    <div className="flex justify-between text-sm mb-1">
-                      <span className="font-medium">{band}</span>
-                      <span className="text-gray-500">{data.count} outlets</span>
-                    </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2">
-                      <div 
-                        className={`h-2 rounded-full ${
-                          band.includes('Excellent') || band.includes('Good') ? 'bg-green-500' :
-                          band.includes('Average') ? 'bg-yellow-500' :
-                          'bg-red-500'
-                        }`}
-                        style={{ width: `${(data.count / (summary?.total_franchisees || 1)) * 100}%` }}
-                      ></div>
+        <div className="rounded-xl border bg-white p-6">
+          <h3 className="font-semibold mb-4">Royalty Rate Distribution</h3>
+          <div className="space-y-3">
+            {Object.entries(summary?.by_rate_band || {}).map(([band, data]: [string, any]) => (
+              <div key={band} className="flex items-center justify-between">
+                <div className="flex-1">
+                  <div className="flex justify-between text-sm mb-1">
+                    <span className="font-medium">{band}</span>
+                    <span className="text-gray-500">{data.count} outlets</span>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-2">
+                    <div 
+                      className={`h-2 rounded-full ${
+                        band.includes('Excellent') || band.includes('Good') ? 'bg-green-500' :
+                        band.includes('Average') ? 'bg-yellow-500' : 'bg-red-500'
+                      }`}
+                      style={{ width: `${(data.count / (summary?.total_franchisees || 1)) * 100}%` }}
+                    ></div>
+                  </div>
+                </div>
+                <span className="ml-4 text-sm font-medium w-24 text-right">{formatCurrency(data.amount)}</span>
+              </div>
+            ))}
+            {Object.keys(summary?.by_rate_band || {}).length === 0 && (
+              <p className="text-center py-8 text-gray-500">No data for this period</p>
+            )}
+          </div>
+        </div>
+
+        <div className="rounded-xl border bg-white p-6">
+          <h3 className="flex items-center gap-2 font-semibold mb-4">
+            <TrendingUp className="h-5 w-5 text-green-600" />
+            Top Performers
+          </h3>
+          <div className="space-y-3">
+            {calculations
+              .filter(c => c.effective_rate < 0.06)
+              .slice(0, 5)
+              .map((calc, i) => (
+                <div key={calc.id} className="flex items-center justify-between p-2 rounded-lg bg-green-50">
+                  <div className="flex items-center gap-3">
+                    <span className="text-lg font-bold text-green-600">#{i + 1}</span>
+                    <div>
+                      <p className="font-medium">Franchisee {calc.franchisee_id.substring(0, 8)}</p>
+                      <p className="text-sm text-gray-500">Score: {calc.risk_score} • Rate: {(calc.effective_rate * 100).toFixed(1)}%</p>
                     </div>
                   </div>
-                  <span className="ml-4 text-sm font-medium w-24 text-right">
-                    {formatCurrency(data.amount)}
-                  </span>
+                  <div className="text-right">
+                    <p className="font-bold text-green-600">-{formatCurrency(calc.savings_vs_flat)}</p>
+                    <p className="text-xs text-gray-500">vs flat 6%</p>
+                  </div>
                 </div>
               ))}
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Top Performers */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <TrendingUp className="h-5 w-5 text-green-600" />
-              Top Performers
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {calculations
-                .filter(c => c.effective_rate < 0.06)
-                .slice(0, 5)
-                .map((calc, i) => (
-                  <div key={calc.id} className="flex items-center justify-between p-2 rounded-lg bg-green-50">
-                    <div className="flex items-center gap-3">
-                      <span className="text-lg font-bold text-green-600">#{i + 1}</span>
-                      <div>
-                        <p className="font-medium">Franchisee {calc.franchisee_id.substring(0, 8)}</p>
-                        <p className="text-sm text-gray-500">
-                          Score: {calc.risk_score} • Rate: {(calc.effective_rate * 100).toFixed(1)}%
-                        </p>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <p className="font-bold text-green-600">
-                        -{formatCurrency(calc.savings_vs_flat)}
-                      </p>
-                      <p className="text-xs text-gray-500">vs flat 6%</p>
-                    </div>
-                  </div>
-                ))}
-              {calculations.filter(c => c.effective_rate < 0.06).length === 0 && (
-                <p className="text-gray-500 text-center py-4">No top performers this period</p>
-              )}
-            </div>
-          </CardContent>
-        </Card>
+            {calculations.filter(c => c.effective_rate < 0.06).length === 0 && (
+              <p className="text-gray-500 text-center py-4">No top performers this period</p>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* All Calculations Table */}
-      <Card>
-        <CardHeader>
-          <CardTitle>All Royalty Calculations - {selectedPeriod}</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b">
-                  <th className="text-left py-3 px-4 font-medium text-gray-500">Franchisee</th>
-                  <th className="text-right py-3 px-4 font-medium text-gray-500">Revenue</th>
-                  <th className="text-right py-3 px-4 font-medium text-gray-500">Score</th>
-                  <th className="text-right py-3 px-4 font-medium text-gray-500">Eff. Rate</th>
-                  <th className="text-right py-3 px-4 font-medium text-gray-500">Royalty</th>
-                  <th className="text-right py-3 px-4 font-medium text-gray-500">vs Flat</th>
-                  <th className="text-center py-3 px-4 font-medium text-gray-500">Status</th>
+      <div className="rounded-xl border bg-white p-6">
+        <h3 className="font-semibold mb-4">All Royalty Calculations - {selectedPeriod}</h3>
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead>
+              <tr className="border-b">
+                <th className="text-left py-3 px-4 font-medium text-gray-500">Franchisee</th>
+                <th className="text-right py-3 px-4 font-medium text-gray-500">Revenue</th>
+                <th className="text-right py-3 px-4 font-medium text-gray-500">Score</th>
+                <th className="text-right py-3 px-4 font-medium text-gray-500">Eff. Rate</th>
+                <th className="text-right py-3 px-4 font-medium text-gray-500">Royalty</th>
+                <th className="text-right py-3 px-4 font-medium text-gray-500">vs Flat</th>
+                <th className="text-center py-3 px-4 font-medium text-gray-500">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {calculations.map((calc) => (
+                <tr key={calc.id} className="border-b hover:bg-gray-50">
+                  <td className="py-3 px-4">
+                    <p className="font-medium">Franchisee {calc.franchisee_id.substring(0, 8)}</p>
+                    <p className="text-sm text-gray-500">ID: {calc.franchisee_id.substring(0, 8)}...</p>
+                  </td>
+                  <td className="py-3 px-4 text-right">{formatCurrency(calc.gross_revenue)}</td>
+                  <td className="py-3 px-4 text-right">
+                    <span className={`px-2 py-1 rounded text-sm ${getRiskBadgeColor(calc.risk_band || '')}`}>
+                      {calc.risk_score || '-'}
+                    </span>
+                  </td>
+                  <td className="py-3 px-4 text-right font-medium">{(calc.effective_rate * 100).toFixed(1)}%</td>
+                  <td className="py-3 px-4 text-right font-bold">{formatCurrency(calc.royalty_amount)}</td>
+                  <td className="py-3 px-4 text-right">
+                    <span className={calc.savings_vs_flat > 0 ? 'text-green-600' : calc.savings_vs_flat < 0 ? 'text-red-600' : 'text-gray-500'}>
+                      {calc.savings_vs_flat > 0 ? <ArrowDownRight className="inline h-4 w-4" /> : calc.savings_vs_flat < 0 ? <ArrowUpRight className="inline h-4 w-4" /> : null}
+                      {calc.savings_vs_flat > 0 ? '-' : ''}{formatCurrency(Math.abs(calc.savings_vs_flat))}
+                    </span>
+                  </td>
+                  <td className="py-3 px-4 text-center">
+                    <span className={`text-xs px-2 py-1 rounded ${
+                      calc.status === 'PAID' ? 'bg-green-100 text-green-700' :
+                      calc.status === 'OVERDUE' ? 'bg-red-100 text-red-700' :
+                      calc.status === 'INVOICED' ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-100 text-gray-700'
+                    }`}>
+                      {calc.status}
+                    </span>
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {calculations.map((calc) => (
-                  <tr key={calc.id} className="border-b hover:bg-gray-50">
-                    <td className="py-3 px-4">
-                      <p className="font-medium">Franchisee {calc.franchisee_id.substring(0, 8)}</p>
-                      <p className="text-sm text-gray-500">ID: {calc.franchisee_id.substring(0, 8)}...</p>
-                    </td>
-                    <td className="py-3 px-4 text-right">{formatCurrency(calc.gross_revenue)}</td>
-                    <td className="py-3 px-4 text-right">
-                      <span className={`px-2 py-1 rounded text-sm ${getRiskBadgeColor(calc.risk_band || '')}`}>
-                        {calc.risk_score || '-'}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4 text-right font-medium">
-                      {(calc.effective_rate * 100).toFixed(1)}%
-                    </td>
-                    <td className="py-3 px-4 text-right font-bold">
-                      {formatCurrency(calc.royalty_amount)}
-                    </td>
-                    <td className="py-3 px-4 text-right">
-                      <span className={`flex items-center justify-end gap-1 ${
-                        calc.savings_vs_flat > 0 ? 'text-green-600' : 
-                        calc.savings_vs_flat < 0 ? 'text-red-600' : 'text-gray-500'
-                      }`}>
-                        {calc.savings_vs_flat > 0 ? (
-                          <ArrowDownRight className="h-4 w-4" />
-                        ) : calc.savings_vs_flat < 0 ? (
-                          <ArrowUpRight className="h-4 w-4" />
-                        ) : null}
-                        {calc.savings_vs_flat > 0 ? '-' : ''}{formatCurrency(Math.abs(calc.savings_vs_flat))}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4 text-center">
-                      <Badge variant={
-                        calc.status === 'PAID' ? 'success' :
-                        calc.status === 'OVERDUE' ? 'danger' :
-                        calc.status === 'INVOICED' ? 'warning' : 'default'
-                      }>
-                        {calc.status}
-                      </Badge>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            {calculations.length === 0 && (
-              <div className="text-center py-12 text-gray-500">
-                <DollarSign className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                <p>No royalty calculations for this period</p>
-                <p className="text-sm">Run the royalty calculator to generate calculations</p>
-              </div>
-            )}
-          </div>
-        </CardContent>
-      </Card>
+              ))}
+            </tbody>
+          </table>
+          {calculations.length === 0 && (
+            <div className="text-center py-12 text-gray-500">
+              <DollarSign className="h-12 w-12 mx-auto mb-4 opacity-50" />
+              <p>No royalty calculations for this period</p>
+              <p className="text-sm">Run the royalty calculator to generate calculations</p>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
