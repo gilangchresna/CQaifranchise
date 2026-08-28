@@ -8,6 +8,7 @@ import {
 interface RoyaltyCalculation {
   id: string;
   franchisee_id: string;
+  franchisee_email?: string;
   period_month: string;
   gross_revenue: number;
   effective_rate: number;
@@ -53,12 +54,32 @@ export default function RoyaltyDashboard() {
       0
     ).getDate()}`;
 
-    const { data: calcs } = await supabase
+    let { data: calcs } = await supabase
       .from('royalty_calculations')
       .select('*')
       .gte('period_month', periodStart)
       .lte('period_month', periodEnd)
       .order('royalty_amount', { ascending: false });
+
+    // Get emails for all franchisees
+    if (calcs && calcs.length > 0) {
+      const franchiseeIds = [...new Set(calcs.map(c => c.franchisee_id))];
+      const { data: profiles } = await supabase
+        .from('user_profiles')
+        .select('id, email')
+        .in('id', franchiseeIds);
+      
+      const emailMap: Record<string, string> = {};
+      (profiles || []).forEach(p => {
+        emailMap[p.id] = p.email || 'Unknown';
+      });
+      
+      // Attach email to calculations
+      calcs = calcs.map(c => ({
+        ...c,
+        franchisee_email: emailMap[c.franchisee_id] || 'Unknown'
+      }));
+    }
 
     setCalculations(calcs || []);
 
@@ -274,8 +295,10 @@ export default function RoyaltyDashboard() {
                   <div className="flex items-center gap-3">
                     <span className="text-lg font-bold text-green-600">#{i + 1}</span>
                     <div>
-                      <p className="font-medium">Franchisee {calc.franchisee_id.substring(0, 8)}</p>
-                      <p className="text-sm text-gray-500">Score: {calc.risk_score} • Rate: {(calc.effective_rate * 100).toFixed(1)}%</p>
+                      <p className="font-medium">{calc.franchisee_email || 'Franchisee'}</p>
+                      <p className="text-sm text-gray-500">
+                        Score: {calc.risk_score} • Rate: {(calc.effective_rate * 100).toFixed(1)}%
+                      </p>
                     </div>
                   </div>
                   <div className="text-right">
@@ -311,8 +334,8 @@ export default function RoyaltyDashboard() {
               {calculations.map((calc) => (
                 <tr key={calc.id} className="border-b hover:bg-gray-50">
                   <td className="py-3 px-4">
-                    <p className="font-medium">Franchisee {calc.franchisee_id.substring(0, 8)}</p>
-                    <p className="text-sm text-gray-500">ID: {calc.franchisee_id.substring(0, 8)}...</p>
+                    <p className="font-medium">{calc.franchisee_email || 'Unknown'}</p>
+                    <p className="text-sm text-gray-500">{calc.franchisee_id.substring(0, 8)}...</p>
                   </td>
                   <td className="py-3 px-4 text-right">{formatCurrency(calc.gross_revenue)}</td>
                   <td className="py-3 px-4 text-right">
