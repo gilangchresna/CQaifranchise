@@ -66,9 +66,9 @@ CREATE TABLE IF NOT EXISTS royalty_agreements (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     
     -- Links
-    franchisee_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    franchise_id UUID REFERENCES franchises(id) ON DELETE SET NULL,
-    outlet_id UUID REFERENCES outlets(id) ON DELETE SET NULL,
+    franchisee_id UUID NOT NULL REFERENCES user_profiles(id) ON DELETE CASCADE,
+    franchise_id UUID,
+    outlet_id UUID,
     
     -- Formula Configuration
     formula_type VARCHAR(20) DEFAULT 'COMBINED' CHECK (formula_type IN ('FLAT', 'SCORE', 'TIERED', 'HYBRID', 'COMBINED')),
@@ -98,7 +98,7 @@ CREATE TABLE IF NOT EXISTS royalty_agreements (
     late_fee_percentage DECIMAL(5,4) DEFAULT 0.02,
     
     -- Audit
-    created_by UUID REFERENCES users(id),
+    created_by UUID,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
     
@@ -111,9 +111,9 @@ CREATE TABLE IF NOT EXISTS royalty_calculations (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     
     -- Links
-    royalty_agreement_id UUID REFERENCES royalty_agreements(id) ON DELETE SET NULL,
-    franchisee_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    outlet_id UUID REFERENCES outlets(id) ON DELETE SET NULL,
+    royalty_agreement_id UUID,
+    franchisee_id UUID NOT NULL,
+    outlet_id UUID,
     
     -- Period
     period_month DATE NOT NULL, -- First day of the month
@@ -169,9 +169,9 @@ CREATE TABLE IF NOT EXISTS royalty_payments (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     
     -- Links
-    royalty_calculation_id UUID REFERENCES royalty_calculations(id) ON DELETE SET NULL,
-    royalty_agreement_id UUID REFERENCES royalty_agreements(id) ON DELETE SET NULL,
-    franchisee_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    royalty_calculation_id UUID,
+    royalty_agreement_id UUID,
+    franchisee_id UUID NOT NULL,
     
     -- Amount
     amount DECIMAL(15,2) NOT NULL,
@@ -211,7 +211,7 @@ CREATE TABLE IF NOT EXISTS royalty_invoices (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     
     -- Links
-    franchisee_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    franchisee_id UUID NOT NULL,
     
     -- Invoice details
     invoice_number VARCHAR(50) UNIQUE NOT NULL,
@@ -255,7 +255,7 @@ CREATE TABLE IF NOT EXISTS royalty_alerts (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     
     -- Links
-    franchisee_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    franchisee_id UUID NOT NULL,
     royalty_calculation_id UUID REFERENCES royalty_calculations(id) ON DELETE SET NULL,
     royalty_payment_id UUID REFERENCES royalty_payments(id) ON DELETE SET NULL,
     
