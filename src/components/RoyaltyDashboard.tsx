@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useSupabase } from '@/lib/supabase';
+import { supabase } from "@/src/lib/supabase";
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
@@ -34,7 +34,6 @@ interface PortfolioSummary {
 }
 
 export default function RoyaltyDashboard() {
-  const { supabase, user } = useSupabase();
   const [loading, setLoading] = useState(true);
   const [calculations, setCalculations] = useState<RoyaltyCalculation[]>([]);
   const [summary, setSummary] = useState<PortfolioSummary | null>(null);
@@ -60,7 +59,7 @@ export default function RoyaltyDashboard() {
 
     const { data: calcs } = await supabase
       .from('royalty_calculations')
-      .select('*, users(full_name, email)')
+      .select('*')
       .gte('period_month', periodStart)
       .lte('period_month', periodEnd)
       .order('royalty_amount', { ascending: false });
@@ -315,7 +314,7 @@ export default function RoyaltyDashboard() {
                     <div className="flex items-center gap-3">
                       <span className="text-lg font-bold text-green-600">#{i + 1}</span>
                       <div>
-                        <p className="font-medium">{(calc as any).users?.full_name || 'Franchisee'}</p>
+                        <p className="font-medium">Franchisee {calc.franchisee_id.substring(0, 8)}</p>
                         <p className="text-sm text-gray-500">
                           Score: {calc.risk_score} • Rate: {(calc.effective_rate * 100).toFixed(1)}%
                         </p>
@@ -360,8 +359,8 @@ export default function RoyaltyDashboard() {
                 {calculations.map((calc) => (
                   <tr key={calc.id} className="border-b hover:bg-gray-50">
                     <td className="py-3 px-4">
-                      <p className="font-medium">{(calc as any).users?.full_name || calc.franchisee_id}</p>
-                      <p className="text-sm text-gray-500">{(calc as any).users?.email}</p>
+                      <p className="font-medium">Franchisee {calc.franchisee_id.substring(0, 8)}</p>
+                      <p className="text-sm text-gray-500">ID: {calc.franchisee_id.substring(0, 8)}...</p>
                     </td>
                     <td className="py-3 px-4 text-right">{formatCurrency(calc.gross_revenue)}</td>
                     <td className="py-3 px-4 text-right">

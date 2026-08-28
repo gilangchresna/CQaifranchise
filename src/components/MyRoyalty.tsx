@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useSupabase } from '@/lib/supabase';
+import { supabase } from "@/src/lib/supabase";
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
@@ -41,29 +41,31 @@ interface Payment {
 }
 
 export default function MyRoyalty() {
-  const { supabase, user } = useSupabase();
   const [loading, setLoading] = useState(true);
   const [royalty, setRoyalty] = useState<MyRoyaltyData | null>(null);
   const [expandedBreakdown, setExpandedBreakdown] = useState(false);
 
   useEffect(() => {
-    if (user) {
-      fetchMyRoyalty();
-    }
-  }, [user]);
+    fetchMyRoyalty();
+  }, []);
 
   async function fetchMyRoyalty() {
-    if (!user) return;
     setLoading(true);
 
-    const now = new Date();
-    const currentPeriod = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    // Get current user
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user) {
+      setLoading(false);
+      return;
+    }
+
+    const userId = session.user.id;
 
     // Get latest calculation
     const { data: calc } = await supabase
       .from('royalty_calculations')
       .select('*')
-      .eq('franchisee_id', user.id)
+      .eq('franchisee_id', userId)
       .order('period_month', { ascending: false })
       .limit(1)
       .single();
@@ -72,7 +74,7 @@ export default function MyRoyalty() {
     const { data: payments } = await supabase
       .from('royalty_payments')
       .select('*')
-      .eq('franchisee_id', user.id)
+      .eq('franchisee_id', userId)
       .order('payment_date', { ascending: false })
       .limit(6);
 
@@ -165,7 +167,7 @@ export default function MyRoyalty() {
           <p className="text-gray-500 mb-6">
             Your royalty will be calculated at the end of the month based on your performance.
           </p>
-          <Button>Refresh</Button>
+          <Button onClick={fetchMyRoyalty}>Refresh</Button>
         </div>
       </div>
     );
@@ -182,7 +184,7 @@ export default function MyRoyalty() {
       </div>
 
       {/* Current Rate Card */}
-      <Card className={`${rateStatus.bgColor} border-2 border-${rateStatus.color}`}>
+      <Card className={rateStatus.bgColor}>
         <CardContent className="pt-6">
           <div className="text-center">
             <p className="text-sm text-gray-600 mb-2">Your Current Effective Rate</p>
@@ -280,7 +282,7 @@ export default function MyRoyalty() {
                     </div>
                   </div>
 
-                  {/* Growth Modifier */}
+                  {/* growth Modifier */}
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <TrendingUp className="h-4 w-4 text-green-600" />
