@@ -177,14 +177,58 @@ export default function RoyaltySettings() {
 
   async function saveSettings() {
     setSaving(true);
-    
-    // In real implementation, save to royalty_settings table
-    // For now, just simulate
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    setMessage({ type: 'success', text: 'Formula saved successfully!' });
-    setSaving(false);
-    setTimeout(() => setMessage(null), 3000);
+    setMessage(null);
+
+    try {
+      // Get current settings ID
+      const { data: existingSettings } = await supabase
+        .from('royalty_settings')
+        .select('id')
+        .limit(1)
+        .single();
+
+      const settingsData = {
+        base_rate: settings.baseRate,
+        marketing_fund_rate: 0.02, // Default 2%
+        upfront_fee: 15000, // Default SGD 15,000
+        min_cap: settings.minCap,
+        max_cap: settings.maxCap,
+        score_multiplier_enabled: settings.useScoreMultiplier,
+        score_multiplier_min: settings.scoreMultiplierMin,
+        score_multiplier_max: settings.scoreMultiplierMax,
+        growth_modifier_enabled: settings.useGrowthBonus,
+        growth_modifier_max: settings.growthBonusMax,
+        compliance_adjustment_enabled: settings.useComplianceBonus,
+        compliance_adjustment_max: settings.complianceBonusMax,
+        tier_adjustment_enabled: settings.useRevenueTier,
+        tier_adjustment_max: settings.revenueTierMax,
+      };
+
+      if (existingSettings?.id) {
+        // Update existing
+        const { error } = await supabase
+          .from('royalty_settings')
+          .update(settingsData)
+          .eq('id', existingSettings.id);
+
+        if (error) throw error;
+      } else {
+        // Insert new
+        const { error } = await supabase
+          .from('royalty_settings')
+          .insert(settingsData);
+
+        if (error) throw error;
+      }
+
+      setMessage({ type: 'success', text: 'Formula saved successfully!' });
+    } catch (error: any) {
+      console.error('Error saving settings:', error);
+      setMessage({ type: 'error', text: 'Failed to save: ' + error.message });
+    } finally {
+      setSaving(false);
+      setTimeout(() => setMessage(null), 3000);
+    }
   }
 
   return (

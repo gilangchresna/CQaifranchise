@@ -124,7 +124,7 @@ function getRevenueTierLabel(revenue: number): string {
 }
 
 /**
- * Calculate effective royalty rate
+ * Calculate effective royalty rate based on formula type
  */
 function calculateEffectiveRate(
   baseRate: number,
@@ -132,6 +132,7 @@ function calculateEffectiveRate(
   revenue: number,
   yoyGrowth: number | null,
   complianceScore: number | null,
+  formulaType: string,
   enabledComponents: {
     score: boolean;
     tier: boolean;
@@ -160,27 +161,38 @@ function calculateEffectiveRate(
   // Calculate base adjustment from score (rate × multiplier - base rate)
   const scoreAdjustment = (baseRate * scoreMultiplier) - baseRate;
 
-  // Combine adjustments
+  // Calculate effective rate based on formula type
   let effectiveRate = baseRate;
 
-  if (enabledComponents.score) {
-    effectiveRate += scoreAdjustment;
-  }
-  if (enabledComponents.tier) {
-    effectiveRate += tierAdj;
-  }
-  if (enabledComponents.growth) {
-    effectiveRate += growthMod;
-  }
-  if (enabledComponents.compliance) {
-    effectiveRate += complianceAdj;
+  if (formulaType === 'SIMPLE') {
+    // SIMPLE: Flat rate only, ignore all components
+    effectiveRate = baseRate;
+  } else if (formulaType === 'PERFORMANCE') {
+    // PERFORMANCE: Base × Score Multiplier + all adjustments
+    effectiveRate = baseRate * scoreMultiplier;
+    if (enabledComponents.tier) effectiveRate += tierAdj;
+    if (enabledComponents.growth) effectiveRate += growthMod;
+    if (enabledComponents.compliance) effectiveRate += complianceAdj;
+  } else if (formulaType === 'HYBRID') {
+    // HYBRID: Base + bonuses only (no score multiplier)
+    effectiveRate = baseRate;
+    if (enabledComponents.growth) effectiveRate += growthMod;
+    if (enabledComponents.compliance) effectiveRate += complianceAdj;
+    if (enabledComponents.tier) effectiveRate += tierAdj;
+  } else {
+    // COMBINED (default): Base × Score + all adjustments
+    effectiveRate = baseRate;
+    if (enabledComponents.score) effectiveRate += scoreAdjustment;
+    if (enabledComponents.tier) effectiveRate += tierAdj;
+    if (enabledComponents.growth) effectiveRate += growthMod;
+    if (enabledComponents.compliance) effectiveRate += complianceAdj;
   }
 
   // Cap at reasonable limits (1% - 15%)
   effectiveRate = Math.max(0.01, Math.min(0.15, effectiveRate));
 
   return {
-    effectiveRate: Math.round(effectiveRate * 10000) / 10000, // Round to 4 decimals
+    effectiveRate: Math.round(effectiveRate * 10000) / 10000,
     scoreMultiplier,
     scoreAdjustment: Math.round(scoreAdjustment * 10000) / 10000,
     tierAdjustment: tierAdj,
@@ -498,6 +510,7 @@ async function calculateRoyalty(input: RoyaltyInput): Promise<RoyaltyResult> {
     grossRevenue,
     yoyGrowth,
     complianceScore,
+    formulaType,
     enabledComponents
   );
 
