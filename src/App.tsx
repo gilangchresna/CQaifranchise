@@ -20,6 +20,7 @@ import { CasesList } from "@/src/components/CasesList";
 import RoyaltyDashboard from "@/src/components/RoyaltyDashboard";
 import MyRoyalty from "@/src/components/MyRoyalty";
 import RoyaltySettings from "@/src/components/RoyaltySettings";
+import RoyaltyAgreements from "@/src/components/RoyaltyAgreements";
 import { LiveTransactionFeed } from "@/src/components/LiveTransactionFeed";
 import { FloatingChat } from "@/src/components/FloatingChat";
 import Login from "@/src/components/Login";
@@ -126,6 +127,8 @@ export default function App() {
         return activeRole === "Franchisee" ? <MyRoyalty /> : <RoyaltyDashboard />;
       case "royaltysettings":
         return <RoyaltySettings />;
+      case "royaltyagreements":
+        return <RoyaltyAgreements />;
       default:
         return <Dashboard activeRole={activeRole} />;
     }

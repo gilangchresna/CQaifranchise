@@ -106,6 +106,7 @@ export function Layout({ children, activeRole, onRoleChange, activeTab, onTabCha
           { icon: ShieldCheck, label: t.nav.accessControl, id: "Access" },
           { icon: Settings, label: t.nav.platformSettings, id: "Settings" },
           { icon: DollarSign, label: "Royalty Settings", id: "RoyaltySettings" },
+          { icon: FileText, label: "Royalty Agreements", id: "RoyaltyAgreements" },
         ];
       case "Regional":
         return [
