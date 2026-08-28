@@ -21,6 +21,7 @@ import RoyaltyDashboard from "@/src/components/RoyaltyDashboard";
 import MyRoyalty from "@/src/components/MyRoyalty";
 import RoyaltySettings from "@/src/components/RoyaltySettings";
 import RoyaltyAgreements from "@/src/components/RoyaltyAgreements";
+import RoyaltySimulationExport from "@/src/components/RoyaltySimulationExport";
 import { LiveTransactionFeed } from "@/src/components/LiveTransactionFeed";
 import { FloatingChat } from "@/src/components/FloatingChat";
 import Login from "@/src/components/Login";
@@ -129,6 +130,8 @@ export default function App() {
         return <RoyaltySettings />;
       case "royaltyagreements":
         return <RoyaltyAgreements />;
+      case "royaltysimulation":
+        return <RoyaltySimulationExport />;
       default:
         return <Dashboard activeRole={activeRole} />;
     }

@@ -25,6 +25,7 @@ import {
   PanelLeft,
   FileText,
   DollarSign,
+  BarChart3,
 } from "lucide-react";
 import { cn } from "@/src/lib/utils";
 
@@ -107,6 +108,7 @@ export function Layout({ children, activeRole, onRoleChange, activeTab, onTabCha
           { icon: Settings, label: t.nav.platformSettings, id: "Settings" },
           { icon: DollarSign, label: "Royalty Settings", id: "RoyaltySettings" },
           { icon: FileText, label: "Royalty Agreements", id: "RoyaltyAgreements" },
+          { icon: BarChart3, label: "Royalty Simulation", id: "RoyaltySimulation" },
         ];
       case "Regional":
         return [
