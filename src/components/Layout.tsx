@@ -105,6 +105,7 @@ export function Layout({ children, activeRole, onRoleChange, activeTab, onTabCha
           { icon: BrainCircuit, label: t.nav.mlModels, id: "Models" },
           { icon: ShieldCheck, label: t.nav.accessControl, id: "Access" },
           { icon: Settings, label: t.nav.platformSettings, id: "Settings" },
+          { icon: DollarSign, label: "Royalty Settings", id: "RoyaltySettings" },
         ];
       case "Regional":
         return [

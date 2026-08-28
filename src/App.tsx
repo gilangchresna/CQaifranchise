@@ -19,13 +19,14 @@ import { Financing } from "@/src/components/Financing";
 import { CasesList } from "@/src/components/CasesList";
 import RoyaltyDashboard from "@/src/components/RoyaltyDashboard";
 import MyRoyalty from "@/src/components/MyRoyalty";
+import RoyaltySettings from "@/src/components/RoyaltySettings";
 import { LiveTransactionFeed } from "@/src/components/LiveTransactionFeed";
 import { FloatingChat } from "@/src/components/FloatingChat";
 import Login from "@/src/components/Login";
 import { Role } from "@/src/types";
 
 export type Tab =
-  | "Dashboard" | "Outlets" | "Workforce" | "Workflows" | "Agents" | "Risk" | "Knowledge" | "Peer" | "Approval" | "Integrations" | "Models" | "Settings" | "Access" | "Financing" | "Cases" | "Royalty";
+  | "Dashboard" | "Outlets" | "Workforce" | "Workflows" | "Agents" | "Risk" | "Knowledge" | "Peer" | "Approval" | "Integrations" | "Models" | "Settings" | "Access" | "Financing" | "Cases" | "Royalty" | "RoyaltySettings";
 
 export default function App() {
   const [activeRole, setActiveRole] = useState<Role | null>(null);
@@ -123,6 +124,8 @@ export default function App() {
         return <CasesList activeRole={activeRole} />;
       case "royalty":
         return activeRole === "Franchisee" ? <MyRoyalty /> : <RoyaltyDashboard />;
+      case "royaltysettings":
+        return <RoyaltySettings />;
       default:
         return <Dashboard activeRole={activeRole} />;
     }
