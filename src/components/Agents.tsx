@@ -211,71 +211,10 @@ export function Agents({ activeRole, userRegionId }: { activeRole: Role; userReg
     }
   }
 
-  // Separate function to update agents with real task counts
-  useEffect(() => {
-    if (tasks.length > 0) {
-      updateAgentsWithTaskCounts();
-    }
-  }, [tasks]);
-
   async function updateAgentsWithTaskCounts() {
-    try {
-      // Try edge function first
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token || '';
-      const response = await fetch(`${EDGE_URL}/agent-status`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const data = await response.json();
-
-      if (data.success && data.agents && data.agents.length > 0) {
-        const transformedAgents: Agent[] = data.agents.map((a: any) => ({
-          id: a.agent_id,
-          name: a.name,
-          role: a.role,
-          status: a.status,
-          last_activity: a.last_activity,
-          tasks_completed_today: agentTaskCounts[a.agent_id]?.today || 0,
-          tasks_pending: agentTaskCounts[a.agent_id]?.pending || 0,
-          tasks_running: agentTaskCounts[a.agent_id]?.running || 0,
-          tasks_failed: agentTaskCounts[a.agent_id]?.failed || 0,
-          avg_response_time_ms: a.avg_response_time_ms || 0,
-          uptime_percent: a.uptime_percent || 100,
-          description: a.description || '',
-          capabilities: a.capabilities || [],
-        }));
-        setAgents(transformedAgents);
-        setMetrics(data.summary || null);
-      } else {
-        // Fetch from database
-        const { data: dbAgents } = await supabase
-          .from('agents')
-          .select('*')
-          .in('id', ['athena', 'monitor', 'analyst', 'coordinator', 'triage', 'executor']);
-        
-        if (dbAgents && dbAgents.length > 0) {
-          const fallbackAgents: Agent[] = dbAgents.map((a: any) => ({
-            id: a.id,
-            name: a.name,
-            role: a.role,
-            status: a.status || 'online',
-            last_activity: a.last_active,
-            tasks_completed_today: agentCompletedCounts[a.id] || 0,
-            tasks_pending: agentPendingCounts[a.id] || 0,
-            tasks_running: 0,
-            tasks_failed: 0,
-            avg_response_time_ms: a.avg_response_time_ms || 0,
-            uptime_percent: a.uptime_percentage || 100,
-            description: a.description || '',
-            capabilities: a.capabilities || [],
-          }));
-          setAgents(fallbackAgents);
-        }
-      }
-      setLastRefresh(new Date());
-    } catch (err) {
-      console.error('Error updating agents:', err);
-    }
+    // Agents are now updated directly in fetchTasksAndLogs()
+    // This function is kept for compatibility but does nothing
+    // because setAgents is called inside fetchTasksAndLogs()
   }
 
   async function fetchTasksAndLogs() {
