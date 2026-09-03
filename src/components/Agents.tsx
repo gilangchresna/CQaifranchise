@@ -110,7 +110,7 @@ async function fetchAgentStatus(): Promise<AgentStatusResponse | null> {
       return null;
     }
 
-    const response = await fetch(`${EDGE_URL}/functions/v1/agent-status`, {
+    const response = await fetch(`${EDGE_URL}/agent-status`, {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${session.access_token}`,
