@@ -307,6 +307,34 @@ export function Agents({ activeRole, userRegionId }: { activeRole: Role; userReg
         ? Math.round(responseTimes.reduce((a, b) => a + b, 0) / responseTimes.length)
         : 0;
       
+      // Calculate per-agent response times
+      const agentResponseTimes: Record<string, number[]> = {};
+      for (const task of (completedData || [])) {
+        // Apply outlet filter
+        if (userOutlets.length > 0) {
+          const taskOutletId = task.input_data?.outlet_id;
+          if (!userOutlets.includes(Number(taskOutletId))) continue;
+        }
+        if (task.started_at && task.completed_at) {
+          const agentId = task.agent_id;
+          if (!agentResponseTimes[agentId]) agentResponseTimes[agentId] = [];
+          const started = new Date(task.started_at).getTime();
+          const completed = new Date(task.completed_at).getTime();
+          const responseTime = completed - started;
+          if (responseTime >= 0) {
+            agentResponseTimes[agentId].push(responseTime);
+          }
+        }
+      }
+      
+      // Calculate per-agent average response time
+      const agentAvgResponseTimes: Record<string, number> = {};
+      for (const [agentId, times] of Object.entries(agentResponseTimes)) {
+        agentAvgResponseTimes[agentId] = times.length > 0
+          ? Math.round(times.reduce((a, b) => a + b, 0) / times.length)
+          : 0;
+      }
+      
       // Calculate per-agent created today counts (pending + completed today)
       const agentTodayCounts: Record<string, number> = {};
       for (const task of (pendingByAgent || [])) {
@@ -374,7 +402,7 @@ export function Agents({ activeRole, userRegionId }: { activeRole: Role; userReg
         tasks_pending: agentPendingCounts[id] || 0,
         tasks_running: 0,
         tasks_failed: 0,
-        avg_response_time_ms: avgResponseTimeMs,
+        avg_response_time_ms: agentAvgResponseTimes[id] || 0,
         uptime_percent: 100,
         description: agentDescriptions[id] || '',
         capabilities: [],
@@ -740,7 +768,7 @@ export function Agents({ activeRole, userRegionId }: { activeRole: Role; userReg
                   </div>
                   <div className="flex justify-between">
                     <span className="text-slate-500">Response time</span>
-                    <span className="font-medium">{Math.round(avgDuration)}ms</span>
+                    <span className="font-medium">{agent.avg_response_time_ms}ms</span>
                   </div>
                   {agent.tasks_pending > 0 && (
                     <div className="flex justify-between">
