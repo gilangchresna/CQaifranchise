@@ -92,6 +92,9 @@ serve(async (req) => {
 
   try {
     console.log("Executor Cron: Processing pending tasks...");
+    
+    // Always log when executor runs
+    await logAgentActivity("executor", "info", "Executor started", { timestamp: new Date().toISOString() });
 
     // Get pending tasks (oldest first, up to 10)
     const { data: pendingTasks, error: fetchError } = await sb
@@ -108,6 +111,10 @@ serve(async (req) => {
 
     if (!pendingTasks || pendingTasks.length === 0) {
       console.log("Executor Cron: No pending tasks");
+      
+      // Always log when executor runs
+      await logAgentActivity("executor", "info", "Executor check: No pending tasks", { timestamp: new Date().toISOString() });
+      
       return new Response(
         JSON.stringify({
           success: true,
