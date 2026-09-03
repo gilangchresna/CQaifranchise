@@ -649,8 +649,8 @@ export function Agents({ activeRole, userRegionId }: { activeRole: Role; userReg
         <MetricCard
           icon={<Clock className="w-5 h-5" />}
           label="Avg Response"
-          value={`${(calculatedMetrics?.avg_uptime || 100).toFixed(1)}%`}
-          subtext="System uptime"
+          value={`${(stats.avg_response_time_ms || 0).toFixed(0)}ms`}
+          subtext="Agent response time"
           color="text-blue-600"
         />
         <MetricCard
