@@ -362,11 +362,16 @@ export function Agents({ activeRole, userRegionId }: { activeRole: Role; userReg
         return userOutlets.includes(Number(taskOutletId));
       });
       
-      // Filter to show ONLY TODAY's tasks for display
-      const todayStart = new Date(todayStr + 'T00:00:00').getTime();
-      const todayTasks = [...allCompleted, ...allPending]
-        .filter(task => new Date(task.created_at).getTime() >= todayStart)
-        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+      // Combine all tasks - server already filtered by date
+      // pendingData: created_at >= today
+      // completedData: completed_at >= today
+      const todayTasks = [...allPending, ...allCompleted]
+        .sort((a, b) => {
+          // Sort by most recent activity (completed_at for completed, created_at for pending)
+          const dateA = a.completed_at || a.created_at;
+          const dateB = b.completed_at || b.created_at;
+          return new Date(dateB).getTime() - new Date(dateA).getTime();
+        })
         .slice(0, 200);
 
       // Update stats with accurate counts
