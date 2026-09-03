@@ -692,17 +692,17 @@ export function Agents({ activeRole, userRegionId }: { activeRole: Role; userReg
                 
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
-                    <span className="text-slate-500">Tasks today</span>
-                    <span className="font-medium">{agentCompleted}</span>
+                    <span className="text-slate-500">Completed</span>
+                    <span className="font-medium text-green-600">{agent.tasks_completed_today}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-slate-500">Response time</span>
                     <span className="font-medium">{Math.round(avgDuration)}ms</span>
                   </div>
-                  {agentPending > 0 && (
+                  {agent.tasks_pending > 0 && (
                     <div className="flex justify-between">
                       <span className="text-slate-500">Queue</span>
-                      <span className="font-medium text-orange-600">{agentPending} pending</span>
+                      <span className="font-medium text-orange-600">{agent.tasks_pending} pending</span>
                     </div>
                   )}
                   {agentRunning > 0 && (
