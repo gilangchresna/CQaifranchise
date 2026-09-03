@@ -107,6 +107,9 @@ export function Agents({ activeRole, userRegionId }: { activeRole: Role; userReg
   // Pagination for Task Pipeline
   const [taskPage, setTaskPage] = useState(1);
   const TASKS_PER_PAGE = 50;
+  
+  // Force component to remount on navigation to reset state
+  const [componentKey, setComponentKey] = useState(0);
 
   // Calculate metrics from tasks directly (instead of relying on edge function)
   const calculatedMetrics = useMemo(() => {
@@ -307,10 +310,14 @@ export function Agents({ activeRole, userRegionId }: { activeRole: Role; userReg
         .slice(0, 200);
 
       // Update stats with accurate counts
+      // total_tasks_today = completed + pending (source of truth)
+      const totalPendingCount = Object.values(agentPendingCounts).reduce((a, b) => a + b, 0);
+      const totalTaskCount = (completedToday || 0) + totalPendingCount;
+      
       setStats({
-        total_tasks_today: (totalToday || 0),
+        total_tasks_today: totalTaskCount, // completed + pending
         total_completed: (completedToday || 0),
-        total_pending: Object.values(agentPendingCounts).reduce((a, b) => a + b, 0),
+        total_pending: totalPendingCount,
         total_failed: 0,
         agentPendingCounts,
       });
