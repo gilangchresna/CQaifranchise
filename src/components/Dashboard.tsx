@@ -88,6 +88,7 @@ export function Dashboard({ activeRole }: { activeRole: Role }) {
   const [error, setError] = useState<string | null>(null);
   const [realtimeStatus, setRealtimeStatus] = useState<'connected' | 'connecting' | 'disconnected'>('connecting');
   const [recentTasks, setRecentTasks] = useState<any[]>([]);
+  const [agentLogs, setAgentLogs] = useState<any[]>([]);
 
   useEffect(() => {
     fetchDashboardData();
@@ -144,13 +145,80 @@ export function Dashboard({ activeRole }: { activeRole: Role }) {
       })
       .subscribe();
 
+    // Agent logs realtime subscription
+    const logsChannel = supabase
+      .channel('agent-logs')
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'agent_logs'
+      }, (payload: any) => {
+        const newLog = payload.new as any;
+        if (newLog) {
+          setAgentLogs((prev) => {
+            const updated = [newLog, ...prev.filter((l: any) => l.id !== newLog.id)].slice(0, 20);
+            return updated;
+          });
+        }
+      })
+      .subscribe();
+
     return () => {
       supabase.removeChannel(alertsChannel);
       supabase.removeChannel(outletsChannel);
       supabase.removeChannel(agentChannel);
+      supabase.removeChannel(logsChannel);
     };
   }, [activeRole, selectedPeriod, selectedCountry]);
 
+  // Fetch agent tasks and logs on mount
+  useEffect(() => {
+    fetchRecentTasks();
+    fetchAgentLogs();
+    
+    // Refresh every 30 seconds
+    const interval = setInterval(() => {
+      fetchRecentTasks();
+      fetchAgentLogs();
+    }, 30000);
+    
+    return () => clearInterval(interval);
+  }, []);
+
+  async function fetchRecentTasks() {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+      const res = await fetch(`${EDGE_FUNCTIONS_URL}/agent-status`, {
+        headers: { Authorization: `Bearer ${session.access_token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        // Get today's tasks from agent_tasks table
+        const today = new Date().toISOString().split('T')[0];
+        const { data: tasks } = await supabase
+          .from('agent_tasks')
+          .select('*')
+          .gte('created_at', today)
+          .order('created_at', { ascending: false })
+          .limit(20);
+        setRecentTasks(tasks || []);
+      }
+    } catch (e) { console.error('fetchTasks error:', e); }
+  }
+
+  async function fetchAgentLogs() {
+    try {
+      const today = new Date().toISOString().split('T')[0];
+      const { data, error } = await supabase
+        .from('agent_logs')
+        .select('*')
+        .gte('created_at', today)
+        .order('created_at', { ascending: false })
+        .limit(20);
+      if (!error) setAgentLogs(data || []);
+    } catch (e) { console.error('fetchLogs error:', e); }
+  }
 
   async function fetchAlerts() {
     try {
@@ -635,6 +703,52 @@ export function Dashboard({ activeRole }: { activeRole: Role }) {
                   <span className={`w-2 h-2 rounded-full ${recentTasks.some((t: any) => t.agent_id === 'coordinator') ? 'bg-violet-500 animate-pulse' : 'bg-violet-500'}`} title="Inventory Agent"></span>
                 </div>
               </div>
+            </div>
+          </div>
+
+          {/* Agent Tasks Today */}
+          <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm relative overflow-hidden shrink-0">
+            <h3 className="text-xs font-semibold text-slate-500 mb-4 relative z-10 flex items-center gap-2 uppercase tracking-wider">
+              <Bot className="w-4 h-4 text-indigo-600" /> Agent Tasks Today
+            </h3>
+            <div className="space-y-2 max-h-48 overflow-y-auto">
+              {recentTasks.length === 0 ? (
+                <p className="text-sm text-slate-400">No tasks today</p>
+              ) : (
+                recentTasks.slice(0, 10).map((task: any) => (
+                  <div key={task.id} className="flex justify-between items-center text-xs py-1 border-b border-slate-50 last:border-0">
+                    <div className="flex items-center gap-2">
+                      <span className={`w-2 h-2 rounded-full ${task.status === 'completed' ? 'bg-green-500' : task.status === 'failed' ? 'bg-red-500' : task.status === 'running' ? 'bg-yellow-500 animate-pulse' : 'bg-slate-400'}`}></span>
+                      <span className="font-medium text-slate-700 capitalize">{task.agent_id}</span>
+                      <span className="text-slate-400">•</span>
+                      <span className="text-slate-500">{task.task_type || 'task'}</span>
+                    </div>
+                    <span className="text-slate-400">{task.created_at ? new Date(task.created_at).toLocaleTimeString() : '-'}</span>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          {/* Agent Logs Today */}
+          <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm relative overflow-hidden shrink-0">
+            <h3 className="text-xs font-semibold text-slate-500 mb-4 relative z-10 flex items-center gap-2 uppercase tracking-wider">
+              <Activity className="w-4 h-4 text-emerald-600" /> Agent Logs Today
+            </h3>
+            <div className="space-y-2 max-h-48 overflow-y-auto">
+              {agentLogs.length === 0 ? (
+                <p className="text-sm text-slate-400">No logs today</p>
+              ) : (
+                agentLogs.slice(0, 10).map((log: any) => (
+                  <div key={log.id} className="text-xs py-1 border-b border-slate-50 last:border-0">
+                    <div className="flex justify-between items-start">
+                      <span className="font-medium text-slate-700 capitalize">{log.agent_id}</span>
+                      <span className="text-slate-400">{log.created_at ? new Date(log.created_at).toLocaleTimeString() : '-'}</span>
+                    </div>
+                    <p className="text-slate-500 truncate">{log.message || log.log_level || 'log entry'}</p>
+                  </div>
+                ))
+              )}
             </div>
           </div>
         </div>
