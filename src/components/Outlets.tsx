@@ -271,7 +271,7 @@ export function Outlets({ activeRole }: { activeRole: Role }) {
         sales_trend: o.sales_trend || 0,
         stockout_risk: o.stock_risk_percent || 0,
         transaction_count: o.transaction_count || 0,
-        low_stock_items: o.low_stock_items || 0,
+        low_stock_items: o.low_stock_count || 0,
         total_products: o.total_products || 0,
       }));
       

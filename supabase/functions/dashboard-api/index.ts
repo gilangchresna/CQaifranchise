@@ -173,15 +173,37 @@ serve(async (req: Request) => {
       prevTotals[s.outlet_id] = (prevTotals[s.outlet_id] || 0) + parseFloat(s.amount);
     });
 
+    // =====================================================
+    // GET LOW STOCK DATA FOR ALL OUTLETS
+    // =====================================================
+    const { data: allInventory } = await supabase
+      .from('inventory')
+      .select('outlet_id, current_stock, min_stock');
+
+    // Calculate low stock per outlet
+    const lowStockByOutlet: Record<number, { low: number; total: number }> = {};
+    for (const inv of allInventory || []) {
+      if (!lowStockByOutlet[inv.outlet_id]) {
+        lowStockByOutlet[inv.outlet_id] = { low: 0, total: 0 };
+      }
+      lowStockByOutlet[inv.outlet_id].total++;
+      if (inv.current_stock < inv.min_stock) {
+        lowStockByOutlet[inv.outlet_id].low++;
+      }
+    }
+
     // Build outlet data
     const outletData: Record<number, any> = {};
     for (const outlet of outlets || []) {
+      const stockInfo = lowStockByOutlet[outlet.id] || { low: 0, total: 0 };
+      const stockRiskPercent = stockInfo.total > 0 ? Math.round((stockInfo.low / stockInfo.total) * 100) : 0;
+
       outletData[outlet.id] = {
         id: outlet.id, code: outlet.code, name: outlet.name,
         status: outlet.status, region: outlet.region,
         daily_target: outlet.daily_target || 0,
         sales: 0, sales_trend: 0, transaction_count: 0,
-        stock_risk_percent: 0, low_stock_count: 0,
+        stock_risk_percent: stockRiskPercent, low_stock_count: stockInfo.low,
       };
     }
 
