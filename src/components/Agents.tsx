@@ -229,24 +229,23 @@ export function Agents({ activeRole, userRegionId }: { activeRole: Role; userReg
       const todayStr = new Date().toISOString().slice(0, 10);
       
       // Fetch PENDING tasks from today
-      // Note: completed_at IS NULL filter returns pending tasks
+      // Note: Using .or() instead of .is() because .is() has Supabase JS bug
       const { data: pendingData } = await supabase
         .from('agent_tasks')
         .select('*')
-        .is('completed_at', null)
+        .or('completed_at.is.null')  // Fixed: .is() bug workaround
         .gte('created_at', todayStr + 'T00:00:00')  // Filter by created_at for pending
         .order('created_at', { ascending: false })
         .limit(200);
       
       // Fetch COMPLETED tasks from today
-      // Filter by completed_at >= today to get tasks completed today
       const { data: completedData } = await supabase
         .from('agent_tasks')
         .select('*')
         .not('completed_at', 'is', null)
         .gte('completed_at', todayStr + 'T00:00:00')  // Filter by completed_at for completed
         .order('completed_at', { ascending: false })
-        .limit(200);  // Increased from 100 to capture more
+        .limit(200);
       
       // Get accurate counts from DB (HQ sees all, filtered roles use outlet filter below)
       const { count: totalToday } = await supabase
@@ -256,11 +255,11 @@ export function Agents({ activeRole, userRegionId }: { activeRole: Role; userReg
       
       // Note: completedToday is now calculated from completedData with outlet filter (see below)
       
-      // Get per-agent pending counts using completed_at IS NULL (more reliable than status filter)
+      // Get per-agent pending counts using .or() instead of .is() (Supabase JS bug workaround)
       const { data: pendingByAgent } = await supabase
         .from('agent_tasks')
         .select('agent_id, input_data')
-        .is('completed_at', null);
+        .or('completed_at.is.null');
       
       // Calculate per-agent pending counts
       const agentPendingCounts: Record<string, number> = {};
