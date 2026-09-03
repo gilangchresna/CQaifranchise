@@ -260,10 +260,10 @@ export function Agents({ activeRole, userRegionId }: { activeRole: Role; userReg
             role: a.role,
             status: a.status || 'online',
             last_activity: a.last_active,
-            tasks_completed_today: agentTaskCounts[a.id]?.today || 0,
-            tasks_pending: agentTaskCounts[a.id]?.pending || 0,
-            tasks_running: agentTaskCounts[a.id]?.running || 0,
-            tasks_failed: agentTaskCounts[a.id]?.failed || 0,
+            tasks_completed_today: agentCompletedCounts[a.id] || 0,
+            tasks_pending: agentPendingCounts[a.id] || 0,
+            tasks_running: 0,
+            tasks_failed: 0,
             avg_response_time_ms: a.avg_response_time_ms || 0,
             uptime_percent: a.uptime_percentage || 100,
             description: a.description || '',
@@ -328,6 +328,24 @@ export function Agents({ activeRole, userRegionId }: { activeRole: Role; userReg
         agentPendingCounts[agentId] = (agentPendingCounts[agentId] || 0) + 1;
       }
       
+      // Calculate per-agent completed counts from completedData (today)
+      const agentCompletedCounts: Record<string, number> = {};
+      for (const task of (completedData || [])) {
+        const agentId = task.agent_id;
+        agentCompletedCounts[agentId] = (agentCompletedCounts[agentId] || 0) + 1;
+      }
+      
+      // Calculate per-agent created today counts (pending + completed today)
+      const agentTodayCounts: Record<string, number> = {};
+      for (const task of (pendingByAgent || [])) {
+        const agentId = task.agent_id;
+        agentTodayCounts[agentId] = (agentTodayCounts[agentId] || 0) + 1;
+      }
+      for (const task of (completedData || [])) {
+        const agentId = task.agent_id;
+        agentTodayCounts[agentId] = (agentTodayCounts[agentId] || 0) + 1;
+      }
+      
       // Filter and combine tasks for display
       let allPending = (pendingData || []).filter((task: any) => {
         if (userOutlets.length === 0) return true;
@@ -353,6 +371,38 @@ export function Agents({ activeRole, userRegionId }: { activeRole: Role; userReg
         total_failed: 0,
         agentPendingCounts,
       });
+
+      // Update agents with accurate task counts
+      const agentNames: Record<string, string> = {
+        athena: 'Athena', monitor: 'Monitor', analyst: 'Analyst',
+        triage: 'Triage', coordinator: 'Coordinator', executor: 'Executor'
+      };
+      const agentDescriptions: Record<string, string> = {
+        monitor: 'Real-time anomaly detection in sales data',
+        analyst: 'Stockout prediction and inventory analysis',
+        triage: 'Alert routing and case prioritization',
+        coordinator: 'Task orchestration and workflow management',
+        executor: 'Action handler and task completion',
+        athena: 'AI Chat Agent',
+      };
+      
+      const agentList = ['monitor', 'analyst', 'triage', 'coordinator', 'executor', 'athena'];
+      const updatedAgents: Agent[] = agentList.map(id => ({
+        id,
+        name: agentNames[id] || id,
+        role: agentNames[id] || id,
+        status: 'online' as const,
+        last_activity: new Date().toISOString(),
+        tasks_completed_today: agentCompletedCounts[id] || 0,
+        tasks_pending: agentPendingCounts[id] || 0,
+        tasks_running: 0,
+        tasks_failed: 0,
+        avg_response_time_ms: 0,
+        uptime_percent: 100,
+        description: agentDescriptions[id] || '',
+        capabilities: [],
+      }));
+      setAgents(updatedAgents);
 
       if (allTasks.length > 0) {
         const agentNames: Record<string, string> = {
