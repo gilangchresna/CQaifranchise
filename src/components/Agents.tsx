@@ -365,6 +365,7 @@ export function Agents({ activeRole, userRegionId }: { activeRole: Role; userReg
       // Combine all tasks - server already filtered by date
       // pendingData: created_at >= today
       // completedData: completed_at >= today
+      console.log('[DEBUG] pendingData:', pendingData?.length, 'completedData:', completedData?.length);
       const todayTasks = [...allPending, ...allCompleted]
         .sort((a, b) => {
           // Sort by most recent activity (completed_at for completed, created_at for pending)
@@ -373,6 +374,7 @@ export function Agents({ activeRole, userRegionId }: { activeRole: Role; userReg
           return new Date(dateB).getTime() - new Date(dateA).getTime();
         })
         .slice(0, 200);
+      console.log('[DEBUG] todayTasks:', todayTasks.length, 'pending:', todayTasks.filter(t => !t.completed_at).length, 'completed:', todayTasks.filter(t => !!t.completed_at).length);
 
       // Update stats with accurate counts
       // total_tasks_today = completed + pending (source of truth)
