@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from "react";
-import { Store, TrendingUp, TrendingDown, AlertTriangle, Bot, ArrowLeft, Sparkles, MessageSquare, Package, RefreshCw, BarChart3, Clock, ShoppingCart, X, ChevronRight } from "lucide-react";
+import React, { useState, useEffect } from "react";
+import { Store, TrendingUp, TrendingDown, AlertTriangle, Bot, ArrowLeft, Package, RefreshCw, BarChart3, Clock, ShoppingCart, X, Sparkles, MessageSquare } from "lucide-react";
 import { cn } from "@/src/lib/utils";
 import { Role } from "@/src/types";
 import { supabase, EDGE_FUNCTIONS_URL } from "@/src/lib/supabase";
@@ -8,37 +8,6 @@ import { supabase, EDGE_FUNCTIONS_URL } from "@/src/lib/supabase";
 const formatSGD = (num: number) => {
   return 'S$ ' + num.toLocaleString('id-ID', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 };
-
-// Animated counter hook
-function useAnimatedNumber(target: number, duration = 500) {
-  const [value, setValue] = useState(target);
-  const prevTarget = useRef(target);
-  
-  useEffect(() => {
-    const start = prevTarget.current;
-    const diff = target - start;
-    const startTime = performance.now();
-    
-    if (diff === 0) return;
-    
-    const animate = (currentTime: number) => {
-      const elapsed = currentTime - startTime;
-      const progress = Math.min(elapsed / duration, 1);
-      const easeOut = 1 - Math.pow(1 - progress, 3);
-      
-      setValue(Math.round(start + diff * easeOut));
-      
-      if (progress < 1) {
-        requestAnimationFrame(animate);
-      }
-    };
-    
-    requestAnimationFrame(animate);
-    prevTarget.current = target;
-  }, [target, duration]);
-  
-  return value;
-}
 
 interface Outlet {
   id: number;
@@ -102,49 +71,26 @@ interface Alert {
 
 // Outlet Card Component
 function OutletCard({ outlet, onClick, index }: { outlet: Outlet; onClick: () => void; index: number }) {
-  const [isNew, setIsNew] = useState(false);
-  const prevSales = useRef(outlet.sales || 0);
-  const animatedSales = useAnimatedNumber(outlet.sales || 0);
-  
-  useEffect(() => {
-    if ((outlet.sales || 0) > prevSales.current) {
-      setIsNew(true);
-      setTimeout(() => setIsNew(false), 2000);
-    }
-    prevSales.current = outlet.sales || 0;
-  }, [outlet.sales]);
-
   const stockRisk = outlet.stockout_risk || 0;
-  
+
   const getRiskStyle = () => {
-    if (stockRisk > 80) return { bg: "bg-gradient-to-br from-red-50 to-orange-50", border: "border-red-200", badge: "bg-red-100 text-red-700" };
-    if (stockRisk > 50) return { bg: "bg-gradient-to-br from-orange-50 to-yellow-50", border: "border-orange-200", badge: "bg-orange-100 text-orange-700" };
-    return { bg: "bg-gradient-to-br from-slate-50 to-white", border: "border-slate-200", badge: "bg-green-100 text-green-700" };
+    if (stockRisk > 80) return { bg: "bg-gradient-to-br from-red-50 to-orange-50", border: "border-red-200" };
+    if (stockRisk > 50) return { bg: "bg-gradient-to-br from-orange-50 to-yellow-50", border: "border-orange-200" };
+    return { bg: "bg-gradient-to-br from-slate-50 to-white", border: "border-slate-200" };
   };
-  
+
   const riskStyle = getRiskStyle();
 
   return (
     <div
       onClick={onClick}
       className={cn(
-        "relative overflow-hidden rounded-2xl border p-5 cursor-pointer transition-all duration-300",
-        "hover:shadow-lg hover:-translate-y-1 hover:scale-[1.02]",
+        "rounded-2xl border p-5 cursor-pointer transition-all duration-200 hover:shadow-lg hover:-translate-y-1",
         riskStyle.bg,
-        riskStyle.border,
-        isNew && "ring-2 ring-green-400 ring-opacity-50"
+        riskStyle.border
       )}
       style={{ animationDelay: `${index * 50}ms`, animation: 'fadeSlideIn 0.5s ease-out forwards', opacity: 0 }}
     >
-      {isNew && (
-        <div className="absolute top-3 right-3">
-          <span className="relative flex h-3 w-3">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
-          </span>
-        </div>
-      )}
-
       <div className="flex items-start justify-between mb-4">
         <div className="flex items-center gap-3">
           <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-white shadow-sm border border-slate-100">
@@ -165,8 +111,8 @@ function OutletCard({ outlet, onClick, index }: { outlet: Outlet; onClick: () =>
           <div className="flex items-center justify-between">
             <div>
               <p className="text-[10px] uppercase tracking-wider text-slate-500 font-medium mb-0.5">Revenue Today</p>
-              <p className={cn("text-lg font-bold transition-all duration-300", isNew ? "text-green-600" : "text-slate-900")}>
-                {formatSGD(animatedSales)}
+              <p className="text-lg font-bold text-slate-900">
+                {formatSGD(outlet.sales || 0)}
               </p>
             </div>
             <div className={cn("flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium", (outlet.sales_trend || 0) >= 0 ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700")}>
@@ -181,7 +127,7 @@ function OutletCard({ outlet, onClick, index }: { outlet: Outlet; onClick: () =>
             <p className="text-[10px] uppercase tracking-wider text-slate-500 font-medium mb-1">Stock Risk</p>
             <div className="flex items-center gap-2">
               <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
-                <div className={cn("h-full rounded-full transition-all duration-500", stockRisk > 80 ? "bg-red-500" : stockRisk > 50 ? "bg-orange-500" : "bg-green-500")} style={{ width: `${stockRisk}%` }} />
+                <div className={cn("h-full rounded-full transition-all", stockRisk > 80 ? "bg-red-500" : stockRisk > 50 ? "bg-orange-500" : "bg-green-500")} style={{ width: `${stockRisk}%` }} />
               </div>
               <span className={cn("text-sm font-bold", stockRisk > 80 ? "text-red-600" : stockRisk > 50 ? "text-orange-600" : "text-slate-700")}>{stockRisk}%</span>
             </div>
@@ -211,56 +157,42 @@ function OutletCard({ outlet, onClick, index }: { outlet: Outlet; onClick: () =>
 
 export function Outlets({ activeRole }: { activeRole: Role }) {
   const [outlets, setOutlets] = useState<Outlet[]>([]);
-  const [alerts, setAlerts] = useState<Alert[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedOutletId, setSelectedOutletId] = useState<number | null>(null);
   const [outletDetail, setOutletDetail] = useState<OutletDetail | null>(null);
-  const [isAskingAI, setIsAskingAI] = useState(false);
-  const [aiExplanation, setAiExplanation] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState(new Date());
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  // Filter period: today, 7d, 30d, month, ytd
-  const [selectedPeriod, setSelectedPeriod] = useState('7d');
-  const [totalSales, setTotalSales] = useState(0);
-  const [totalTransactions, setTotalTransactions] = useState(0);
-  const [periodLabel, setPeriodLabel] = useState('Last 7 Days');
-  const [selectedTransaction, setSelectedTransaction] = useState<RecentTransaction | null>(null);
+
+  // Fixed: Always show TODAY, no period filter
+  const selectedPeriod = 'today';
 
   useEffect(() => {
     fetchData();
-    const interval = setInterval(() => fetchData(true), 5000);
+    // Refresh every 30 seconds
+    const interval = setInterval(() => fetchData(true), 30000);
     return () => clearInterval(interval);
-  }, [activeRole, selectedOutletId, selectedPeriod]);
+  }, [activeRole]);
 
   async function fetchData(silent = false) {
     if (!silent) setLoading(true);
-    setIsRefreshing(true);
-    
+
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      
+
+      // Always fetch TODAY data with no outlet filter (all outlets)
       const dashboardRes = await fetch(`${EDGE_FUNCTIONS_URL}/dashboard-api`, {
         method: 'POST',
-        headers: { 
+        headers: {
           'Authorization': `Bearer ${session?.access_token || ''}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ 
-          period: selectedPeriod,
-          ...(selectedOutletId && { outlet_id: selectedOutletId })
+        body: JSON.stringify({
+          period: 'today',
         }),
       });
-      
+
       const dashboardData = await dashboardRes.json();
-      
-      if (dashboardData.totals) {
-        setTotalSales(dashboardData.totals.total_revenue);
-        setTotalTransactions(dashboardData.totals.total_transactions);
-      }
-      if (dashboardData.period_label) {
-        setPeriodLabel(dashboardData.period_label);
-      }
-      
+
+      // Transform outlets
       const transformedOutlets: Outlet[] = (dashboardData.outlets || []).map((o: any) => ({
         id: o.id,
         name: o.name,
@@ -274,37 +206,13 @@ export function Outlets({ activeRole }: { activeRole: Role }) {
         low_stock_items: o.low_stock_count || 0,
         total_products: o.total_products || 0,
       }));
-      
+
       setOutlets(transformedOutlets);
-      
-      if (selectedOutletId && dashboardData.outlet_detail) {
-        setOutletDetail(dashboardData.outlet_detail);
-      }
-      
-      // Fetch alerts separately
-      const alertsRes = await fetch(`${EDGE_FUNCTIONS_URL}/alerts-list`, {
-        headers: { 'Authorization': `Bearer ${session?.access_token || ''}` },
-      });
-      const alertsData = await alertsRes.json();
-      const alertsList = alertsData?.data || [];
-      const transformedAlerts: Alert[] = alertsList.slice(0, 10).map((a: any) => ({
-        id: a.id,
-        outlet_id: a.outlet_id,
-        outlet_name: a.outlet_name || `Outlet ${a.outlet_id}`,
-        alert_type: a.alert_type || a.type,
-        message: a.message || a.description,
-        severity: a.severity || 'medium',
-        created_at: a.created_at,
-        is_read: a.is_read,
-      }));
-      setAlerts(transformedAlerts);
-      
       setLastUpdated(new Date());
     } catch (err) {
       console.error('Error fetching outlets:', err);
     } finally {
-      if (!silent) setLoading(false);
-      setIsRefreshing(false);
+      setLoading(false);
     }
   }
 
@@ -609,55 +517,38 @@ export function Outlets({ activeRole }: { activeRole: Role }) {
   // Outlet Directory View
   return (
     <div className="space-y-6">
+      {/* Header - Simple, no filters */}
       <div className="bg-gradient-to-r from-slate-900 to-slate-800 rounded-2xl p-6 text-white">
-        <div className="flex justify-between items-start mb-4">
+        <div className="flex justify-between items-center mb-4">
           <div>
             <h2 className="text-xl font-bold flex items-center gap-2"><Store className="w-6 h-6" /> Outlet Directory</h2>
-            <p className="text-slate-400 text-sm">{outlets.length} outlets monitored</p>
+            <p className="text-slate-400 text-sm">{outlets.length} outlets monitored • Today</p>
           </div>
-          <div className="flex flex-col items-end gap-2">
-            <div className="flex gap-1 bg-white/10 p-1 rounded-lg">
-              {[
-                { key: 'today', label: 'Today' },
-                { key: '7d', label: '7D' },
-                { key: '30d', label: '30D' },
-                { key: 'month', label: 'Month' },
-                { key: 'ytd', label: 'YTD' },
-              ].map((p) => (
-                <button
-                  key={p.key}
-                  onClick={() => setSelectedPeriod(p.key)}
-                  className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${
-                    selectedPeriod === p.key
-                      ? 'bg-white text-slate-900'
-                      : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  {p.label}
-                </button>
-              ))}
-            </div>
-            <span className="flex items-center gap-2 text-xs text-slate-400">
-              <span className="relative flex h-2 w-2"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span><span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span></span>
-              {periodLabel}
-            </span>
+          <button onClick={() => fetchData()} className="p-2 hover:bg-white/10 rounded-lg">
+            <RefreshCw className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Summary Stats */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="bg-white/10 rounded-xl p-4">
+            <p className="text-sm text-slate-400">Total Revenue (Today)</p>
+            <p className="text-2xl font-bold">{formatSGD(outlets.reduce((sum, o) => sum + (o.sales || 0), 0))}</p>
+          </div>
+          <div className="bg-white/10 rounded-xl p-4">
+            <p className="text-sm text-slate-400">Total Transactions</p>
+            <p className="text-2xl font-bold">{outlets.reduce((sum, o) => sum + (o.transaction_count || 0), 0).toLocaleString()}</p>
+          </div>
+          <div className="bg-white/10 rounded-xl p-4">
+            <p className="text-sm text-slate-400">Active Outlets</p>
+            <p className="text-2xl font-bold">{outlets.filter(o => o.status === 'ACTIVE').length}</p>
+          </div>
+          <div className="bg-white/10 rounded-xl p-4">
+            <p className="text-sm text-slate-400">Avg Stock Risk</p>
+            <p className="text-2xl font-bold">{outlets.length > 0 ? Math.round(outlets.reduce((sum, o) => sum + (o.stockout_risk || 0), 0) / outlets.length) : 0}%</p>
           </div>
         </div>
-        <div className="grid grid-cols-3 gap-4">
-          <div className="bg-white/10 rounded-xl p-4">
-            <p className="text-sm text-slate-400">Total Revenue</p>
-            <p className="text-2xl font-bold">{formatSGD(animatedTotalSales)}</p>
-          </div>
-          <div className="bg-white/10 rounded-xl p-4">
-            <p className="text-sm text-slate-400">Transactions</p>
-            <p className="text-2xl font-bold">{animatedTotalTxns}</p>
-          </div>
-          <div className="bg-white/10 rounded-xl p-4">
-            <p className="text-sm text-slate-400">Active Alerts</p>
-            <p className="text-2xl font-bold">{alerts.filter(a => a.status !== 'RESOLVED').length}</p>
-          </div>
-        </div>
-        <p className="text-xs text-slate-500 mt-3 text-right">Last updated: {lastUpdated.toLocaleTimeString('id-ID')}</p>
+        <p className="text-xs text-slate-500 mt-3">Last updated: {lastUpdated.toLocaleTimeString('id-ID')}</p>
       </div>
 
       {loading ? (
