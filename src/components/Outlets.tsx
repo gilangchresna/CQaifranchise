@@ -161,6 +161,7 @@ export function Outlets({ activeRole }: { activeRole: Role }) {
   const [selectedOutletId, setSelectedOutletId] = useState<number | null>(null);
   const [outletDetail, setOutletDetail] = useState<OutletDetail | null>(null);
   const [lastUpdated, setLastUpdated] = useState(new Date());
+  const [alerts, setAlerts] = useState<any[]>([]);
 
   // Fixed: Always show TODAY, no period filter
   const selectedPeriod = 'today';
@@ -208,6 +209,9 @@ export function Outlets({ activeRole }: { activeRole: Role }) {
       }));
 
       setOutlets(transformedOutlets);
+      if (dashboardData.alerts) {
+        setAlerts(dashboardData.alerts);
+      }
       setLastUpdated(new Date());
     } catch (err) {
       console.error('Error fetching outlets:', err);
@@ -217,8 +221,6 @@ export function Outlets({ activeRole }: { activeRole: Role }) {
   }
 
   const selectedOutlet = outlets.find(o => o.id === selectedOutletId);
-  const animatedTotalSales = useAnimatedNumber(totalSales, 800);
-  const animatedTotalTxns = useAnimatedNumber(totalTransactions, 400);
 
   // Outlet Detail View
   if (selectedOutletId && selectedOutlet) {
