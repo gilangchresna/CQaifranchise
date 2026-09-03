@@ -228,39 +228,24 @@ export function Agents({ activeRole, userRegionId }: { activeRole: Role; userReg
     try {
       const todayStr = new Date().toISOString().slice(0, 10);
       
-      // Fetch PENDING tasks (all) using completed_at IS NULL
-      const { data: pendingData } = await supabase
+      // Fetch ALL tasks at once (PostgREST null filters are broken, we'll filter client-side)
+      const { data: allTasksData } = await supabase
         .from('agent_tasks')
         .select('*')
-        .is('completed_at', null)
         .order('created_at', { ascending: false });
       
-      // Fetch COMPLETED tasks from today (using completed_at IS NOT NULL instead of broken status filter)
-      const { data: completedData } = await supabase
-        .from('agent_tasks')
-        .select('*')
-        .not('completed_at', 'is', null)
-        .gte('completed_at', todayStr + 'T00:00:00')
-        .order('completed_at', { ascending: false })
-        .limit(100);
+      // Client-side filter: separate pending vs completed (bypasses broken PostgREST null filters)
+      const allTasks = allTasksData || [];
+      const pendingData = allTasks.filter(t => !t.completed_at);
+      const completedData = allTasks.filter(t => !!t.completed_at);
       
-      // Get accurate counts from DB (HQ sees all, filtered roles use outlet filter below)
-      const { count: totalToday } = await supabase
-        .from('agent_tasks')
-        .select('*', { count: 'exact', head: true })
-        .gte('created_at', todayStr + 'T00:00:00');
+      // Filter completedData to today only
+      const todayStart = new Date(todayStr + 'T00:00:00').getTime();
+      const completedTodayArr = completedData.filter(t => new Date(t.completed_at).getTime() >= todayStart);
       
-      // Note: completedToday is now calculated from completedData with outlet filter (see below)
-      
-      // Get per-agent pending counts using completed_at IS NULL (more reliable than status filter)
-      const { data: pendingByAgent } = await supabase
-        .from('agent_tasks')
-        .select('agent_id, input_data')
-        .is('completed_at', null);
-      
-      // Calculate per-agent pending counts
+      // Get per-agent pending counts from filtered pendingData
       const agentPendingCounts: Record<string, number> = {};
-      for (const task of (pendingByAgent || [])) {
+      for (const task of pendingData) {
         // Filter by outlet if userOutlets is set
         if (userOutlets.length > 0) {
           const taskOutletId = task.input_data?.outlet_id;
@@ -337,40 +322,40 @@ export function Agents({ activeRole, userRegionId }: { activeRole: Role; userReg
       
       // Calculate per-agent created today counts (pending + completed today)
       const agentTodayCounts: Record<string, number> = {};
-      for (const task of (pendingByAgent || [])) {
+      for (const task of pendingData) {
         const agentId = task.agent_id;
         agentTodayCounts[agentId] = (agentTodayCounts[agentId] || 0) + 1;
       }
-      for (const task of (completedData || [])) {
+      for (const task of completedData) {
         const agentId = task.agent_id;
         agentTodayCounts[agentId] = (agentTodayCounts[agentId] || 0) + 1;
       }
       
       // Filter and combine tasks for display
-      let allPending = (pendingData || []).filter((task: any) => {
+      const filteredPending = pendingData.filter((task: any) => {
         if (userOutlets.length === 0) return true;
         const taskOutletId = task.input_data?.outlet_id;
         return userOutlets.includes(Number(taskOutletId));
       });
       
-      let allCompleted = (completedData || []).filter((task: any) => {
+      const filteredCompleted = completedData.filter((task: any) => {
         if (userOutlets.length === 0) return true;
         const taskOutletId = task.input_data?.outlet_id;
         return userOutlets.includes(Number(taskOutletId));
       });
       
-      const allTasks = [...allCompleted, ...allPending]
+      const displayTasks = [...filteredCompleted, ...filteredPending]
         .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
         .slice(0, 200);
 
       // Update stats with accurate counts
       // total_tasks_today = completed + pending (source of truth)
       const totalPendingCount = Object.values(agentPendingCounts).reduce((a, b) => a + b, 0);
-      const totalTaskCount = (completedToday || 0) + totalPendingCount;
+      const totalTaskCount = completedTodayArr.length + totalPendingCount;
       
       setStats({
         total_tasks_today: totalTaskCount, // completed + pending
-        total_completed: (completedToday || 0),
+        total_completed: completedTodayArr.length,
         total_pending: totalPendingCount,
         total_failed: 0,
         avg_response_time_ms: avgResponseTimeMs,
@@ -409,13 +394,18 @@ export function Agents({ activeRole, userRegionId }: { activeRole: Role; userReg
       }));
       setAgents(updatedAgents);
 
-      if (allTasks.length > 0) {
+      // Combine all tasks for display (completed first, then pending)
+      const allDisplayTasks = [...completedData, ...pendingData]
+        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+        .slice(0, 200);
+      
+      if (allDisplayTasks.length > 0) {
         const agentNames: Record<string, string> = {
           athena: 'Athena', monitor: 'Monitor', analyst: 'Analyst',
           triage: 'Triage', coordinator: 'Coordinator', executor: 'Executor'
         };
 
-        const transformedTasks: AgentTask[] = allTasks.map((t: any) => ({
+        const transformedTasks: AgentTask[] = allDisplayTasks.map((t: any) => ({
           id: t.id,
           agent_id: t.agent_id,
           agent_name: agentNames[t.agent_id] || t.agent_id,
