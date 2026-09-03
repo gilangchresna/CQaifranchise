@@ -1175,15 +1175,15 @@ function AgentDetailModal({
           {/* Stats */}
           <div className="grid grid-cols-3 gap-4">
             <div className="bg-slate-50 rounded-lg p-4 text-center">
-              <p className="text-2xl font-bold text-slate-900">{tasks.length}</p>
+              <p className="text-2xl font-bold text-slate-900">{agent.tasks_completed_today + agent.tasks_pending}</p>
               <p className="text-xs text-slate-500">Tasks Today</p>
             </div>
             <div className="bg-slate-50 rounded-lg p-4 text-center">
-              <p className="text-2xl font-bold text-slate-900">{completedCount}</p>
+              <p className="text-2xl font-bold text-slate-900">{agent.tasks_completed_today}</p>
               <p className="text-xs text-slate-500">Completed</p>
             </div>
             <div className="bg-slate-50 rounded-lg p-4 text-center">
-              <p className="text-2xl font-bold text-slate-900">{pendingCount + runningCount}</p>
+              <p className="text-2xl font-bold text-slate-900">{agent.tasks_pending}</p>
               <p className="text-xs text-slate-500">Pending/Running</p>
             </div>
           </div>
