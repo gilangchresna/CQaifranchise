@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from "react";
 import { 
   Bot, Activity, Clock, Zap, AlertCircle, CheckCircle2, XCircle,
   MessageSquare, ChevronRight, RefreshCw, Filter, Search, ArrowUpRight,
-  Cpu, Network, Play, Pause, Settings, Eye, EyeOff
+  Cpu, Network, Play, Pause, Settings, Eye, EyeOff, Download
 } from "lucide-react";
 import { cn } from "@/src/lib/utils";
 import { Role } from "@/src/types";
@@ -156,6 +156,12 @@ export function Agents({ activeRole, userRegionId }: { activeRole: Role; userReg
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
   const [filterLevel, setFilterLevel] = useState<string>('all');
   const [filterStatus, setFilterStatus] = useState<string>('all');
+  const [filterAgent, setFilterAgent] = useState<string>('all');
+  const [filterDateRange, setFilterDateRange] = useState<string>('today');
+  const [dateFrom, setDateFrom] = useState<string>('');
+  const [dateTo, setDateTo] = useState<string>('');
+  const [isCustomDate, setIsCustomDate] = useState<boolean>(false);
+  const [showFullDate, setShowFullDate] = useState<boolean>(false);
 
   // Fetch user outlets for filtering
   useEffect(() => {
@@ -370,12 +376,42 @@ export function Agents({ activeRole, userRegionId }: { activeRole: Role; userReg
         setTasks(transformedTasks);
       }
 
-      // Fetch recent logs
-      const { data: logsData } = await supabase
+      // Build date filter based on filterDateRange
+      let dateFilter = new Date();
+      dateFilter.setHours(dateFilter.getHours() - 24); // default to last 24h
+
+      if (filterDateRange === 'today') {
+        dateFilter = new Date();
+        dateFilter.setHours(0, 0, 0, 0);
+      } else if (filterDateRange === '24hours') {
+        dateFilter = new Date();
+        dateFilter.setHours(dateFilter.getHours() - 24);
+      } else if (filterDateRange === '7days') {
+        dateFilter = new Date();
+        dateFilter.setDate(dateFilter.getDate() - 7);
+      } else if (dateFrom) {
+        dateFilter = new Date(dateFrom);
+      }
+
+      // Build query with filters
+      let logsQuery = supabase
         .from('agent_logs')
         .select('*')
+        .gte('created_at', dateFilter.toISOString())
         .order('created_at', { ascending: false })
-        .limit(100);
+        .limit(200);
+
+      // Add agent filter if not 'all'
+      if (filterAgent !== 'all') {
+        logsQuery = logsQuery.eq('agent_id', filterAgent);
+      }
+
+      // Add level filter if not 'all'
+      if (filterLevel !== 'all') {
+        logsQuery = logsQuery.or(`log_level.eq.${filterLevel},level.eq.${filterLevel}`);
+      }
+
+      const { data: logsData } = await logsQuery;
 
       if (logsData) {
         const agentNames: Record<string, string> = {
@@ -471,13 +507,71 @@ export function Agents({ activeRole, userRegionId }: { activeRole: Role; userReg
     return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   };
 
+  const formatDateTime = (dateStr: string | null | undefined) => {
+    if (!dateStr) return '-';
+    const date = new Date(dateStr);
+    if (isNaN(date.getTime())) return '-';
+    if (showFullDate) {
+      return date.toLocaleString('en-GB', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+      });
+    }
+    return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  };
+
   const formatDuration = (ms: number) => {
     if (ms < 1000) return `${ms}ms`;
     return `${(ms / 1000).toFixed(1)}s`;
   };
 
+  const exportLogsToCSV = () => {
+    const headers = ['Timestamp', 'Agent', 'Level', 'Message'];
+    const rows = filteredLogs.map(log => [
+      new Date(log.timestamp || log.created_at).toISOString(),
+      log.agent_id || log.agent_name,
+      log.level,
+      log.message.replace(/"/g, '""') // Escape quotes
+    ]);
+
+    const csv = [
+      headers.join(','),
+      ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
+    ].join('\n');
+
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `agent-logs-${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const filteredTasks = tasks.filter(t => filterStatus === 'all' || t.status === filterStatus);
-  const filteredLogs = logs.filter(l => filterLevel === 'all' || l.level === filterLevel);
+  const filteredLogs = logs.filter(l => {
+  // Level filter
+  if (filterLevel !== 'all' && l.level !== filterLevel) return false;
+  
+  // Agent filter
+  if (filterAgent !== 'all' && l.agent_id !== filterAgent) return false;
+  
+  // Date filter (client-side backup)
+  if (dateFrom) {
+    const logDate = new Date(l.timestamp || l.created_at);
+    if (logDate < new Date(dateFrom)) return false;
+  }
+  if (dateTo) {
+    const logDate = new Date(l.timestamp || l.created_at);
+    if (logDate > new Date(dateTo)) return false;
+  }
+  
+  return true;
+});
 
   if (loading) {
     return (
@@ -754,19 +848,132 @@ export function Agents({ activeRole, userRegionId }: { activeRole: Role; userReg
       {/* Logs Tab */}
       {activeTab === 'logs' && (
         <div className="space-y-4">
-          {/* Filters */}
-          <div className="flex gap-4 items-center">
-            <select
-              value={filterLevel}
-              onChange={(e) => setFilterLevel(e.target.value)}
-              className="px-3 py-2 border rounded-lg text-sm bg-white"
-            >
-              <option value="all">All Levels</option>
-              <option value="info">Info</option>
-              <option value="warn">Warning</option>
-              <option value="error">Error</option>
-              <option value="debug">Debug</option>
-            </select>
+          {/* Filter Bar */}
+          <div className="bg-slate-50 rounded-lg p-3 space-y-3">
+            <div className="flex items-center justify-between flex-wrap gap-3">
+              <h3 className="text-sm font-medium text-slate-700 flex items-center gap-2">
+                <Filter className="w-4 h-4" />
+                Filters
+              </h3>
+              <div className="flex items-center gap-2 flex-wrap">
+                {/* Date Range Filter */}
+                <select
+                  value={filterDateRange}
+                  onChange={(e) => {
+                    setFilterDateRange(e.target.value);
+                    setIsCustomDate(e.target.value === 'custom');
+                    if (e.target.value === 'today') {
+                      const today = new Date();
+                      today.setHours(0, 0, 0, 0);
+                      setDateFrom(today.toISOString());
+                      setDateTo(new Date().toISOString());
+                    } else if (e.target.value === '24hours') {
+                      const day = new Date();
+                      day.setHours(day.getHours() - 24);
+                      setDateFrom(day.toISOString());
+                      setDateTo(new Date().toISOString());
+                    } else if (e.target.value === '7days') {
+                      const week = new Date();
+                      week.setDate(week.getDate() - 7);
+                      setDateFrom(week.toISOString());
+                      setDateTo(new Date().toISOString());
+                    }
+                  }}
+                  className="text-xs px-2 py-1.5 border border-slate-200 rounded-md bg-white"
+                >
+                  <option value="today">Today</option>
+                  <option value="24hours">Last 24 Hours</option>
+                  <option value="7days">Last 7 Days</option>
+                  <option value="custom">Custom Range</option>
+                </select>
+
+                {/* Agent Filter */}
+                <select
+                  value={filterAgent}
+                  onChange={(e) => setFilterAgent(e.target.value)}
+                  className="text-xs px-2 py-1.5 border border-slate-200 rounded-md bg-white"
+                >
+                  <option value="all">All Agents</option>
+                  <option value="monitor">Monitor</option>
+                  <option value="analyst">Analyst</option>
+                  <option value="coordinator">Coordinator</option>
+                  <option value="triage">Triage</option>
+                  <option value="executor">Executor</option>
+                  <option value="athena">Athena</option>
+                </select>
+
+                {/* Level Filter */}
+                <select
+                  value={filterLevel}
+                  onChange={(e) => setFilterLevel(e.target.value)}
+                  className="text-xs px-2 py-1.5 border border-slate-200 rounded-md bg-white"
+                >
+                  <option value="all">All Levels</option>
+                  <option value="info">INFO</option>
+                  <option value="warn">WARN</option>
+                  <option value="error">ERROR</option>
+                  <option value="debug">DEBUG</option>
+                </select>
+
+                {/* Show Date Toggle */}
+                <button
+                  onClick={() => setShowFullDate(!showFullDate)}
+                  className="text-xs px-2 py-1.5 border border-slate-200 rounded-md bg-white hover:bg-slate-50"
+                  title={showFullDate ? "Hide full date" : "Show full date"}
+                >
+                  {showFullDate ? "Hide Date" : "Show Date"}
+                </button>
+
+                {/* Export CSV */}
+                <button
+                  onClick={exportLogsToCSV}
+                  className="text-xs px-2 py-1.5 border border-slate-200 rounded-md bg-white hover:bg-slate-50 flex items-center gap-1"
+                  title="Export filtered logs to CSV"
+                >
+                  <Download className="w-3 h-3" />
+                  Export CSV
+                </button>
+
+                {/* Clear Filters */}
+                {(filterAgent !== 'all' || filterLevel !== 'all' || filterDateRange !== 'today') && (
+                  <button
+                    onClick={() => {
+                      setFilterAgent('all');
+                      setFilterLevel('all');
+                      setFilterDateRange('today');
+                      setIsCustomDate(false);
+                      const today = new Date();
+                      today.setHours(0, 0, 0, 0);
+                      setDateFrom(today.toISOString());
+                      setDateTo(new Date().toISOString());
+                    }}
+                    className="text-xs px-2 py-1.5 text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-md"
+                  >
+                    Clear Filters
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Custom Date Range Inputs */}
+            {isCustomDate && (
+              <div className="flex items-center gap-2">
+                <label className="text-xs text-slate-500">From:</label>
+                <input
+                  type="datetime-local"
+                  value={dateFrom ? dateFrom.slice(0, 16) : ''}
+                  onChange={(e) => setDateFrom(new Date(e.target.value).toISOString())}
+                  className="text-xs px-2 py-1.5 border border-slate-200 rounded-md"
+                />
+                <label className="text-xs text-slate-500">To:</label>
+                <input
+                  type="datetime-local"
+                  value={dateTo ? dateTo.slice(0, 16) : ''}
+                  onChange={(e) => setDateTo(new Date(e.target.value).toISOString())}
+                  className="text-xs px-2 py-1.5 border border-slate-200 rounded-md"
+                />
+              </div>
+            )}
           </div>
 
           {/* Log Stream */}
@@ -774,7 +981,7 @@ export function Agents({ activeRole, userRegionId }: { activeRole: Role; userReg
             <div className="space-y-2">
               {filteredLogs.map((log) => (
                 <div key={log.id} className="flex items-start gap-3 text-slate-300">
-                  <span className="text-slate-500 shrink-0">{formatTime(log.timestamp)}</span>
+                  <span className="text-slate-500 shrink-0">{formatDateTime(log.timestamp)}</span>
                   <span className={cn(
                     "shrink-0",
                     log.level === 'error' ? 'text-red-400' :
