@@ -191,12 +191,14 @@ export function Agents({ activeRole, userRegionId }: { activeRole: Role; userReg
     fetchUserOutlets();
   }, [activeRole, userRegionId]);
 
+  // Auto-refresh every 15 seconds (independent of outlet filter)
   useEffect(() => {
     fetchAgentData();
-    // Auto-refresh every 30 seconds
-    const interval = setInterval(fetchAgentData, 30000);
+    const interval = setInterval(() => {
+      fetchAgentData();
+    }, 15000);
     return () => clearInterval(interval);
-  }, [userOutlets.length]);
+  }, []);
 
   async function fetchAgentData() {
     try {
