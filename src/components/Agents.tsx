@@ -228,11 +228,11 @@ export function Agents({ activeRole, userRegionId }: { activeRole: Role; userReg
     try {
       const todayStr = new Date().toISOString().slice(0, 10);
       
-      // Fetch PENDING tasks (all)
+      // Fetch PENDING tasks (all) using completed_at IS NULL
       const { data: pendingData } = await supabase
         .from('agent_tasks')
         .select('*')
-        .eq('status', 'pending')
+        .is('completed_at', null)
         .order('created_at', { ascending: false });
       
       // Fetch COMPLETED tasks from today
@@ -256,11 +256,11 @@ export function Agents({ activeRole, userRegionId }: { activeRole: Role; userReg
         .eq('status', 'completed')
         .gte('completed_at', todayStr + 'T00:00:00');
       
-      // Get per-agent pending counts (filter by outlet if needed)
+      // Get per-agent pending counts using completed_at IS NULL (more reliable than status filter)
       const { data: pendingByAgent } = await supabase
         .from('agent_tasks')
         .select('agent_id, input_data')
-        .eq('status', 'pending');
+        .is('completed_at', null);
       
       // Calculate per-agent pending counts
       const agentPendingCounts: Record<string, number> = {};
