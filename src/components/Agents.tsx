@@ -157,7 +157,7 @@ export function Agents({ activeRole, userRegionId }: { activeRole: Role; userReg
   const [filterLevel, setFilterLevel] = useState<string>('all');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [filterAgent, setFilterAgent] = useState<string>('all');
-  const [filterDateRange, setFilterDateRange] = useState<string>('today');
+  const [filterDateRange, setFilterDateRange] = useState<string>('30days');
   const [dateFrom, setDateFrom] = useState<string>('');
   const [dateTo, setDateTo] = useState<string>('');
   const [isCustomDate, setIsCustomDate] = useState<boolean>(false);
@@ -389,6 +389,9 @@ export function Agents({ activeRole, userRegionId }: { activeRole: Role; userReg
       } else if (filterDateRange === '7days') {
         dateFilter = new Date();
         dateFilter.setDate(dateFilter.getDate() - 7);
+      } else if (filterDateRange === '30days') {
+        dateFilter = new Date();
+        dateFilter.setDate(dateFilter.getDate() - 30);
       } else if (dateFrom) {
         dateFilter = new Date(dateFrom);
       }
@@ -873,18 +876,24 @@ export function Agents({ activeRole, userRegionId }: { activeRole: Role; userReg
                       setDateFrom(day.toISOString());
                       setDateTo(new Date().toISOString());
                     } else if (e.target.value === '7days') {
-                      const week = new Date();
-                      week.setDate(week.getDate() - 7);
-                      setDateFrom(week.toISOString());
-                      setDateTo(new Date().toISOString());
-                    }
+                                const week = new Date();
+                                week.setDate(week.getDate() - 7);
+                                setDateFrom(week.toISOString());
+                                setDateTo(new Date().toISOString());
+                              } else if (e.target.value === '30days') {
+                                const month = new Date();
+                                month.setDate(month.getDate() - 30);
+                                setDateFrom(month.toISOString());
+                                setDateTo(new Date().toISOString());
+                              }
                   }}
                   className="text-xs px-2 py-1.5 border border-slate-200 rounded-md bg-white"
                 >
                   <option value="today">Today</option>
-                  <option value="24hours">Last 24 Hours</option>
-                  <option value="7days">Last 7 Days</option>
-                  <option value="custom">Custom Range</option>
+                          <option value="24hours">Last 24 Hours</option>
+                          <option value="7days">Last 7 Days</option>
+                          <option value="30days" selected>Last 30 Days</option>
+                          <option value="custom">Custom Range</option>
                 </select>
 
                 {/* Agent Filter */}
