@@ -359,7 +359,10 @@ export function Agents({ activeRole, userRegionId }: { activeRole: Role; userReg
         return userOutlets.includes(Number(taskOutletId));
       });
       
-      const allTasks = [...allCompleted, ...allPending]
+      // Filter to show ONLY TODAY's tasks for display
+      const todayStart = new Date(todayStr + 'T00:00:00').getTime();
+      const todayTasks = [...allCompleted, ...allPending]
+        .filter(task => new Date(task.created_at).getTime() >= todayStart)
         .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
         .slice(0, 200);
 
@@ -409,13 +412,13 @@ export function Agents({ activeRole, userRegionId }: { activeRole: Role; userReg
       }));
       setAgents(updatedAgents);
 
-      if (allTasks.length > 0) {
+      if (todayTasks.length > 0) {
         const agentNames: Record<string, string> = {
           athena: 'Athena', monitor: 'Monitor', analyst: 'Analyst',
           triage: 'Triage', coordinator: 'Coordinator', executor: 'Executor'
         };
 
-        const transformedTasks: AgentTask[] = allTasks.map((t: any) => ({
+        const transformedTasks: AgentTask[] = todayTasks.map((t: any) => ({
           id: t.id,
           agent_id: t.agent_id,
           agent_name: agentNames[t.agent_id] || t.agent_id,
