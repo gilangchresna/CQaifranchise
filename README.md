@@ -158,3 +158,4 @@ For issues, check:
 3. Network tab for API failures
 
 # CQaifranchise
+# trigger
