@@ -5,7 +5,7 @@
  * Edge Function: agent-coordinator
  */
 
-import { createClient } from "jsr:@supabase/supabase-js@2"
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
@@ -123,8 +123,9 @@ async function callAgent(agentId: string, inputData: any, authToken?: string): P
     }
 
     return await response.json()
-  } catch (e) {
-    throw new Error(`Failed to call agent ${agentId}: ${e.message}`)
+  } catch (e: unknown) {
+    const error = e as Error;
+    throw new Error(`Failed to call agent ${agentId}: ${error.message}`)
   }
 }
 
@@ -158,12 +159,10 @@ Deno.serve(async (req: Request) => {
     // Get auth session
     const authHeader = req.headers.get('Authorization')
     let userId: string | undefined
-    let session: any
 
     if (authHeader) {
       const { data } = await supabase.auth.getUser(authHeader.replace('Bearer ', ''))
       userId = data.user?.id
-      session = data.user
     }
 
     // Parse request

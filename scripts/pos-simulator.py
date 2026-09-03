@@ -612,7 +612,9 @@ def main():
 
     while True:
         count += 1
-        payload = build_txn(target_outlet, args.platform)
+        # FIX: Use build_realistic_txn() which correctly picks MENU per outlet region
+        ts = datetime.now(timezone.utc)
+        payload = build_realistic_txn(target_outlet, ts)
 
         if args.dry_run:
             print(f"[{datetime.now().strftime('%H:%M:%S')}] DRY RUN #{count}")

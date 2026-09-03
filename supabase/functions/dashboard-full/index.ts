@@ -282,26 +282,80 @@ const supabase = supabaseService; // alias for old code
     // Calculate avg daily (in SGD)
     const avgDaily = Object.keys(dailySales).length > 0 ? totalSettlementSGD / Object.keys(dailySales).length : 0;
     
-    // Get metrics (scoped to franchisee's outlets if applicable)
+    // Get metrics - Use service role for accurate counts (bypass RLS)
+    // For HQ_ADMIN: count ALL outlets and ALL low stock
+    // For other roles: count scoped to allowedOutletIds
     let outletCount: number | null = null;
-    if (allowedOutletIds) {
+
+    if (effectiveRole === "HQ_ADMIN" && !allowedOutletIds) {
+      // HQ_ADMIN sees all - use service role for accurate count
+      const { count } = await supabaseService.from("outlets").select("*", { count: "exact", head: true });
+      outletCount = count;
+    } else if (allowedOutletIds) {
       outletCount = allowedOutletIds.length;
     } else {
       const { count } = await supabaseUser.from("outlets").select("*", { count: "exact", head: true });
       outletCount = count;
     }
-    const alertsQuery = supabaseUser.from("alerts").select("*", { count: "exact", head: true });
-    const lowStockQuery = supabaseUser.from("inventory").select("id");
-    if (allowedOutletIds) {
-      alertsQuery.in("outlet_id", allowedOutletIds);
-      lowStockQuery.in("outlet_id", allowedOutletIds);
+
+    // Alerts query - use service role for accurate count
+    // For HQ_ADMIN: count ALL non-RESOLVED alerts
+    // For other roles: count scoped to allowedOutletIds
+    let alertsCount = 0;
+    if (effectiveRole === "HQ_ADMIN" && !allowedOutletIds) {
+      // HQ_ADMIN sees all alerts
+      const { count } = await supabaseService
+        .from("alerts")
+        .select("*", { count: "exact", head: true })
+        .neq("status", "RESOLVED");
+      alertsCount = count || 0;
+    } else if (allowedOutletIds && allowedOutletIds.length > 0) {
+      // Scoped to specific outlets
+      const { count } = await supabaseService
+        .from("alerts")
+        .select("*", { count: "exact", head: true })
+        .neq("status", "RESOLVED")
+        .in("outlet_id", allowedOutletIds);
+      alertsCount = count || 0;
+    } else {
+      // Fallback
+      const { count } = await supabaseUser
+        .from("alerts")
+        .select("*", { count: "exact", head: true })
+        .neq("status", "RESOLVED");
+      alertsCount = count || 0;
     }
-    // C9: Count non-RESOLVED alerts (NEW + ACKNOWLEDGED) for "Open" metric
-    const { count: alertsCount } = await supabase
-      .from("alerts")
-      .select("*", { count: "exact", head: true })
-      .neq("status", "RESOLVED");
-    const { data: lowStock } = await lowStockQuery.lt("current_stock", 25);
+
+    // Low stock query - use service role for accurate count
+    // For HQ_ADMIN: count ALL low stock items
+    // For other roles: count scoped to allowedOutletIds
+    let lowStockCount = 0;
+    if (effectiveRole === "HQ_ADMIN" && !allowedOutletIds) {
+      // HQ_ADMIN sees all low stock - use service role
+      const { count: lsCount } = await supabaseService
+        .from("inventory")
+        .select("id", { count: "exact", head: true })
+        .lt("current_stock", 25);
+      lowStockCount = lsCount || 0;
+    } else if (allowedOutletIds && allowedOutletIds.length > 0) {
+      // Scoped to specific outlets
+      const { count: lsCount } = await supabaseService
+        .from("inventory")
+        .select("id", { count: "exact", head: true })
+        .in("outlet_id", allowedOutletIds)
+        .lt("current_stock", 25);
+      lowStockCount = lsCount || 0;
+    } else {
+      // Fallback to user-scoped query
+      const { data: lowStock } = await supabaseUser
+        .from("inventory")
+        .select("id")
+        .lt("current_stock", 25);
+      lowStockCount = lowStock?.length || 0;
+    }
+
+    // Debug logging for troubleshooting
+    console.log(`[Dashboard Metrics] role=${effectiveRole}, outletCount=${outletCount}, lowStockCount=${lowStockCount}, allowedOutletIds=${allowedOutletIds?.length || 'all'}`);
     
     // Comparison period (previous period)
     const compareStartDate = new Date(new Date(startDate).getTime() - daysInPeriod * 86400000).toISOString().split('T')[0];
@@ -354,7 +408,7 @@ const supabase = supabaseService; // alias for old code
         outlets: outletCount || 0,
         outlets_with_sales: outletsSet.size,
         active_alerts: alertsCount || 0,
-        low_stock: lowStock?.length || 0,
+        low_stock: lowStockCount,
       },
       daily_breakdown: Object.entries(dailySales).sort().map(([d, a]) => ({ date: d, amount: Math.round(a * 100) / 100 })),
       payment_breakdown: Object.entries(paymentBreakdown).map(([m, a]) => ({ method: m, amount: Math.round(a * 100) / 100 })),

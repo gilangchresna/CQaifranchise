@@ -61,6 +61,14 @@ interface Metrics {
   coordinator_up: boolean;
 }
 
+// Edge function response types
+interface AgentStatusResponse {
+  success: boolean;
+  agents: Agent[];
+  summary: Metrics;
+  last_updated: string;
+}
+
 const agentColors: Record<string, string> = {
   athena: "from-violet-500 to-purple-600",
   monitor: "from-green-500 to-emerald-600",
@@ -92,6 +100,40 @@ const getAgentName = (agentId: string | undefined): string => {
   if (!agentId) return '-';
   return agentNames[agentId] || agentId.charAt(0).toUpperCase() + agentId.slice(1);
 };
+
+// Fetch agent status from edge function
+async function fetchAgentStatus(): Promise<AgentStatusResponse | null> {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) {
+      console.warn('No session, skipping agent-status fetch');
+      return null;
+    }
+
+    const response = await fetch(`${EDGE_URL}/functions/v1/agent-status`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${session.access_token}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      console.error('agent-status error:', response.status);
+      return null;
+    }
+
+    const data = await response.json();
+    if (data.success) {
+      return data as AgentStatusResponse;
+    }
+    console.error('agent-status returned error:', data.error);
+    return null;
+  } catch (err) {
+    console.error('Error fetching agent status:', err);
+    return null;
+  }
+}
 
 export function Agents({ activeRole, userRegionId }: { activeRole: Role; userRegionId: number | null }) {
   const [agents, setAgents] = useState<Agent[]>([]);
@@ -209,7 +251,14 @@ export function Agents({ activeRole, userRegionId }: { activeRole: Role; userReg
 
   async function fetchAgentData() {
     try {
-      // First fetch tasks to calculate real task counts
+      // Fetch agent status from edge function
+      const statusData = await fetchAgentStatus();
+      if (statusData?.agents) {
+        setAgents(statusData.agents);
+        setMetrics(statusData.summary);
+      }
+
+      // Then fetch tasks and logs for Task Pipeline and Logs tabs
       await fetchTasksAndLogs();
       setLoading(false);
     } catch (err) {
@@ -390,37 +439,8 @@ export function Agents({ activeRole, userRegionId }: { activeRole: Role; userReg
         agentPendingCounts,
       });
 
-      // Update agents with accurate task counts
-      const agentNames: Record<string, string> = {
-        athena: 'Athena', monitor: 'Monitor', analyst: 'Analyst',
-        triage: 'Triage', coordinator: 'Coordinator', executor: 'Executor'
-      };
-      const agentDescriptions: Record<string, string> = {
-        monitor: 'Real-time anomaly detection in sales data',
-        analyst: 'Stockout prediction and inventory analysis',
-        triage: 'Alert routing and case prioritization',
-        coordinator: 'Task orchestration and workflow management',
-        executor: 'Action handler and task completion',
-        athena: 'AI Chat Agent',
-      };
-      
-      const agentList = ['monitor', 'analyst', 'triage', 'coordinator', 'executor', 'athena'];
-      const updatedAgents: Agent[] = agentList.map(id => ({
-        id,
-        name: agentNames[id] || id,
-        role: agentNames[id] || id,
-        status: 'online' as const,
-        last_activity: new Date().toISOString(),
-        tasks_completed_today: agentCompletedCounts[id] || 0,
-        tasks_pending: agentPendingCounts[id] || 0,
-        tasks_running: 0,
-        tasks_failed: 0,
-        avg_response_time_ms: agentAvgResponseTimes[id] || 0,
-        uptime_percent: 100,
-        description: agentDescriptions[id] || '',
-        capabilities: [],
-      }));
-      setAgents(updatedAgents);
+      // Note: Agents are now set by fetchAgentStatus() from edge function
+      // Only set tasks and logs here
 
       if (todayTasks.length > 0) {
         const agentNames: Record<string, string> = {
@@ -678,35 +698,39 @@ export function Agents({ activeRole, userRegionId }: { activeRole: Role; userReg
         </button>
       </div>
 
-      {/* Metrics Cards - Use stats from DB */}
+      {/* Metrics Cards - Use data from edge function (with DB fallback) */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <MetricCard
           icon={<Activity className="w-5 h-5" />}
           label="Tasks Today"
-          value={(stats.total_tasks_today || 0).toLocaleString()}
-          subtext={`${stats.total_completed || 0} completed`}
+          value={(metrics?.total_tasks_today || stats.total_tasks_today || 0).toLocaleString()}
+          subtext={`${metrics?.total_completed || stats.total_completed || 0} completed`}
           color="text-violet-600"
         />
         <MetricCard
           icon={<Clock className="w-5 h-5" />}
           label="Avg Response"
-          value={`${(stats.avg_response_time_ms || 0).toFixed(0)}ms`}
+          value={`${(metrics?.total_completed && metrics.total_completed > 0
+            ? Math.round((stats.avg_response_time_ms || 0) / metrics.total_completed)
+            : stats.avg_response_time_ms || 0)}ms`}
           subtext="Agent response time"
           color="text-blue-600"
         />
         <MetricCard
           icon={<Bot className="w-5 h-5" />}
           label="Coordinator"
-          value={calculatedMetrics?.coordinator_up ? 'Online' : 'Offline'}
-          subtext={`${(calculatedMetrics?.avg_uptime || 100).toFixed(1)}% uptime`}
-          color={calculatedMetrics?.coordinator_up ? "text-green-600" : "text-red-600"}
+          value={(metrics?.coordinator_up ?? calculatedMetrics?.coordinator_up) ? 'Online' : 'Offline'}
+          subtext={`${(metrics?.avg_uptime || calculatedMetrics?.avg_uptime || 100).toFixed(1)}% uptime`}
+          color={(metrics?.coordinator_up ?? calculatedMetrics?.coordinator_up) ? "text-green-600" : "text-red-600"}
         />
         <MetricCard
           icon={<AlertCircle className="w-5 h-5" />}
           label="Failed Tasks"
-          value={(stats.total_failed || 0).toString()}
-          subtext={`${stats.total_tasks_today > 0 ? ((stats.total_failed / stats.total_tasks_today) * 100).toFixed(1) : 0}% error rate`}
-          color={stats.total_failed > 0 ? "text-red-600" : "text-slate-600"}
+          value={(metrics?.total_failed || stats.total_failed || 0).toString()}
+          subtext={`${(metrics?.total_tasks_today || stats.total_tasks_today || 0) > 0
+            ? (((metrics?.total_failed || 0) / (metrics?.total_tasks_today || stats.total_tasks_today || 1)) * 100).toFixed(1)
+            : 0}% error rate`}
+          color={(metrics?.total_failed || stats.total_failed || 0) > 0 ? "text-red-600" : "text-slate-600"}
         />
       </div>
 
