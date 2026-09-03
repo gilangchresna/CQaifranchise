@@ -219,6 +219,7 @@ export function Outlets({ activeRole }: { activeRole: Role }) {
   const [aiExplanation, setAiExplanation] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState(new Date());
   const [isRefreshing, setIsRefreshing] = useState(false);
+  // Filter period: today, 7d, 30d, month, ytd
   const [selectedPeriod, setSelectedPeriod] = useState('7d');
   const [totalSales, setTotalSales] = useState(0);
   const [totalTransactions, setTotalTransactions] = useState(0);
