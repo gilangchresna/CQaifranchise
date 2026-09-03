@@ -292,8 +292,8 @@ export function Agents({ activeRole, userRegionId }: { activeRole: Role; userReg
         .from('agent_tasks')
         .select('*')
         .eq('status', 'completed')
-        .gte('created_at', todayStr + 'T00:00:00')
-        .order('created_at', { ascending: false })
+        .gte('completed_at', todayStr + 'T00:00:00')
+        .order('completed_at', { ascending: false })
         .limit(100);
       
       // Get accurate counts from DB
@@ -306,7 +306,7 @@ export function Agents({ activeRole, userRegionId }: { activeRole: Role; userReg
         .from('agent_tasks')
         .select('*', { count: 'exact', head: true })
         .eq('status', 'completed')
-        .gte('created_at', todayStr + 'T00:00:00');
+        .gte('completed_at', todayStr + 'T00:00:00');
       
       // Get per-agent pending counts (filter by outlet if needed)
       const { data: pendingByAgent } = await supabase
