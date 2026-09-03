@@ -249,13 +249,15 @@ serve(async (req: Request) => {
       console.log("Body parse skipped (empty or invalid)");
     }
     
-  // Skip workflow tracking - just log and continue
-  console.log("Coordinator Pipeline starting for date:", t0);
-  
-  // Log coordinator start
-  await logAgentActivity("coordinator", "info", "Coordinator pipeline started", { date: t0, triggered_by: triggeredBy });
-  
-  instanceId = null;
+    console.log("Coordinator Pipeline starting for date:", t0);
+    
+    // Log coordinator start
+    await logAgentActivity("coordinator", "info", "Coordinator pipeline started", { date: t0, triggered_by: triggeredBy });
+    
+    instanceId = null;
+  } catch (e: any) {
+    console.error("Init error:", e?.message || e);
+  }
 
   const out: any = { errors: [] };
   const alertResults: any[] = [];
