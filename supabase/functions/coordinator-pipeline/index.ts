@@ -249,20 +249,13 @@ serve(async (req: Request) => {
       console.log("Body parse skipped (empty or invalid)");
     }
     
-    console.log("Creating workflow instance for date:", t0, "triggeredBy:", triggeredBy);
-    instanceId = await workflowCreate("coordinator-pipeline", { date: t0 }, triggeredBy);
-    console.log("Workflow instance created:", instanceId);
-    if (instanceId) await workflowUpdate(instanceId, "running", "init", 5);
-  } catch (e: any) {
-    console.error("ERROR creating workflow instance:", e?.message || e);
-    // Try again without body
-    try {
-      instanceId = await workflowCreate("coordinator-pipeline", { date: t0 }, "fallback");
-      if (instanceId) await workflowUpdate(instanceId, "running", "init", 5);
-    } catch (e2: any) {
-      console.error("FALLBACK also failed:", e2?.message || e2);
-    }
-  }
+  // Skip workflow tracking - just log and continue
+  console.log("Coordinator Pipeline starting for date:", t0);
+  
+  // Log coordinator start
+  await logAgentActivity("coordinator", "info", "Coordinator pipeline started", { date: t0, triggered_by: triggeredBy });
+  
+  instanceId = null;
 
   const out: any = { errors: [] };
   const alertResults: any[] = [];
