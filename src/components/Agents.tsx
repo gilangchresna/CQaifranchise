@@ -98,7 +98,7 @@ export function Agents({ activeRole, userRegionId }: { activeRole: Role; userReg
   const [tasks, setTasks] = useState<AgentTask[]>([]);
   const [logs, setLogs] = useState<AgentLog[]>([]);
   const [metrics, setMetrics] = useState<Metrics | null>(null);
-  const [stats, setStats] = useState<{ total_tasks_today: number; total_completed: number; total_pending: number; total_failed: number; agentPendingCounts: Record<string, number> }>({ total_tasks_today: 0, total_completed: 0, total_pending: 0, total_failed: 0, agentPendingCounts: {} });
+  const [stats, setStats] = useState<{ total_tasks_today: number; total_completed: number; total_pending: number; total_failed: number; avg_response_time_ms: number; agentPendingCounts: Record<string, number> }>({ total_tasks_today: 0, total_completed: 0, total_pending: 0, total_failed: 0, avg_response_time_ms: 0, agentPendingCounts: {} });
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'overview' | 'tasks' | 'logs'>('overview');
   const [lastRefresh, setLastRefresh] = useState(new Date());
