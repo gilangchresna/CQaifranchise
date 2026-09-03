@@ -244,17 +244,13 @@ export function Agents({ activeRole, userRegionId }: { activeRole: Role; userReg
         .order('completed_at', { ascending: false })
         .limit(100);
       
-      // Get accurate counts from DB
+      // Get accurate counts from DB (HQ sees all, filtered roles use outlet filter below)
       const { count: totalToday } = await supabase
         .from('agent_tasks')
         .select('*', { count: 'exact', head: true })
         .gte('created_at', todayStr + 'T00:00:00');
       
-      const { count: completedToday } = await supabase
-        .from('agent_tasks')
-        .select('*', { count: 'exact', head: true })
-        .eq('status', 'completed')
-        .gte('completed_at', todayStr + 'T00:00:00');
+      // Note: completedToday is now calculated from completedData with outlet filter (see below)
       
       // Get per-agent pending counts using completed_at IS NULL (more reliable than status filter)
       const { data: pendingByAgent } = await supabase
@@ -274,12 +270,20 @@ export function Agents({ activeRole, userRegionId }: { activeRole: Role; userReg
         agentPendingCounts[agentId] = (agentPendingCounts[agentId] || 0) + 1;
       }
       
-      // Calculate per-agent completed counts from completedData (today)
+      // Calculate per-agent completed counts from completedData (today) with outlet filter
       const agentCompletedCounts: Record<string, number> = {};
       for (const task of (completedData || [])) {
+        // Apply outlet filter
+        if (userOutlets.length > 0) {
+          const taskOutletId = task.input_data?.outlet_id;
+          if (!userOutlets.includes(Number(taskOutletId))) continue;
+        }
         const agentId = task.agent_id;
         agentCompletedCounts[agentId] = (agentCompletedCounts[agentId] || 0) + 1;
       }
+      
+      // Calculate total completed today (with outlet filter applied)
+      const completedToday = Object.values(agentCompletedCounts).reduce((a, b) => a + b, 0);
       
       // Calculate per-agent created today counts (pending + completed today)
       const agentTodayCounts: Record<string, number> = {};
