@@ -366,7 +366,7 @@ export function Agents({ activeRole, userRegionId }: { activeRole: Role; userReg
       // pendingData: created_at >= today
       // completedData: completed_at >= today
       console.log('[DEBUG] pendingData:', pendingData?.length, 'completedData:', completedData?.length);
-      const todayTasks = [...allPending, ...allCompleted]
+      const todayTasks = [...allCompleted, ...allPending]  // COMPLETED first, then pending
         .sort((a, b) => {
           // Sort by most recent activity (completed_at for completed, created_at for pending)
           const dateA = a.completed_at || a.created_at;
