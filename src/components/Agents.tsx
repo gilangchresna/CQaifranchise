@@ -235,11 +235,11 @@ export function Agents({ activeRole, userRegionId }: { activeRole: Role; userReg
         .is('completed_at', null)
         .order('created_at', { ascending: false });
       
-      // Fetch COMPLETED tasks from today
+      // Fetch COMPLETED tasks from today (using completed_at IS NOT NULL instead of broken status filter)
       const { data: completedData } = await supabase
         .from('agent_tasks')
         .select('*')
-        .eq('status', 'completed')
+        .not('completed_at', 'is', null)
         .gte('completed_at', todayStr + 'T00:00:00')
         .order('completed_at', { ascending: false })
         .limit(100);
