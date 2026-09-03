@@ -285,6 +285,28 @@ export function Agents({ activeRole, userRegionId }: { activeRole: Role; userReg
       // Calculate total completed today (with outlet filter applied)
       const completedToday = Object.values(agentCompletedCounts).reduce((a, b) => a + b, 0);
       
+      // Calculate average response time from completed tasks (completed_at - started_at)
+      const responseTimes: number[] = [];
+      for (const task of (completedData || [])) {
+        // Apply outlet filter
+        if (userOutlets.length > 0) {
+          const taskOutletId = task.input_data?.outlet_id;
+          if (!userOutlets.includes(Number(taskOutletId))) continue;
+        }
+        // Only calculate if both started_at and completed_at exist
+        if (task.started_at && task.completed_at) {
+          const started = new Date(task.started_at).getTime();
+          const completed = new Date(task.completed_at).getTime();
+          const responseTime = completed - started; // milliseconds
+          if (responseTime >= 0) {
+            responseTimes.push(responseTime);
+          }
+        }
+      }
+      const avgResponseTimeMs = responseTimes.length > 0
+        ? Math.round(responseTimes.reduce((a, b) => a + b, 0) / responseTimes.length)
+        : 0;
+      
       // Calculate per-agent created today counts (pending + completed today)
       const agentTodayCounts: Record<string, number> = {};
       for (const task of (pendingByAgent || [])) {
@@ -323,6 +345,7 @@ export function Agents({ activeRole, userRegionId }: { activeRole: Role; userReg
         total_completed: (completedToday || 0),
         total_pending: totalPendingCount,
         total_failed: 0,
+        avg_response_time_ms: avgResponseTimeMs,
         agentPendingCounts,
       });
 
@@ -351,7 +374,7 @@ export function Agents({ activeRole, userRegionId }: { activeRole: Role; userReg
         tasks_pending: agentPendingCounts[id] || 0,
         tasks_running: 0,
         tasks_failed: 0,
-        avg_response_time_ms: 0,
+        avg_response_time_ms: avgResponseTimeMs,
         uptime_percent: 100,
         description: agentDescriptions[id] || '',
         capabilities: [],
