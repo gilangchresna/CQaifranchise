@@ -103,6 +103,10 @@ export function Agents({ activeRole, userRegionId }: { activeRole: Role; userReg
   const [activeTab, setActiveTab] = useState<'overview' | 'tasks' | 'logs'>('overview');
   const [lastRefresh, setLastRefresh] = useState(new Date());
   const [userOutlets, setUserOutlets] = useState<number[]>([]);
+  
+  // Pagination for Task Pipeline
+  const [taskPage, setTaskPage] = useState(1);
+  const TASKS_PER_PAGE = 50;
 
   // Calculate metrics from tasks directly (instead of relying on edge function)
   const calculatedMetrics = useMemo(() => {
@@ -544,6 +548,11 @@ export function Agents({ activeRole, userRegionId }: { activeRole: Role; userReg
   };
 
   const filteredTasks = tasks.filter(t => filterStatus === 'all' || t.status === filterStatus);
+  
+  // Paginate tasks
+  const totalPages = Math.ceil(filteredTasks.length / TASKS_PER_PAGE);
+  const paginatedTasks = filteredTasks.slice((taskPage - 1) * TASKS_PER_PAGE, taskPage * TASKS_PER_PAGE);
+  
   const filteredLogs = logs.filter(l => {
   // Level filter
   if (filterLevel !== 'all' && l.level !== filterLevel) return false;
@@ -797,7 +806,7 @@ export function Agents({ activeRole, userRegionId }: { activeRole: Role; userReg
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {filteredTasks.map((task) => (
+                  {paginatedTasks.map((task) => (
                     <tr key={task.id} className="hover:bg-slate-50">
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-3">
@@ -831,6 +840,34 @@ export function Agents({ activeRole, userRegionId }: { activeRole: Role; userReg
                   ))}
                 </tbody>
               </table>
+              
+              {/* Pagination Controls */}
+              {totalPages > 1 && (
+                <div className="flex items-center justify-between px-4 py-3 bg-slate-50 border-t border-slate-200">
+                  <div className="text-sm text-slate-500">
+                    Showing {(taskPage - 1) * TASKS_PER_PAGE + 1}-{Math.min(taskPage * TASKS_PER_PAGE, filteredTasks.length)} of {filteredTasks.length} tasks
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setTaskPage(p => Math.max(1, p - 1))}
+                      disabled={taskPage === 1}
+                      className="px-3 py-1 text-sm rounded border border-slate-300 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-100"
+                    >
+                      Previous
+                    </button>
+                    <span className="text-sm text-slate-600">
+                      Page {taskPage} of {totalPages}
+                    </span>
+                    <button
+                      onClick={() => setTaskPage(p => Math.min(totalPages, p + 1))}
+                      disabled={taskPage === totalPages}
+                      className="px-3 py-1 text-sm rounded border border-slate-300 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-100"
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
