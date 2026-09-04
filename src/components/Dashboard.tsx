@@ -324,6 +324,7 @@ export function Dashboard({ activeRole }: { activeRole: Role }) {
         });
         if (anomalyRes.ok) {
           const anomalyJson = await anomalyRes.json();
+          console.log('[DEBUG] Anomaly data received:', Object.keys(anomalyJson).slice(0,5), 'outlets count:', anomalyJson.outlets?.length);
           const ad: Record<number, { score: number; percentile: number; is_anomaly: boolean; status: string }> = {};
           (anomalyJson.outlets || []).forEach((o: any) => {
             ad[o.outlet_id] = {
@@ -333,6 +334,7 @@ export function Dashboard({ activeRole }: { activeRole: Role }) {
               status: o.status || 'OK',
             };
           });
+          console.log('[DEBUG] Anomaly parsed:', Object.keys(ad).length, 'entries, samples:', Object.entries(ad).slice(0,2));
           setAnomalyData(ad);
         }
       } catch (e) {
@@ -358,6 +360,7 @@ export function Dashboard({ activeRole }: { activeRole: Role }) {
               };
             }
           });
+          console.log('[DEBUG] Stockout parsed:', Object.keys(sd).length, 'entries >0 risk, samples:', Object.entries(sd).slice(0,3));
           setStockoutData(sd);
         }
       } catch (e) {
