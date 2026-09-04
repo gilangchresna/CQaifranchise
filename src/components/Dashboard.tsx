@@ -85,6 +85,10 @@ export function Dashboard({ activeRole }: { activeRole: Role }) {
     is_anomaly: boolean;
     status: string;
   }>>({});
+  const [stockoutData, setStockoutData] = useState<Record<number, {
+    risk_level: string;
+    days_remaining: number | null;
+  }>>({});
   const [error, setError] = useState<string | null>(null);
   const [realtimeStatus, setRealtimeStatus] = useState<'connected' | 'connecting' | 'disconnected'>('connecting');
   const [recentTasks, setRecentTasks] = useState<any[]>([]);
@@ -333,6 +337,30 @@ export function Dashboard({ activeRole }: { activeRole: Role }) {
         }
       } catch (e) {
         console.error('Anomaly fetch error:', e);
+      }
+
+      // Fetch stockout risk data
+      try {
+        const stockoutRes = await fetch(`${EDGE_FUNCTIONS_URL}/dashboard-api`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ period: '7d' }),
+        });
+        if (stockoutRes.ok) {
+          const stockoutJson = await stockoutRes.json();
+          const sd: Record<number, { risk_level: string; days_remaining: number | null }> = {};
+          (stockoutJson.outlets || []).forEach((o: any) => {
+            if (o.stock_risk_percent > 0) {
+              sd[o.outlet_id] = {
+                risk_level: o.stock_risk_percent > 50 ? 'CRITICAL' : 'WARNING',
+                days_remaining: null,
+              };
+            }
+          });
+          setStockoutData(sd);
+        }
+      } catch (e) {
+        console.error('Stockout fetch error:', e);
       }
 
       // Fetch alerts for alerts list
@@ -612,10 +640,11 @@ export function Dashboard({ activeRole }: { activeRole: Role }) {
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {(() => {
-                    // Only show outlets with actual risk (anomaly or non-OK status)
+                    // Show outlets with anomaly OR stockout risk
                     const riskyOutlets = outlets.filter(o => {
                       const anomaly = anomalyData[o.id];
-                      return anomaly?.is_anomaly || anomaly?.status === 'CRITICAL' || anomaly?.status === 'WARNING';
+                      const stockout = stockoutData[o.id];
+                      return anomaly?.is_anomaly || anomaly?.status === 'CRITICAL' || anomaly?.status === 'WARNING' || stockout?.risk_level;
                     }).slice(0, 5);
                     if (riskyOutlets.length === 0) {
                       return (
@@ -634,10 +663,13 @@ export function Dashboard({ activeRole }: { activeRole: Role }) {
                     }
                     return riskyOutlets.map(outlet => {
                       const anomaly = anomalyData[outlet.id];
+                      const stockout = stockoutData[outlet.id];
                       const hasAnomaly = anomaly?.is_anomaly || false;
                       const scorePercent = anomaly ? Math.round(anomaly.anomaly_score * 10) : 0;
                       const hasNegative = scorePercent < 0;
-                      const status = anomaly?.status || 'OK';
+                      const anomalyStatus = anomaly?.status || 'OK';
+                      // Use stockout status if no anomaly
+                      const status = stockout?.risk_level || anomalyStatus;
                       return (
                         <tr key={outlet.id} className="hover:bg-slate-50 transition-colors">
                           <td className="px-6 py-3 font-medium text-slate-900">{outlet.name} ({outlet.code})</td>
