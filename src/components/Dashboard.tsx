@@ -350,8 +350,9 @@ export function Dashboard({ activeRole }: { activeRole: Role }) {
           const stockoutJson = await stockoutRes.json();
           const sd: Record<number, { risk_level: string; days_remaining: number | null }> = {};
           (stockoutJson.outlets || []).forEach((o: any) => {
+            // stock_risk_percent > 0 means outlet has low stock items
             if (o.stock_risk_percent > 0) {
-              sd[o.outlet_id] = {
+              sd[o.id] = {
                 risk_level: o.stock_risk_percent > 50 ? 'CRITICAL' : 'WARNING',
                 days_remaining: null,
               };
