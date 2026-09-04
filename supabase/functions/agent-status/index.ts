@@ -116,7 +116,11 @@ Deno.serve(async (req: Request) => {
 
       // Calculate metrics
       const uptimeMetric = agentMetrics.find((m: AgentMetric) => m.metric_type === 'uptime')
-      const avgDurationMetric = agentMetrics.find((m: AgentMetric) => m.metric_type === 'avg_duration')
+      const responseTimeMetrics = agentMetrics.filter((m: AgentMetric) => m.metric_type === 'response_time')
+      // Calculate average response time from all metrics
+      const avgResponseTime = responseTimeMetrics.length > 0
+        ? responseTimeMetrics.reduce((sum, m) => sum + m.metric_value, 0) / responseTimeMetrics.length
+        : 0;
 
       const tasks_completed_today = agentTasks.filter((t: AgentTask) => t.status === 'completed').length
       const tasks_failed = agentTasks.filter((t: AgentTask) => t.status === 'failed').length
@@ -136,7 +140,7 @@ Deno.serve(async (req: Request) => {
         tasks_completed: tasks_completed_today,
         tasks_failed,
         tasks_completed_today,
-        avg_response_time_ms: avgDurationMetric?.metric_value || 0,
+        avg_response_time_ms: Math.round(avgResponseTime),
         uptime_percent: uptimeMetric?.metric_value || 100,
         last_activity: lastTask?.created_at || null,
         description: agent.description
