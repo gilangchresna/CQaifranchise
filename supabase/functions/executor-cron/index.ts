@@ -132,6 +132,8 @@ serve(async (req) => {
     const results: any[] = [];
 
     for (const task of pendingTasks) {
+      const taskStartTime = Date.now(); // Track start time
+      
       try {
         // Mark as running
         await sb
@@ -141,6 +143,17 @@ serve(async (req) => {
 
         // Process the task
         const result = await processTask(task);
+        
+        // Calculate duration
+        const durationMs = Date.now() - taskStartTime;
+        
+        // Record response time metric
+        await sb.from("agent_metrics").insert({
+          agent_id: task.agent_id || "executor",
+          metric_type: "response_time",
+          metric_value: durationMs,
+          recorded_at: new Date().toISOString(),
+        });
 
         if (result.success) {
           // Mark as completed
@@ -149,7 +162,7 @@ serve(async (req) => {
             .update({
               status: "completed",
               completed_at: new Date().toISOString(),
-              output_data: { result: result.message },
+              output_data: { result: result.message, duration_ms: durationMs },
             })
             .eq("id", task.id);
 
@@ -157,7 +170,7 @@ serve(async (req) => {
             "executor",
             "info",
             `Task completed: ${task.task_type} - ${result.message}`,
-            { task_id: task.id }
+            { task_id: task.id, duration_ms: durationMs }
           );
 
           processed++;
