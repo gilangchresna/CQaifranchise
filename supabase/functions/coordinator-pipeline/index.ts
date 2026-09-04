@@ -143,16 +143,28 @@ async function createAgentTask(
 }
 
 // Mark task as completed
-async function completeAgentTask(taskId: string, outputData?: Record<string, any>) {
+async function completeAgentTask(taskId: string, outputData?: Record<string, any>, startTime?: number) {
   try {
+    const endTime = Date.now();
+    const durationMs = startTime ? endTime - startTime : 0;
+    
     await sb
       .from("agent_tasks")
       .update({
         status: "completed",
         completed_at: new Date().toISOString(),
-        output_data: outputData || { result: "success" }
+        output_data: outputData ? { ...outputData, duration_ms: durationMs } : { result: "success", duration_ms: durationMs }
       })
       .eq("id", taskId);
+      
+    // Record response time metric
+    await sb.from("agent_metrics").insert({
+      agent_id: "analyst",
+      metric_type: "response_time",
+      metric_value: durationMs,
+      metric_unit: "ms",
+      recorded_at: new Date().toISOString(),
+    });
   } catch (e) {
     console.error(`Error completing task ${taskId}:`, e);
   }
@@ -358,8 +370,10 @@ serve(async (req: Request) => {
     // Create agent tasks for anomalies (Monitor Agent)
     let tasksCreated = 0;
     const createdTaskIds: string[] = [];  // Track task IDs
+    const taskStartTimes: Map<string, number> = new Map();  // Track start times
     
     for (const item of anomalyOutlets) {
+      const taskStartTime = Date.now(); // Track when task starts
       const task = await createAgentTask("monitor", "anomaly_check", {
         outlet_id: item.oid,
         z_score: item.z,
@@ -370,6 +384,7 @@ serve(async (req: Request) => {
       if (task) {
         tasksCreated++;
         createdTaskIds.push(task.id);  // Store ID
+        taskStartTimes.set(task.id, taskStartTime); // Store start time
         await logAgentActivity("monitor", "warn", `Anomaly task created`, {
           task_id: task.id,
           outlet_id: item.oid,
@@ -437,6 +452,7 @@ serve(async (req: Request) => {
       if (r.success) alertsCreated++;
 
       // Create stockout task (Analyst Agent)
+      const stockoutStartTime = Date.now();
       const stockoutTask = await createAgentTask("analyst", "stockout_check", {
         outlet_id: oid,
         items_at_risk: inv.length,
@@ -445,6 +461,7 @@ serve(async (req: Request) => {
       if (stockoutTask) {
         tasksCreated++;
         createdTaskIds.push(stockoutTask.id);  // Store ID
+        taskStartTimes.set(stockoutTask.id, stockoutStartTime); // Store start time
         await logAgentActivity("analyst", "warn", `Stockout task created`, {
           task_id: stockoutTask.id,
           outlet_id: oid,
@@ -453,9 +470,10 @@ serve(async (req: Request) => {
       }
     }
     
-    // Mark all created tasks as completed
+    // Mark all created tasks as completed with timing
     for (const taskId of createdTaskIds) {
-      await completeAgentTask(taskId, { alerts_created: alertsCreated });
+      const startTime = taskStartTimes.get(taskId) || Date.now();
+      await completeAgentTask(taskId, { alerts_created: alertsCreated }, startTime);
     }
     
     out.agent_tasks_created = tasksCreated;
