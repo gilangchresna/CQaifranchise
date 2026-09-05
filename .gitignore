@@ -1,24 +1,39 @@
 # Dependencies
 node_modules
+.supabase/functions/*/node_modules
+deno.lock
 
-# Environment files
+# Environment & secrets
+.env
 .env.local
 .env.*.local
 *.env
-
-# Documentation (internal planning)
-docs/PHASE0_DEPLOYMENT.md
-docs/IMPLEMENTATION_PLAN.md
-CODE_REVIEW_REPORT.md
+supabase/.env
+supabase/.env.*
 
 # Build output
 dist/
 build/
 
+# Supabase local dev
+.supabase/
+
 # Generated seed data (too large for git)
 scripts/*.json
 scripts/sg_*
 scripts/chunk_*
+scripts/id_*
+scripts/sim_*
+
+# POS simulator outputs
+scripts/output/
+scripts/results/
+*.csv
+
+# Documentation (internal planning)
+docs/PHASE0_DEPLOYMENT.md
+docs/IMPLEMENTATION_PLAN.md
+CODE_REVIEW_REPORT.md
 
 # Python cache
 __pycache__/
@@ -39,3 +54,9 @@ Thumbs.db
 # Logs
 *.log
 npm-debug.log*
+yarn-error.log
+
+# Temp files
+tmp/
+temp/
+*.tmp
