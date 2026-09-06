@@ -1,161 +1,83 @@
-# CyberQuote MVP - README
+# Agentic Ecosystem Expansion — 14 New Agents, Every Module at 2+
 
-**CyberQuote MVP is LIVE**\
-Last Updated: August 5, 2026
+Builds out every agent recommended in the system review, and ensures every
+module in the app has at least two agents watching it. See `COVERAGE_MAP.md`
+for the full module-to-agent mapping and the reasoning behind shared vs.
+dedicated tables.
 
----
+## What's included
 
-## 🚀 Quick Start
-
-### Frontend
-
-```bash
-cd CQaifranchise
-npm install
-npm run dev
+```
+COVERAGE_MAP.md                                  — module → agent coverage, design rationale
+sql/003_agentic_ecosystem_expansion.sql          — agent_insights (shared), repayment_events,
+                                                     royalty_reconciliation tables + RLS
+supabase/functions/_shared/agentInsights.ts      — shared helper (insert + audit log)
+supabase/functions/collector-agent/              — Financing: post-disbursement repayment monitoring
+supabase/functions/ledger-agent/                 — Royalty: GL/sales ledger reconciliation
+supabase/functions/royalty-auditor-agent/        — Royalty: formula/rate-band validation
+supabase/functions/voice-agent/                  — Cases: complaint pattern clustering
+supabase/functions/shift-agent/                  — Workforce: staffing shortfall prediction
+supabase/functions/coach-agent/                  — Workforce: performance/coaching recommendations
+supabase/functions/curator-agent/                — Knowledge: drafts new KB articles from case patterns
+supabase/functions/librarian-agent/              — Knowledge: flags stale/ineffective KB articles
+supabase/functions/gatekeeper-agent/             — Integrations: connector uptime/staleness
+supabase/functions/bridge-agent/                 — Integrations: payload schema drift validation
+supabase/functions/guardian-agent/               — Access: dormant accounts, excess permissions
+supabase/functions/steward-agent/                — Access: invitation/temp-access lifecycle
+supabase/functions/benchmarker-agent/            — Peer: proactive underperformance nudges
+supabase/functions/scout-agent/                  — Peer: expansion sites, cannibalisation risk
+src/components/AgentInsightsFeed.tsx             — generic feed, reused across 8 modules
+src/components/RepaymentsPanel.tsx               — dedicated Collector dashboard
+src/components/RoyaltyReconciliationPanel.tsx    — dedicated Ledger dashboard
+PATCH_NOTES.md                                   — exact diffs for App.tsx + where to embed the feed
 ```
 
-Open: http://localhost:3000 (port is set in package.json's "dev" script)
+## Setup steps
 
-### Login
+1. **Apply the SQL migration** — depends on `outlets`, `risk_scores`,
+   `loan_sizing_recommendations` from the earlier Phase 2 package.
 
-- Email: steve.gilang@gmail.com
-- Password: (check .env.local)
+2. **Deploy all 14 Edge Functions:**
+   ```bash
+   for fn in collector-agent ledger-agent royalty-auditor-agent voice-agent \
+             shift-agent coach-agent curator-agent librarian-agent \
+             gatekeeper-agent bridge-agent guardian-agent steward-agent \
+             benchmarker-agent scout-agent; do
+     supabase functions deploy "$fn"
+   done
+   ```
+   The `_shared/agentInsights.ts` helper deploys automatically as part of
+   each function's bundle (Supabase bundles relative imports).
 
----
+3. **Wire up cadences** per the table in `PATCH_NOTES.md` — most are cron
+   jobs (`supabase functions schedule` or an external scheduler hitting each
+   function's URL); Royalty Auditor and Bridge are better as event triggers
+   fired by whatever process already runs royalty calculations / receives
+   webhooks, since they validate a specific event rather than scanning
+   periodically.
 
-## 📊 System Status
+4. **Apply the App.tsx and module-page patches** in `PATCH_NOTES.md`.
 
-| Component      | Status                      |
-| -------------- | --------------------------- |
-| Database       | ✅ 10 tables, 1000+ records |
-| Edge Functions | ✅ 34 deployed              |
-| ML Pipeline    | ✅ Working                  |
-| Frontend       | ✅ 15+ components           |
-| Cron Jobs      | ✅ Orchestrator ready       |
-| i18n           | ✅ EN + ID supported        |
+5. **Confirm RLS** for `agent_insights` — test as each role, and specifically
+   confirm a Franchisee cannot see network-level insights (outlet_id null)
+   like Gatekeeper/Guardian/Steward/Curator/Librarian/Scout expansion flags,
+   which are HQ/Regional-only by design.
 
----
+## Honest gaps in this package
 
-## 🎯 Key Features
-
-1. **Real-time Alerting**
-   - ML Anomaly Detection (Z-score)
-   - Stockout Risk Prediction
-
-2. **Case Management**
-   - Alert → Case → Assignment → Resolution
-   - SLA tracking
-
-3. **Dashboard**
-   - Region overview (9 regions)
-   - Outlet monitoring (24 outlets)
-   - Alert summary (26 alerts)
-
-4. **Financing Module** *(NEW)*
-   - Lender bridge integration
-   - Stakeholder reporting
-
-5. **Multi-language (i18n)** *(NEW)*
-   - English (EN) + Indonesian (ID)
-   - Language switcher in header
-
-6. **POS Simulator** *(NEW)*
-   - Live transaction simulation
-   - Real-time transaction feed
-
-7. **AI Chat** *(NEW)*
-   - Floating chat button
-   - AI-powered assistance
-
----
-
-## 🔒 Security
-
-### Webhook Authentication
-- **POS Webhook**: HMAC-SHA256 signature required — header `x-pos-signature`
-- **Lender Webhook**: Secret header required — header `x-lender-webhook-secret`
-
-### Rate Limiting
-- Loan applications: **5 per day** per franchisee
-- API requests: 100 per minute (global)
-
-### RLS Policies
-All tables enforce Row Level Security. Check `supabase/migrations/` for policies.
-
----
-
-## 🌐 Edge Function Endpoints
-
-| Endpoint | Auth | Rate Limit | Notes |
-|----------|------|------------|-------|
-| `pos-webhook` | HMAC-SHA256 | — | Requires `x-pos-signature` header |
-| `lender-bridge` | JWT | 5/day | Submit/status/cancel actions |
-| `lender-bridge/webhook` | Secret | — | Requires `x-lender-webhook-secret` |
-| `ml-anomaly-v2` | JWT | 10/min | Returns anomaly score |
-| `ml-stockout-v2` | JWT | 10/min | Returns stockout risk |
-| `athena-chat` | JWT | 30/min | AI assistant |
-
----
-
-## 📋 Changelog
-
-| Date       | Summary |
-| ---------- | ------- |
-| 2026-08-05 | Financing module, i18n, POS Simulator, FloatingChat |
-| 2026-08-01 | Security fixes, RLS cleanup |
-| 2026-07-16 | MVP launch |
-
----
-
-## 📁 Documentation
-
-| Doc            | Location                                     |
-| -------------- | -------------------------------------------- |
-| Technical      | `docs/technical-documentation.md`            |
-| Gap Analysis   | `docs/app-gap-analysis.md`                   |
-| Frontend Plan  | `docs/frontend-integration-plan.md`          |
-| Cron Setup     | `docs/cron-setup.sql`                        |
-| Missing Tables | `docs/missing-tables-implementation-plan.md` |
-
----
-
-## 🔧 Maintenance
-
-### Seed Data
-
-```bash
-# Sales (720 records)
-curl -X POST https://ploqeifazcgzwjzmukgp.supabase.co/functions/v1/seed-sales
-
-# Inventory (105 items)
-curl -X POST https://ploqeifazcgzwjzmukgp.supabase.co/functions/v1/seed-inventory
-
-# Integrations (4 records)
-curl -X POST https://ploqeifazcgzwjzmukgp.supabase.co/functions/v1/sql-seed-integrations
-```
-
-### Run ML Pipeline
-
-```bash
-curl -X POST https://ploqeifazcgzwjzmukgp.supabase.co/functions/v1/cron-run
-```
-
----
-
-## 🌐 Supabase Dashboard
-
-https://supabase.com/dashboard/project/ploqeifazcgzwjzmukgp
-
----
-
-## 📞 Support
-
-For issues, check:
-
-1. Edge Function logs in Supabase Dashboard
-2. Browser console for frontend errors
-3. Network tab for API failures
-
-# CQaifranchise
-# trigger
+- **No actual scheduling/cron config included** — Supabase's own scheduling
+  mechanism (or an external cron caller) needs to be set up per function;
+  this package provides the functions themselves, not the trigger
+  infrastructure.
+- **Several agents assume upstream data shapes that don't exist yet**
+  (e.g. Guardian's `has_hq_admin_role_but_regional_activity_only` — this is
+  a precomputed signal your Access Management logic would need to produce;
+  Scout's catchment-overlap estimate needs a geospatial calculation not
+  built here). These functions are ready to receive that data once it's
+  computed upstream — the detection/flagging logic is complete, but the
+  upstream data pipeline for a few signals is not.
+- **Royalty Auditor's SCORE_BANDS is hardcoded**, mirroring what's likely
+  already in `RoyaltySettings` — same pattern as the earlier note about
+  `FINANCIER_PROFILES`. Worth sourcing from a shared rate-bands table so
+  Royalty Auditor and RoyaltySettings can't drift out of sync with each
+  other.
