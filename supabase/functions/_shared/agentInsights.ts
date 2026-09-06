@@ -1,8 +1,5 @@
 // supabase/functions/_shared/agentInsights.ts
-//
-// Shared helper for any agent writing into the generic `agent_insights` table.
-// Import with a relative path from each agent's index.ts, e.g.:
-//   import { createInsight, logAgentRun } from "../_shared/agentInsights.ts";
+// Shared helpers for agent insights and logging
 
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -42,10 +39,21 @@ export async function logAgentRun(
   agentName: string,
   metadata: Record<string, unknown>
 ) {
+  // Write to agent_logs (main log table)
+  await supabase.from("agent_logs").insert({
+    agent_id: agentName,
+    log_level: "info",
+    message: `${agentName} agent completed`,
+    metadata,
+    source: "agent",
+  });
+  
+  // Also write to audit_log for compliance
   await supabase.from("audit_log").insert({
     action: `${agentName}.run`,
     entity_type: "agent",
     entity_id: agentName,
+    user_id: "system",
     metadata,
   });
 }

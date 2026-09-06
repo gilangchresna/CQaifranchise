@@ -75,6 +75,15 @@ serve(async (req) => {
       metadata: { checks, alerts_created: alerts.length, flags_created: complianceFlags.length },
     });
 
+    // Also log to agent_logs for unified logging
+    await supabase.from("agent_logs").insert({
+      agent_id: "sentinel",
+      log_level: "info",
+      message: "Sentinel check complete",
+      metadata: { checks: checks.length, alerts_created: alerts.length, flags_created: complianceFlags.length },
+      source: "agent",
+    });
+
     return new Response(JSON.stringify({
       success: true,
       checks: checks.length,
