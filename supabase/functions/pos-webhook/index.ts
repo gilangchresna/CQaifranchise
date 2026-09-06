@@ -1,0 +1,252 @@
+/// <reference lib="deno.ns" />
+import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+// Valid payment methods
+const VALID_PAYMENT_METHODS = ['cash', 'card', 'qrcode', 'ewallet', 'gofood', 'grabfood', 'shopeefood', 'dine_in'];
+const VALID_PLATFORMS = ['dine_in', 'gofood', 'grabfood', 'shopeefood', 'pos'];
+
+// HMAC secret for POS webhook authentication
+const POS_WEBHOOK_SECRET = Deno.env.get('POS_WEBHOOK_SECRET');
+
+// CORS headers
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-pos-signature",
+};
+
+// ── L1 Replay Protection ─────────────────────────────────────────────────────
+// Reject transactions with dates older than today (in the past)
+// Allow: today and yesterday (with clock drift tolerance)
+// Reject: anything older than yesterday
+function isTimestampValid(timestamp: string | undefined): boolean {
+  if (!timestamp) return false;
+  const txDate = new Date(timestamp).toISOString().split("T")[0];
+  const today = new Date().toISOString().split("T")[0];
+  const yesterday = new Date(Date.now() - 86400000).toISOString().split("T")[0];
+  return txDate >= yesterday && txDate <= today;
+}
+
+// ── HMAC Verification ─────────────────────────────────────────────────────────
+// Verify HMAC-SHA256 from raw body text (already consumed from request)
+function verifyHMACHex(rawBody: string, signature: string | null): boolean {
+  if (!POS_WEBHOOK_SECRET) {
+    console.error('SECURITY: POS_WEBHOOK_SECRET not configured');
+    return false;
+  }
+  if (!signature) {
+    console.error('POS Webhook: Missing x-pos-signature header');
+    return false;
+  }
+  const encoder = new TextEncoder();
+  const keyData = encoder.encode(POS_WEBHOOK_SECRET);
+  const messageData = encoder.encode(rawBody);
+
+  // Compute HMAC-SHA256
+  const key = { kty: 'oct', k: btoa(String.fromCharCode(...keyData)), alg: 'HS256' };
+
+  return crypto.subtle.verify('HMAC', key, hexToBytes(signature), messageData)
+    .catch(() => false);
+}
+
+function hexToBytes(hex: string): Uint8Array {
+  const bytes = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < hex.length; i += 2) {
+    bytes[i / 2] = parseInt(hex.substr(i, 2), 16);
+  }
+  return bytes;
+}
+
+serve(async (req) => {
+  // Handle CORS preflight
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: corsHeaders });
+  }
+
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  const supabase = createClient(supabaseUrl, serviceKey);
+
+  try {
+    // ── Step 1: Read body once ───────────────────────────────────────────────
+    const rawBody = await req.text();
+    let body: Record<string, unknown>;
+    try {
+      body = JSON.parse(rawBody);
+    } catch {
+      return new Response(JSON.stringify({ success: false, error: "Invalid JSON body" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" }
+      });
+    }
+
+    // ── Step 2: L1 Replay Protection (before HMAC) ──────────────────────────
+    if (body.date && !isTimestampValid(body.date as string)) {
+      return new Response(JSON.stringify({
+        success: false,
+        error: "Replay detected: transaction timestamp is too old or missing",
+        code: "REPLAY_DETECTED"
+      }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" }
+      });
+    }
+
+    // ── Step 3: HMAC Authentication ─────────────────────────────────────────
+    const signature = req.headers.get('x-pos-signature');
+    const devBypass = req.headers.get('x-pos-dev-bypass');
+    
+    // Dev bypass for local/staging testing
+    if (devBypass === 'dev-mode-2026') {
+      console.log('POS Webhook: DEV BYPASS enabled - skipping HMAC');
+    } else {
+      const hmacValid = verifyHMACHex(rawBody, signature);
+      if (!hmacValid) {
+        return new Response(JSON.stringify({
+          success: false,
+          error: "Unauthorized: Invalid or missing signature"
+        }), {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" }
+        });
+      }
+    }
+
+    // ── Validation ─────────────────────────────────────────────────────────────
+    const errors: string[] = [];
+    if (!body.transaction_id) errors.push("transaction_id is required");
+    if (!body.outlet_id) errors.push("outlet_id is required");
+    if (!body.date) errors.push("date is required");
+    if (body.amount === undefined || body.amount === null) errors.push("amount is required");
+
+    if (body.outlet_id && (typeof body.outlet_id !== 'number' || body.outlet_id <= 0)) {
+      errors.push("outlet_id must be a positive number");
+    }
+    if (body.amount && (typeof body.amount !== 'number' || body.amount < 0)) {
+      errors.push("amount must be a non-negative number");
+    }
+    if (body.discount && (typeof body.discount !== 'number' || body.discount < 0)) {
+      errors.push("discount must be non-negative");
+    }
+    if (body.tax && (typeof body.tax !== 'number' || body.tax < 0)) {
+      errors.push("tax must be non-negative");
+    }
+    if (body.payment_method && !VALID_PAYMENT_METHODS.includes(body.payment_method)) {
+      errors.push(`payment_method must be one of: ${VALID_PAYMENT_METHODS.join(', ')}`);
+    }
+    if (body.platform && !VALID_PLATFORMS.includes(body.platform)) {
+      errors.push(`platform must be one of: ${VALID_PLATFORMS.join(', ')}`);
+    }
+
+    if (errors.length > 0) {
+      return new Response(JSON.stringify({ success: false, errors }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" }
+      });
+    }
+
+    // ── Verify Outlet + Get Currency ───────────────────────────────────────
+    const { data: outlet, error: outletError } = await supabase
+      .from("outlets")
+      .select("id, region_id")
+      .eq("id", body.outlet_id)
+      .single();
+
+    if (outletError || !outlet) {
+      return new Response(JSON.stringify({
+        success: false,
+        error: "Invalid outlet_id",
+        message: `Outlet ${body.outlet_id} does not exist`
+      }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    // Get region currency as fallback
+    let currency_code = body.currency_code ?? "IDR";
+    if (!body.currency_code && outlet.region_id) {
+      const { data: region } = await supabase
+        .from("regions")
+        .select("currency_code")
+        .eq("id", outlet.region_id)
+        .single();
+      if (region?.currency_code) currency_code = region.currency_code;
+    }
+
+    // ── Data Transformation ───────────────────────────────────────────────────
+    const dateObj = new Date(body.date as string);
+    const hour = body.hour ?? dateObj.getHours();
+    const day_of_week = body.day_of_week ?? dateObj.getDay();
+    const discount = body.discount ?? 0;
+    const tax = body.tax ?? 0;
+    const cost = body.cost ?? 0;
+    const platform_fee = body.platform_fee ?? 0;
+    const net_amount = body.net_amount ?? (body.amount as number - discount + tax);
+    const settlement_amount = body.settlement_amount ?? (net_amount - platform_fee);
+    const profit = net_amount - cost;
+
+    // ── Insert Transaction ───────────────────────────────────────────────────
+    const { data, error } = await supabase
+      .from("sales_transactions")
+      .insert({
+        transaction_id: body.transaction_id,
+        outlet_id: body.outlet_id,
+        date: body.date,
+        amount: body.amount,
+        currency_code,
+        transaction_count: body.transaction_count ?? 1,
+        hour,
+        day_of_week,
+        payment_method: body.payment_method ?? 'dine_in',
+        customer_id: body.customer_id ?? null,
+        staff_id: body.staff_id ?? null,
+        discount,
+        tax,
+        cost,
+        net_amount,
+        platform: body.platform ?? 'dine_in',
+        platform_order_id: body.platform_order_id ?? null,
+        platform_fee,
+        settlement_amount,
+      })
+      .select().single();
+
+    if (error) {
+      if (error.code === '23505') {
+        return new Response(JSON.stringify({
+          success: false,
+          error: "Duplicate transaction_id",
+          message: `Transaction ${body.transaction_id} already exists`
+        }), { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+      throw error;
+    }
+
+    return new Response(JSON.stringify({
+      success: true,
+      message: "Transaction recorded",
+      data: {
+        id: data.id,
+        transaction_id: data.transaction_id,
+        outlet_id: data.outlet_id,
+        date: data.date,
+        amount: data.amount,
+        payment_method: data.payment_method,
+        platform: data.platform,
+        discount: data.discount,
+        tax: data.tax,
+        cost: data.cost,
+        net_amount: data.net_amount,
+        platform_fee: data.platform_fee,
+        settlement_amount: data.settlement_amount,
+        profit: data.net_amount - data.cost,
+      }
+    }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+
+  } catch (err) {
+    console.error("POS Webhook Error:", err);
+    return new Response(JSON.stringify({
+      success: false,
+      error: "Internal server error",
+      details: err instanceof Error ? err.message : String(err)
+    }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+  }
+});

@@ -1,0 +1,510 @@
+/// <reference lib="deno.ns" />
+/**
+ * Coordinator Pipeline — AI Agent Orchestration
+ * Runs every 15 min via pg_cron
+ * 
+ * Flow:
+ *  1. Calculate z-score anomaly per outlet (30-day baseline vs today)
+ *  2. Persist scores to ml_anomaly_scores table
+ *  3. Check stockout risk per outlet
+ *  4. Call alert-generator for CRITICAL/WARNING anomalies
+ */
+
+import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0";
+
+const HEADERS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+};
+
+const SB_URL = Deno.env.get("SUPABASE_URL") || "";
+const SB_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+const sb = createClient(SB_URL, SB_KEY);
+
+// Type interfaces for Supabase queries
+interface InventoryItem {
+  id: number;
+  outlet_id: number;
+  current_stock: number;
+}
+
+// FX rates to SGD
+function toSGD(currency: string): number {
+  if (currency === "SGD") return 1;
+  if (currency === "IDR") return 1 / 12500;
+  if (currency === "THB") return 1 / 27.5;
+  if (currency === "MYR") return 1 / 3.4;
+  return 1;
+}
+
+// Severity from z-score
+function severityFromZ(z: number): { status: string; severity: string } {
+  const az = Math.abs(z);
+  if (az >= 2.5) return { status: "CRITICAL", severity: "P0_CRITICAL" };
+  if (az >= 1.5) return { status: "WARNING", severity: "P1_HIGH" };
+  return { status: "OK", severity: "P2_MEDIUM" };
+}
+
+// Call alert-generator edge function
+async function _createAlert(
+  outletId: number,
+  triggerType: "ANOMALY" | "STOCKOUT" | "MANUAL",
+  currentSales?: number
+): Promise<{ success: boolean; alert_id?: number; reason?: string }> {
+  try {
+    const res = await fetch(`${SB_URL}/functions/v1/alert-generator`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${SB_KEY}`,
+        "apikey": SB_KEY,
+      },
+      body: JSON.stringify({
+        outlet_id: outletId,
+        trigger_type: triggerType,
+        current_sales: currentSales,
+      }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      return { success: false, reason: err.reason || res.statusText };
+    }
+    return await res.json();
+  } catch (e: any) {
+    return { success: false, reason: e.message };
+  }
+}
+
+// Insert alert directly (bypasses alert-generator's internal ML recalculation)
+async function insertAlertDirect(
+  outletId: number,
+  alertType: string,
+  severity: string,
+  score: number,
+  title: string,
+  description: string
+): Promise<{ success: boolean; alert_id?: number; reason?: string }> {
+  try {
+    const { data, error } = await sb.from("alerts").insert({
+      outlet_id: outletId,
+      type: alertType,
+      severity,
+      score,
+      status: "NEW",
+      title,
+      description,
+    }).select("id").single();
+
+    if (error) return { success: false, reason: error.message };
+    return { success: true, alert_id: data?.id };
+  } catch (e: any) {
+    return { success: false, reason: e.message };
+  }
+}
+
+// Get outlet name for alert title
+async function getOutletName(outletId: number): Promise<string> {
+  const { data } = await sb.from("outlets").select("name").eq("id", outletId).single();
+  return data?.name || `Outlet ${outletId}`;
+}
+
+// Create agent task
+async function createAgentTask(
+  agentId: string,
+  taskType: string,
+  context: Record<string, any>
+): Promise<{ id: string } | null> {
+  try {
+    const { data, error } = await sb
+      .from("agent_tasks")
+      .insert({
+        agent_id: agentId,
+        task_type: taskType,
+        status: "pending",
+        priority: 2,
+        input_data: context,
+        created_at: new Date().toISOString(),
+        started_at: new Date().toISOString(),
+      })
+      .select("id")
+      .single();
+
+    if (error) {
+      console.error(`Error creating agent task:`, JSON.stringify(error));
+      return null;
+    }
+
+    return data;
+  } catch (e: any) {
+    console.error(`Exception creating agent task:`, e);
+    return null;
+  }
+}
+
+// Mark task as completed
+async function completeAgentTask(taskId: string, outputData?: Record<string, any>, startTime?: number) {
+  try {
+    const endTime = Date.now();
+    const durationMs = startTime ? endTime - startTime : 0;
+    
+    await sb
+      .from("agent_tasks")
+      .update({
+        status: "completed",
+        completed_at: new Date().toISOString(),
+        output_data: outputData ? { ...outputData, duration_ms: durationMs } : { result: "success", duration_ms: durationMs }
+      })
+      .eq("id", taskId);
+      
+    // Record response time metric
+    await sb.from("agent_metrics").insert({
+      agent_id: "analyst",
+      metric_type: "response_time",
+      metric_value: durationMs,
+      metric_unit: "ms",
+      recorded_at: new Date().toISOString(),
+    });
+  } catch (e) {
+    console.error(`Error completing task ${taskId}:`, e);
+  }
+}
+
+// Log agent activity
+async function logAgentActivity(
+  agentId: string,
+  level: "info" | "warn" | "error",
+  message: string,
+  metadata: Record<string, any> = {}
+): Promise<void> {
+  try {
+    await sb.from("agent_logs").insert({
+      agent_id: agentId,
+      log_level: level,
+      message: message,
+      metadata: metadata,
+      created_at: new Date().toISOString(),
+    });
+  } catch (e) {
+    console.error(`Error logging agent activity:`, e);
+  }
+}
+
+// ── Workflow helpers ────────────────────────────────────────────────────────────
+
+async function workflowCreate(name: string, payload: any, triggeredBy = "manual"): Promise<string | null> {
+  console.log("workflowCreate called:", name, triggeredBy, payload);
+  try {
+    const { data, error } = await sb.rpc("workflow_create", {
+      p_workflow_name: name,
+      p_payload: payload,
+      p_triggered_by: triggeredBy,
+    });
+    if (error) { 
+      console.error("workflow_create error:", JSON.stringify(error)); 
+      return null; 
+    }
+    console.log("workflow_create result:", data);
+    return data as string;
+  } catch (e) {
+    console.error("workflow_create exception:", e);
+    return null;
+  }
+}
+
+async function workflowUpdate(
+  instanceId: string,
+  status: string,
+  step?: string,
+  progress?: number,
+  result?: any,
+  errorDetail?: string,
+) {
+  try {
+    await sb.rpc("workflow_update_status", {
+      p_instance_id: instanceId,
+      p_status: status,
+      p_step: step ?? null,
+      p_progress: progress ?? null,
+      p_result: result ?? null,
+      p_error: errorDetail ?? null,
+    });
+  } catch (e) {
+    console.error("workflow_update_status error:", e);
+  }
+}
+
+// ── Main pipeline ────────────────────────────────────────────────────────────────
+
+serve(async (req: Request) => {
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: HEADERS });
+  }
+
+  const now = new Date();
+  const t0 = now.toISOString().slice(0, 10); // today
+  const t30 = new Date(now.getTime() - 30 * 86400000).toISOString().slice(0, 10);
+
+  let instanceId: string | null = null;
+  let triggeredBy = "cron";
+
+  try {
+    // Try to parse body, but continue even if it fails
+    let body: any = {};
+    try {
+      const text = await req.text();
+      if (text) {
+        body = JSON.parse(text);
+        if (body?.triggered_by) triggeredBy = body.triggered_by;
+      }
+    } catch (parseErr) {
+      console.log("Body parse skipped (empty or invalid)");
+    }
+    
+    console.log("Coordinator Pipeline starting for date:", t0);
+    
+    // Log coordinator start
+    await logAgentActivity("coordinator", "info", "Coordinator pipeline started", { date: t0, triggered_by: triggeredBy });
+    
+    instanceId = null;
+  } catch (e: any) {
+    console.error("Init error:", e?.message || e);
+  }
+
+  const out: any = { errors: [] };
+  const alertResults: any[] = [];
+
+  try {
+    // ── STEP 1: Anomaly Detection ───────────────────────────────────────────
+    if (instanceId) await workflowUpdate(instanceId, "running", "anomaly", 10);
+
+    // Load regions + outlets
+    const [{ data: regions }, { data: outlets }] = await Promise.all([
+      sb.from("regions").select("id, currency_code"),
+      sb.from("outlets").select("id, name, region_id"),
+    ]);
+
+    out.regions_count = (regions || []).length;
+    out.outlets_count = (outlets || []).length;
+
+    const rmap: Record<number, string> = {};
+    (regions || []).forEach((r: any) => { rmap[r.id] = r.currency_code || "SGD"; });
+
+    const cmap: Record<number, string> = {};
+    (outlets || []).forEach((o: any) => { cmap[o.id] = rmap[o.region_id] || "SGD"; });
+
+    // Load 30-day sales
+    const { data: sales30, error: sErr } = await sb
+      .from("sales_transactions")
+      .select("outlet_id, date, amount")
+      .gte("date", t30);
+    out.sales30_count = (sales30 || []).length;
+
+    if (sErr) throw new Error("sales30: " + sErr.message);
+
+    // Aggregate daily totals (in SGD)
+    const dailyTotals: Record<number, Record<string, number>> = {};
+    (sales30 || []).forEach((s: any) => {
+      const fx = toSGD(cmap[s.outlet_id] || "SGD");
+      const day = String(s.date).slice(0, 10);
+      const amt = Number(s.amount || 0) * fx;
+      if (!dailyTotals[s.outlet_id]) dailyTotals[s.outlet_id] = {};
+      dailyTotals[s.outlet_id][day] = (dailyTotals[s.outlet_id][day] || 0) + amt;
+    });
+
+    // Load today's sales
+    const { data: todayRows } = await sb
+      .from("sales_transactions")
+      .select("outlet_id, amount")
+      .eq("date", t0);
+    out.today_count = (todayRows || []).length;
+
+    const todayMap: Record<number, number> = {};
+    (todayRows || []).forEach((t: any) => {
+      const fx = toSGD(cmap[t.outlet_id] || "SGD");
+      todayMap[t.outlet_id] = (todayMap[t.outlet_id] || 0) + Number(t.amount || 0) * fx;
+    });
+
+    // Score each outlet
+    const scoreRecords: any[] = [];
+    const anomalyOutlets: any[] = [];
+    let crit = 0, warn = 0, okCnt = 0;
+
+    for (const [oid, daily] of Object.entries(dailyTotals)) {
+      const o = Number(oid);
+      const vals = Object.values(daily as Record<string, number>);
+      if (vals.length < 5) { okCnt++; continue; }
+
+      const mean = vals.reduce((a, b) => a + b, 0) / vals.length;
+      const variance = vals.reduce((s, v) => s + Math.pow(v - mean, 2), 0) / vals.length;
+      const std = Math.sqrt(variance);
+      const tAmt = todayMap[o] || 0;
+      const z = std > 0 ? (tAmt - mean) / std : 0;
+      const { status, severity } = severityFromZ(z);
+
+      // Upsert ml_anomaly_scores
+      scoreRecords.push({
+        outlet_id: o,
+        anomaly_score: z,
+        percentile: Math.min(100, Math.round(Math.abs(z) * 30)),
+        is_anomaly: status !== "OK",
+        status: status,
+        recorded_at: now.toISOString(),
+      });
+
+      if (status === "CRITICAL") { crit++; anomalyOutlets.push({ oid: o, status, severity, z, todayAmt: tAmt }); }
+      else if (status === "WARNING") { warn++; anomalyOutlets.push({ oid: o, status, severity, z, todayAmt: tAmt }); }
+      else { okCnt++; }
+    }
+
+    // Bulk upsert ml_anomaly_scores
+    if (scoreRecords.length > 0) {
+      for (const rec of scoreRecords) {
+        await sb.from("ml_anomaly_scores").upsert(rec, { onConflict: "outlet_id" });
+      }
+    }
+
+    out.anomaly = { critical: crit, warning: warn, ok: okCnt, scored: scoreRecords.length };
+    out.anomaly_outlets = anomalyOutlets;
+
+    // Create agent tasks for anomalies (Monitor Agent)
+    let tasksCreated = 0;
+    const createdTaskIds: string[] = [];  // Track task IDs
+    const taskStartTimes: Map<string, number> = new Map();  // Track start times
+    
+    for (const item of anomalyOutlets) {
+      const taskStartTime = Date.now(); // Track when task starts
+      const task = await createAgentTask("monitor", "anomaly_check", {
+        outlet_id: item.oid,
+        z_score: item.z,
+        status: item.status,
+        severity: item.severity,
+        today_amount: item.todayAmt,
+      });
+      if (task) {
+        tasksCreated++;
+        createdTaskIds.push(task.id);  // Store ID
+        taskStartTimes.set(task.id, taskStartTime); // Store start time
+        await logAgentActivity("monitor", "warn", `Anomaly task created`, {
+          task_id: task.id,
+          outlet_id: item.oid,
+          z_score: item.z,
+        });
+      }
+    }
+    await logAgentActivity("coordinator", "info", `Anomaly tasks created: ${tasksCreated}`, {
+      anomalies: anomalyOutlets.length,
+    });
+
+    // ── STEP 2: Stockout Risk ────────────────────────────────────────────────
+    if (instanceId) await workflowUpdate(instanceId, "running", "stockout", 40);
+
+    const { data: inventoryData, error: invErr } = await sb
+      .from("inventory")
+      .select("id, outlet_id, current_stock")
+      .lt("current_stock", 25);
+    const inventory = inventoryData as InventoryItem[] | null;
+    out.inventory_low_count = (inventory || []).length;
+    out.stockout = { checked: (inventory || []).length };
+    if (invErr) throw new Error("inventory: " + invErr.message);
+
+    // ── STEP 3: Create Alerts ─────────────────────────────────────────────
+    if (instanceId) await workflowUpdate(instanceId, "running", "alerts", 70);
+
+    let alertsCreated = 0;
+    const today = new Date().toISOString().slice(0, 10);
+
+    for (const item of anomalyOutlets) {
+      const outletName = await getOutletName(item.oid);
+      const title = `${item.severity.replace("_", " ")}: Sales Anomaly at ${outletName}`;
+      const description = `Anomaly detected at ${outletName}.\n\nOutlet: ${outletName}\nZ-Score: ${item.z.toFixed(2)}\nStatus: ${item.status}\nToday's Revenue: S$${item.todayAmt.toFixed(2)}\n\nTriggered by: Coordinator Pipeline AI Agent\nDate: ${today}`;
+
+      const r = await insertAlertDirect(
+        item.oid,
+        "SALES_ANOMALY",
+        item.severity,
+        Math.abs(item.z),
+        title,
+        description
+      );
+      alertResults.push({ outlet_id: item.oid, ...r });
+      if (r.success) alertsCreated++;
+    }
+
+    // Stockout alerts
+    const stockoutOutlets: number[] = [...new Set((inventory || []).map((i: InventoryItem) => i.outlet_id))];
+    for (const oid of stockoutOutlets) {
+      const outletName = await getOutletName(Number(oid));
+      const inv = (inventory || []).filter((i: InventoryItem) => i.outlet_id === oid);
+      const lowest = inv.reduce((min: number, i: InventoryItem) => Math.min(min, i.current_stock), 999);
+      const title = `STOCKOUT RISK: Low Stock Alert at ${outletName}`;
+      const description = `Stockout risk detected at ${outletName}.\n\nOutlet: ${outletName}\nLowest Stock: ${lowest} units\nItems Below Threshold: ${inv.length}\n\nTriggered by: Coordinator Pipeline AI Agent\nDate: ${today}`;
+
+      const r = await insertAlertDirect(
+        oid,
+        "STOCKOUT_RISK",
+        "P1_HIGH",
+        0.8,
+        title,
+        description
+      );
+      alertResults.push({ outlet_id: oid, ...r });
+      if (r.success) alertsCreated++;
+
+      // Create stockout task (Analyst Agent)
+      const stockoutStartTime = Date.now();
+      const stockoutTask = await createAgentTask("analyst", "stockout_check", {
+        outlet_id: oid,
+        items_at_risk: inv.length,
+        lowest_stock: lowest,
+      });
+      if (stockoutTask) {
+        tasksCreated++;
+        createdTaskIds.push(stockoutTask.id);  // Store ID
+        taskStartTimes.set(stockoutTask.id, stockoutStartTime); // Store start time
+        await logAgentActivity("analyst", "warn", `Stockout task created`, {
+          task_id: stockoutTask.id,
+          outlet_id: oid,
+          lowest_stock: lowest,
+        });
+      }
+    }
+    
+    // Mark all created tasks as completed with timing
+    for (const taskId of createdTaskIds) {
+      const startTime = taskStartTimes.get(taskId) || Date.now();
+      await completeAgentTask(taskId, { alerts_created: alertsCreated }, startTime);
+    }
+    
+    out.agent_tasks_created = tasksCreated;
+    await logAgentActivity("coordinator", "info", `Pipeline completed: ${tasksCreated} tasks created`, {
+      anomalies: anomalyOutlets.length,
+      stockout: stockoutOutlets.length,
+      tasks_created: tasksCreated,
+    });
+
+    out.alerts = { created: alertsCreated, details: alertResults.slice(0, 10) };
+
+    if (instanceId) await workflowUpdate(instanceId, "completed", "done", 100, out);
+
+    return new Response(JSON.stringify({
+      success: true,
+      timestamp: now.toISOString(),
+      pipeline: out,
+      instance_id: instanceId,
+    }), { headers: { ...HEADERS, "Content-Type": "application/json" } });
+
+  } catch (e: any) {
+    out.fatal = e.message;
+    out.errors.push(e.message);
+    if (instanceId) {
+      await workflowUpdate(instanceId, "failed", "fatal", undefined, undefined, e.message);
+    }
+    return new Response(JSON.stringify({
+      success: false,
+      error: e.message,
+      pipeline: out,
+      instance_id: instanceId,
+    }), { status: 500, headers: { ...HEADERS, "Content-Type": "application/json" } });
+  }
+});

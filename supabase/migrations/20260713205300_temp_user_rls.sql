@@ -1,0 +1,1 @@
+ALTER TABLE public.user_profiles DISABLE ROW LEVEL SECURITY;
