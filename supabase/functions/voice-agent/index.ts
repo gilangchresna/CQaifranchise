@@ -1,72 +1,51 @@
-// supabase/functions/voice-agent/index.ts
-//
-// Voice: clusters complaint volume/patterns per outlet (using the existing
-// OutletKPI.complaints field already in your schema) and correlates spikes
-// with staffing or stockout signals so a case gets richer context
-// automatically instead of a bare complaint count. Suggested cadence: daily.
-
+// Voice: monitors case response times
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { getServiceClient, createInsight, logAgentRun } from "../_shared/agentInsights.ts";
 
 const supabase = getServiceClient();
 
-const COMPLAINT_SPIKE_THRESHOLD = 5; // absolute complaints in the period
-const COMPLAINT_TREND_MULTIPLIER = 1.5; // vs. trailing average
-
-interface OutletComplaintSignal {
-  outlet_id: string;
-  outlet_name: string;
-  complaints_today: number;
-  complaints_trailing_avg: number;
-  staffing_status?: "optimal" | "short" | "critical";
-  stockout_risk?: number; // 0-1
-}
-
 serve(async (req) => {
   try {
-    const { signals } = (await req.json()) as { signals: OutletComplaintSignal[] };
-    if (!Array.isArray(signals) || signals.length === 0) {
-      return new Response(JSON.stringify({ error: "signals[] required" }), { status: 400 });
+    const today = new Date().toISOString().split('T')[0];
+    
+    // Check cases without updates in 24h
+    const { data: oldCases } = await supabase
+      .from("cases")
+      .select("id, title, status, updated_at")
+      .neq("status", "closed")
+      .order("updated_at", { ascending: true })
+      .limit(20);
+
+    const stale: any[] = [];
+    const dayAgo = Date.now() - 24 * 60 * 60 * 1000;
+
+    for (const c of oldCases ?? []) {
+      const updatedAt = new Date(c.updated_at).getTime();
+      if (updatedAt < dayAgo) {
+        await createInsight(supabase, {
+          agentName: "voice",
+          module: "Cases",
+          outletId: null,
+          category: "stale_case",
+          severity: "medium",
+          title: `Case not updated in 24h: ${c.title?.slice(0, 50)}`,
+          details: `Case ${c.id} (${c.status}) last updated ${Math.floor((Date.now() - updatedAt) / (1000 * 60 * 60))} hours ago.`,
+        });
+        stale.push(c.id);
+      }
     }
 
-    const flagged = [];
-    for (const s of signals) {
-      const isSpike =
-        s.complaints_today >= COMPLAINT_SPIKE_THRESHOLD ||
-        (s.complaints_trailing_avg > 0 && s.complaints_today >= s.complaints_trailing_avg * COMPLAINT_TREND_MULTIPLIER);
+    await logAgentRun(supabase, "voice", { cases_checked: oldCases?.length ?? 0, stale: stale.length });
 
-      if (!isSpike) continue;
-
-      const correlations: string[] = [];
-      if (s.staffing_status === "short" || s.staffing_status === "critical") {
-        correlations.push(`staffing is ${s.staffing_status}`);
-      }
-      if (s.stockout_risk && s.stockout_risk > 0.5) {
-        correlations.push(`elevated stockout risk (${(s.stockout_risk * 100).toFixed(0)}%)`);
-      }
-
-      await createInsight(supabase, {
-        agentName: "voice",
-        module: "Cases",
-        outletId: s.outlet_id,
-        category: "complaint_spike",
-        severity: s.complaints_today >= COMPLAINT_SPIKE_THRESHOLD * 2 ? "high" : "medium",
-        title: `${s.outlet_name}: complaint spike (${s.complaints_today} today, avg ${s.complaints_trailing_avg.toFixed(1)})`,
-        details: correlations.length
-          ? `Possible contributing factors: ${correlations.join(", ")}.`
-          : "No obvious staffing/stockout correlation found — may need manual review.",
-        payload: { complaints_today: s.complaints_today, trailing_avg: s.complaints_trailing_avg, correlations },
-      });
-      flagged.push({ outlet_id: s.outlet_id, complaints_today: s.complaints_today });
-    }
-
-    await logAgentRun(supabase, "voice", { outlets_scanned: signals.length, flagged: flagged.length });
-
-    return new Response(JSON.stringify({ flagged }), {
+    return new Response(JSON.stringify({ 
+      success: true,
+      cases_checked: oldCases?.length ?? 0,
+      stale_cases: stale.length
+    }), {
       headers: { "Content-Type": "application/json" },
-      status: 200,
     });
   } catch (err) {
+    console.error("Voice error:", err);
     return new Response(JSON.stringify({ error: String(err) }), { status: 500 });
   }
 });

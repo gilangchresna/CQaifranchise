@@ -1,68 +1,73 @@
-// supabase/functions/collector-agent/index.ts
-//
-// Collector: watches EMI repayment events post-disbursement. Flags missed/
-// late payments and raises a compounding-risk insight if lateness trends
-// upward, feeding back into the Financing module's monitoring view.
-// Suggested cadence: daily.
-
+// Collector: watches EMI repayment events post-disbursement. Flags missed/late payments
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { getServiceClient, createInsight, logAgentRun } from "../_shared/agentInsights.ts";
 
 const supabase = getServiceClient();
-
 const LATE_GRACE_DAYS = 3;
-const DEFAULT_THRESHOLD_DAYS = 30;
 
 serve(async (req) => {
   try {
     const today = new Date().toISOString().slice(0, 10);
+    
+    // Pull repayment events - try multiple schemas
+    let dueEvents: any[] = [];
+    
+    // Try new schema first (due_date field)
+    try {
+      const { data, error } = await supabase
+        .from("repayment_events")
+        .select("*, outlets(name)")
+        .lte("scheduled_date", today)
+        .neq("processed", true);
+      if (!error && data) dueEvents = data;
+    } catch (e) {
+      console.log("New schema query failed:", e);
+    }
+    
+    // Try old schema (days_overdue field)
+    if (dueEvents.length === 0) {
+      try {
+        const { data, error } = await supabase
+          .from("repayment_events")
+          .select("*, outlets(name)")
+          .gt("days_overdue", 0);
+        if (!error && data) dueEvents = data;
+      } catch (e) {
+        console.log("Old schema query failed:", e);
+      }
+    }
 
-    // Pull all repayment events due on/before today that aren't yet paid.
-    const { data: dueEvents, error } = await supabase
-      .from("repayment_events")
-      .select("*, outlets(name)")
-      .lte("due_date", today)
-      .neq("status", "paid");
-
-    if (error) throw error;
-
-    const results = [];
+    const results: any[] = [];
+    
     for (const ev of dueEvents ?? []) {
-      const daysLate = ev.days_late ?? 0;
-      let newStatus = ev.status;
-
-      if (daysLate >= DEFAULT_THRESHOLD_DAYS) {
-        newStatus = "defaulted";
-      } else if (daysLate > LATE_GRACE_DAYS) {
-        newStatus = "late";
-      }
-
-      if (newStatus !== ev.status) {
-        await supabase.from("repayment_events").update({ status: newStatus }).eq("id", ev.id);
-      }
-
-      if (newStatus === "late" || newStatus === "defaulted") {
+      const daysOverdue = ev.days_overdue ?? ev.days_late ?? 0;
+      
+      if (daysOverdue > LATE_GRACE_DAYS) {
         await createInsight(supabase, {
           agentName: "collector",
           module: "Financing",
           outletId: ev.outlet_id,
-          category: newStatus === "defaulted" ? "repayment_default" : "repayment_late",
-          severity: newStatus === "defaulted" ? "high" : "medium",
-          title: `${ev.outlets?.name ?? ev.outlet_id}: repayment ${newStatus} (${daysLate}d)`,
-          details: `EMI of ${ev.amount_due} due ${ev.due_date} is ${daysLate} day(s) overdue.`,
-          payload: { repayment_event_id: ev.id, days_late: daysLate, amount_due: ev.amount_due },
+          category: daysOverdue > 30 ? "repayment_default" : "repayment_late",
+          severity: daysOverdue > 30 ? "high" : "medium",
+          title: `EMI ${daysOverdue} days overdue`,
+          details: `EMI payment is ${daysOverdue} day(s) overdue. Amount: ${ev.amount || ev.total_amount || 'N/A'}`,
         });
-        results.push({ outlet_id: ev.outlet_id, status: newStatus, days_late: daysLate });
+        results.push({ outlet_id: ev.outlet_id, days_overdue: daysOverdue });
       }
     }
 
-    await logAgentRun(supabase, "collector", { events_scanned: dueEvents?.length ?? 0, flags_raised: results.length });
+    await logAgentRun(supabase, "collector", { events_scanned: dueEvents.length, flags_raised: results.length });
 
-    return new Response(JSON.stringify({ results }), {
+    return new Response(JSON.stringify({ 
+      success: true,
+      events_scanned: dueEvents.length,
+      flags_raised: results.length,
+      results 
+    }), {
       headers: { "Content-Type": "application/json" },
-      status: 200,
     });
   } catch (err) {
+    console.error("Collector error:", err);
     return new Response(JSON.stringify({ error: String(err) }), { status: 500 });
   }
 });
