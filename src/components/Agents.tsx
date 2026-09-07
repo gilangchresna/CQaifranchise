@@ -288,13 +288,17 @@ export function Agents({ activeRole, userRegionId }: { activeRole: Role; userReg
         .limit(200);
       
       // Fetch COMPLETED tasks from today
-      const { data: completedData } = await supabase
+      // Note: .not('col', 'is', null) has Supabase JS bug
+      // Get all tasks created today, then filter for completed ones in JS
+      const { data: completedAllData } = await supabase
         .from('agent_tasks')
         .select('*')
-        .not('completed_at', 'is', null)
-        .gte('completed_at', todayStr + 'T00:00:00')  // Filter by completed_at for completed
-        .order('completed_at', { ascending: false })
+        .gte('created_at', todayStr + 'T00:00:00')
+        .order('created_at', { ascending: false })
         .limit(200);
+      
+      // Filter to only completed tasks (completed_at IS NOT NULL)
+      const completedData = (completedAllData || []).filter((t: any) => t.completed_at !== null);
       
       // Get accurate counts from DB (HQ sees all, filtered roles use outlet filter below)
       const { count: totalToday } = await supabase
