@@ -146,12 +146,13 @@ export function CasesList({ activeRole }: CasesListProps) {
 
     if (res.ok) {
       // Update in allCases state
+      const oldStatus = allCases.find(c => c.id === caseId)?.status || newStatus;
       setAllCases(prev => prev.map(c => c.id === caseId ? { ...c, status: newStatus } : c));
       // Update stats
       setStats(prev => ({
         ...prev,
-        [status]: (prev[status] || 0) - 1,
-        [newStatus]: (prev[newStatus] || 0) + 1
+        [oldStatus]: (prev[oldStatus as keyof typeof prev] || 0) - 1,
+        [newStatus]: (prev[newStatus as keyof typeof prev] || 0) + 1
       }));
       setExpandedCase(null);
     }
