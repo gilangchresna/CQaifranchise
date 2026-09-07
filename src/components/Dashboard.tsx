@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { StatCard } from "./StatCard";
 import { AlertsList } from "./AlertsList";
 import { AICopilot } from "./AICopilot";
+import { AgentInsightsFeed } from "./AgentInsightsFeed";
 import { DollarSign, TrendingUp, TrendingDown, Percent, AlertTriangle, Activity, Bot, Store } from "lucide-react";
 import {
   LineChart,
@@ -787,6 +788,22 @@ export function Dashboard({ activeRole }: { activeRole: Role }) {
               )}
             </div>
           </div>
+
+          {/* Agent Insights Feed */}
+          {activeRole !== 'Franchisee' && (
+            <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm relative overflow-hidden shrink-0">
+              <h3 className="text-xs font-semibold text-slate-500 mb-4 relative z-10 flex items-center gap-2 uppercase tracking-wider">
+                <AlertTriangle className="w-4 h-4 text-amber-600" /> Agent Insights
+              </h3>
+              <div className="max-h-64 overflow-y-auto">
+                <AgentInsightsFeed 
+                  activeRole={activeRole} 
+                  module="Knowledge" 
+                  title=""
+                />
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
