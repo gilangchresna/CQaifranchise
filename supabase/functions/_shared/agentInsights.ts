@@ -21,7 +21,8 @@ export interface InsightInput {
 }
 
 export async function createInsight(supabase: SupabaseClient, input: InsightInput) {
-  const { error } = await supabase.from("agent_insights").insert({
+  // Write to agent_insights
+  const { error: insightError } = await supabase.from("agent_insights").insert({
     agent_name: input.agentName,
     module: input.module,
     outlet_id: input.outletId ?? null,
@@ -31,7 +32,24 @@ export async function createInsight(supabase: SupabaseClient, input: InsightInpu
     details: input.details ?? null,
     payload: input.payload ?? {},
   });
-  if (error) throw error;
+  if (insightError) console.error("agent_insights insert error:", insightError.message);
+
+  // Also write to alerts table for Dashboard UI (only if outletId exists)
+  if (input.outletId) {
+    const outletIdNum = parseInt(input.outletId);
+    if (!isNaN(outletIdNum)) {
+      const { error: alertError } = await supabase.from("alerts").insert({
+        outlet_id: outletIdNum,
+        type: input.category,
+        severity: input.severity,
+        title: `[${input.agentName}] ${input.title}`,
+        description: input.details ?? null,
+        status: "open",
+        triggered_at: new Date().toISOString(),
+      });
+      if (alertError) console.error("alerts insert error:", alertError.message);
+    }
+  }
 }
 
 export async function logAgentRun(
