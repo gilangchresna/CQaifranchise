@@ -41,10 +41,10 @@ export async function createInsight(supabase: SupabaseClient, input: InsightInpu
       const { error: alertError } = await supabase.from("alerts").insert({
         outlet_id: outletIdNum,
         type: input.category,
-        severity: input.severity,
+        severity: input.severity === "high" ? "P1_HIGH" : input.severity === "medium" ? "P2_MEDIUM" : "P3_LOW",
         title: `[${input.agentName}] ${input.title}`,
         description: input.details ?? null,
-        status: "open",
+        status: "NEW",
         triggered_at: new Date().toISOString(),
       });
       if (alertError) console.error("alerts insert error:", alertError.message);
