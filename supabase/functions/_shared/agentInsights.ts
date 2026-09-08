@@ -40,7 +40,11 @@ export async function createInsight(supabase: SupabaseClient, input: InsightInpu
     if (!isNaN(outletIdNum)) {
       const { error: alertError } = await supabase.from("alerts").insert({
         outlet_id: outletIdNum,
-        type: input.category,
+        // FIXED: alerts.type is a fixed Postgres enum (SALES_ANOMALY, STOCKOUT_RISK,
+        // ATTENDANCE_ISSUE, COMPLAINT, SYSTEM) — the arbitrary agent `category` strings
+        // (e.g. "staffing_shortfall_risk", "connector_stale") are not valid enum values
+        // and would fail every insert. Map to the closest valid enum value instead.
+        type: mapCategoryToAlertType(input.category),
         severity: input.severity === "high" ? "P1_HIGH" : input.severity === "medium" ? "P2_MEDIUM" : "P3_LOW",
         title: `[${input.agentName}] ${input.title}`,
         description: input.details ?? null,
@@ -50,6 +54,21 @@ export async function createInsight(supabase: SupabaseClient, input: InsightInpu
       if (alertError) console.error("alerts insert error:", alertError.message);
     }
   }
+}
+
+// Maps an agent's free-text category onto the fixed alert_type enum
+// (SALES_ANOMALY | STOCKOUT_RISK | ATTENDANCE_ISSUE | COMPLAINT | SYSTEM).
+function mapCategoryToAlertType(category: string): string {
+  const c = category.toLowerCase();
+  if (c.includes("stockout")) return "STOCKOUT_RISK";
+  if (c.includes("complaint")) return "COMPLAINT";
+  if (c.includes("staffing") || c.includes("shift") || c.includes("attendance") || c.includes("no_show")) {
+    return "ATTENDANCE_ISSUE";
+  }
+  if (c.includes("sales") || c.includes("variance") || c.includes("anomaly") || c.includes("rate_mismatch")) {
+    return "SALES_ANOMALY";
+  }
+  return "SYSTEM"; // connector/schema/access/peer/financing/knowledge-base categories fall back here
 }
 
 export async function logAgentRun(

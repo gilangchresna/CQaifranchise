@@ -109,6 +109,11 @@ export function Layout({ children, activeRole, onRoleChange, activeTab, onTabCha
           { icon: DollarSign, label: "Royalty Settings", id: "RoyaltySettings" },
           { icon: FileText, label: "Royalty Agreements", id: "RoyaltyAgreements" },
           { icon: BarChart3, label: "Royalty Simulation", id: "RoyaltySimulation" },
+          { icon: Bot, label: "Underwriter", id: "Underwriter" },
+          { icon: DollarSign, label: "Repayments", id: "Repayments" },
+          { icon: BarChart3, label: "Royalty Reconciliation", id: "RoyaltyReconciliation" },
+          { icon: ShieldCheck, label: "Compliance", id: "Compliance" },
+          { icon: Landmark, label: "Financiers", id: "Financiers" },
         ];
       case "Regional":
         return [
@@ -127,6 +132,10 @@ export function Layout({ children, activeRole, onRoleChange, activeTab, onTabCha
           { icon: BrainCircuit, label: t.nav.mlModels, id: "Models" },
           { icon: ShieldCheck, label: t.nav.accessControl, id: "Access" },
           { icon: Settings, label: t.nav.regionalSettings, id: "Settings" },
+          { icon: Bot, label: "Underwriter", id: "Underwriter" },
+          { icon: DollarSign, label: "Repayments", id: "Repayments" },
+          { icon: BarChart3, label: "Royalty Reconciliation", id: "RoyaltyReconciliation" },
+          { icon: ShieldCheck, label: "Compliance", id: "Compliance" },
         ];
       case "Franchisee":
         return [
@@ -135,6 +144,8 @@ export function Layout({ children, activeRole, onRoleChange, activeTab, onTabCha
           { icon: ActivitySquare, label: t.nav.myTasks, id: "Workflows" },
           { icon: DollarSign, label: "My Royalty", id: "Royalty" },
           { icon: Landmark, label: t.nav.bridgeFinancing, id: "Financing" },
+          { icon: Landmark, label: "Financiers", id: "Financiers" },
+          { icon: DollarSign, label: "Repayments", id: "Repayments" },
           { icon: Settings, label: t.nav.storePreferences, id: "Settings" },
         ];
       default:

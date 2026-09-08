@@ -1,17 +1,19 @@
 import React, { useEffect, useState } from "react";
 import { supabase } from "@/src/lib/supabase";
 
+// FIXED: previously queried period_start/period_end/expected_royalty/
+// ledger_royalty columns that don't exist — the corrected royalty_reconciliation
+// table (matching what ledger-agent actually writes) uses period_month (text,
+// 'YYYY-MM') and expected_amount/actual_amount/variance instead.
 interface ReconciliationRow {
   id: number;
-  outletId: string;
+  outletId: number | null;
   outletName?: string;
-  periodStart: string;
-  periodEnd: string;
-  expectedRoyalty: number;
-  ledgerRoyalty: number;
+  periodMonth: string;
+  expectedAmount: number;
+  actualAmount: number;
   variance: number;
-  variancePct: number;
-  flagged: boolean;
+  status: string;
 }
 
 export function RoyaltyReconciliationPanel() {
@@ -24,7 +26,7 @@ export function RoyaltyReconciliationPanel() {
       const { data, error } = await supabase
         .from("royalty_reconciliation")
         .select("*, outlets(name)")
-        .order("period_end", { ascending: false })
+        .order("period_month", { ascending: false })
         .limit(50);
 
       if (error) {
@@ -38,13 +40,11 @@ export function RoyaltyReconciliationPanel() {
           id: r.id,
           outletId: r.outlet_id,
           outletName: r.outlets?.name,
-          periodStart: r.period_start,
-          periodEnd: r.period_end,
-          expectedRoyalty: r.expected_royalty,
-          ledgerRoyalty: r.ledger_royalty,
+          periodMonth: r.period_month,
+          expectedAmount: r.expected_amount,
+          actualAmount: r.actual_amount,
           variance: r.variance,
-          variancePct: r.variance_pct,
-          flagged: r.flagged,
+          status: r.status,
         }))
       );
       setLoading(false);
@@ -59,7 +59,7 @@ export function RoyaltyReconciliationPanel() {
       <div>
         <h2 className="text-2xl font-bold text-slate-800">Royalty Reconciliation — Ledger</h2>
         <p className="text-sm text-slate-500">
-          Expected (formula-calculated) royalty vs. what landed in the bank GL / sales ledger, per period.
+          Expected (formula-calculated) royalty vs. actual collected amount, per period.
         </p>
       </div>
       <div className="overflow-x-auto rounded-lg border border-slate-200">
@@ -69,25 +69,27 @@ export function RoyaltyReconciliationPanel() {
               <th className="px-4 py-2 text-left font-medium text-slate-600">Outlet</th>
               <th className="px-4 py-2 text-left font-medium text-slate-600">Period</th>
               <th className="px-4 py-2 text-left font-medium text-slate-600">Expected</th>
-              <th className="px-4 py-2 text-left font-medium text-slate-600">Ledger</th>
+              <th className="px-4 py-2 text-left font-medium text-slate-600">Actual</th>
               <th className="px-4 py-2 text-left font-medium text-slate-600">Variance</th>
+              <th className="px-4 py-2 text-left font-medium text-slate-600">Status</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
             {rows.map((r) => (
-              <tr key={r.id} className={r.flagged ? "bg-red-50/40" : undefined}>
-                <td className="px-4 py-2 font-medium text-slate-800">{r.outletName ?? r.outletId}</td>
-                <td className="px-4 py-2 text-slate-700">{r.periodStart} – {r.periodEnd}</td>
-                <td className="px-4 py-2 text-slate-700">{r.expectedRoyalty.toLocaleString()}</td>
-                <td className="px-4 py-2 text-slate-700">{r.ledgerRoyalty.toLocaleString()}</td>
-                <td className={`px-4 py-2 font-medium ${r.flagged ? "text-red-700" : "text-slate-700"}`}>
-                  {r.variance >= 0 ? "+" : ""}{r.variance.toLocaleString()} ({(r.variancePct * 100).toFixed(1)}%)
+              <tr key={r.id} className={r.status === "flagged" ? "bg-red-50/40" : undefined}>
+                <td className="px-4 py-2 font-medium text-slate-800">{r.outletName ?? r.outletId ?? "—"}</td>
+                <td className="px-4 py-2 text-slate-700">{r.periodMonth}</td>
+                <td className="px-4 py-2 text-slate-700">{r.expectedAmount?.toLocaleString()}</td>
+                <td className="px-4 py-2 text-slate-700">{r.actualAmount?.toLocaleString()}</td>
+                <td className={`px-4 py-2 font-medium ${r.status === "flagged" ? "text-red-700" : "text-slate-700"}`}>
+                  {r.variance >= 0 ? "+" : ""}{r.variance?.toLocaleString()}
                 </td>
+                <td className="px-4 py-2 text-slate-700">{r.status}</td>
               </tr>
             ))}
             {rows.length === 0 && (
               <tr>
-                <td colSpan={5} className="px-4 py-6 text-center text-slate-400">No reconciliation runs yet.</td>
+                <td colSpan={6} className="px-4 py-6 text-center text-slate-400">No reconciliation runs yet.</td>
               </tr>
             )}
           </tbody>

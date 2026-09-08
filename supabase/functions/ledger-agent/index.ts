@@ -21,7 +21,7 @@ serve(async (req) => {
     const { data: activeOutlets } = await supabase
       .from("outlets")
       .select("id")
-      .eq("status", "active");
+      .eq("status", "ACTIVE"); // FIXED: outlet_status enum values are uppercase (ACTIVE/INACTIVE/SUSPENDED); "active" matched zero rows
 
     const missingReconciliation: number[] = [];
     for (const outlet of activeOutlets ?? []) {

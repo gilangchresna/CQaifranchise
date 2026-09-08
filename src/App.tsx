@@ -25,16 +25,24 @@ import RoyaltySimulationExport from "@/src/components/RoyaltySimulationExport";
 import { LiveTransactionFeed } from "@/src/components/LiveTransactionFeed";
 import { FloatingChat } from "@/src/components/FloatingChat";
 import Login from "@/src/components/Login";
+import { Underwriter } from "@/src/components/Underwriter";
+import { RepaymentsPanel } from "@/src/components/RepaymentsPanel";
+import { RoyaltyReconciliationPanel } from "@/src/components/RoyaltyReconciliationPanel";
+import { FinancierSelector } from "@/src/components/FinancierSelector";
+import { ComplianceFlags } from "@/src/components/ComplianceFlags";
+import { AgentInsightsFeed } from "@/src/components/AgentInsightsFeed";
 import { Role } from "@/src/types";
 
 export type Tab =
-  | "Dashboard" | "Outlets" | "Workforce" | "Workflows" | "Agents" | "Risk" | "Knowledge" | "Peer" | "Approval" | "Integrations" | "Models" | "Settings" | "Access" | "Financing" | "Cases" | "Royalty" | "RoyaltySettings";
+  | "Dashboard" | "Outlets" | "Workforce" | "Workflows" | "Agents" | "Risk" | "Knowledge" | "Peer" | "Approval" | "Integrations" | "Models" | "Settings" | "Access" | "Financing" | "Cases" | "Royalty" | "RoyaltySettings"
+  | "Underwriter" | "Repayments" | "RoyaltyReconciliation" | "Financiers" | "Compliance";
 
 export default function App() {
   const [activeRole, setActiveRole] = useState<Role | null>(null);
   const [activeTab, setActiveTab] = useState<Tab>("Dashboard");
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
   const [userRegionId, setUserRegionId] = useState<number | null>(null);
+  const [userOutletId, setUserOutletId] = useState<number | null>(null);
 
   // Fetch user role AND region_id from user_profiles on auth change
   useEffect(() => {
@@ -60,6 +68,19 @@ export default function App() {
         setActiveRole(uiRole);
         setUserRegionId(profile.region_id ?? null);
       }
+
+      // Resolve the franchisee's own outlet for components that need a
+      // concrete outlet_id (Financiers tab). HQ/Regional users acting on
+      // behalf of a specific franchisee still need a proper outlet-picker —
+      // not built here since outlet-selection state doesn't exist elsewhere
+      // in this app yet; this only resolves the logged-in franchisee's own outlet.
+      const { data: outlet } = await supabase
+        .from('outlets')
+        .select('id')
+        .eq('franchisee_id', session.user.id)
+        .limit(1)
+        .maybeSingle();
+      setUserOutletId(outlet?.id ?? null);
     }
 
     fetchUserRole();
@@ -124,6 +145,20 @@ export default function App() {
         return <Financing activeRole={activeRole} />;
       case "cases":
         return <CasesList activeRole={activeRole} />;
+      case "underwriter":
+        return <Underwriter />;
+      case "repayments":
+        return <RepaymentsPanel />;
+      case "royaltyreconciliation":
+        return <RoyaltyReconciliationPanel />;
+      case "compliance":
+        return <ComplianceFlags />;
+      case "financiers":
+        return userOutletId ? (
+          <FinancierSelector activeRole={activeRole} outletId={userOutletId} market="SG" />
+        ) : (
+          <div className="p-6 text-slate-500">No outlet resolved for this account yet — Financiers requires an assigned outlet.</div>
+        );
       case "royalty":
         return activeRole === "Franchisee" ? <MyRoyalty /> : <RoyaltyDashboard />;
       case "royaltysettings":

@@ -309,10 +309,12 @@ export function Agents({ activeRole, userRegionId }: { activeRole: Role; userReg
       // Note: completedToday is now calculated from completedData with outlet filter (see below)
       
       // Get per-agent pending counts using .or() instead of .is() (Supabase JS bug workaround)
+      // Filter to TODAY only
       const { data: pendingByAgent } = await supabase
         .from('agent_tasks')
-        .select('agent_id, input_data')
-        .or('completed_at.is.null');
+        .select('agent_id, input_data, created_at')
+        .or('completed_at.is.null')  // Fixed: .is() bug workaround
+        .gte('created_at', todayStr + 'T00:00:00');  // Filter by created_at for pending
       
       // Calculate per-agent pending counts
       const agentPendingCounts: Record<string, number> = {};
